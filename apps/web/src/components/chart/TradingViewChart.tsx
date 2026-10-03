@@ -89,16 +89,16 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     if (historicalCandles.length > 0) {
       candleSeries.setData(historicalCandles as any);
     } else {
-      const nowSec = Math.floor(Date.now() / 1000);
-      let p = 2650.0;
+      const currentMinute = Math.floor(Date.now() / 60000) * 60;
+      let p = 2648.5;
       const initialBars: CandleData[] = [];
       for (let i = 59; i >= 0; i--) {
-        const t = (nowSec - i * 60);
+        const t = currentMinute - i * 60;
         const o = p;
-        const d = (Math.sin(i) * 0.8) + ((i % 3 === 0 ? 0.4 : -0.3));
-        const c = p + d;
-        const h = Math.max(o, c) + 0.35;
-        const l = Math.min(o, c) - 0.35;
+        const d = (Math.sin(i) * 0.7) + ((i % 3 === 0 ? 0.35 : -0.25));
+        const c = Number((p + d).toFixed(2));
+        const h = Number((Math.max(o, c) + 0.35).toFixed(2));
+        const l = Number((Math.min(o, c) - 0.35).toFixed(2));
         p = c;
         initialBars.push({ time: t, open: o, high: h, low: l, close: c, volume: 10 + (i % 5) });
       }
@@ -125,15 +125,25 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     };
   }, []);
 
+  const lastBarTimeRef = useRef<number>(0);
+
   useEffect(() => {
     if (candleSeriesRef.current && currentCandle) {
-      candleSeriesRef.current.update({
-        time: currentCandle.time as any,
-        open: currentCandle.open,
-        high: currentCandle.high,
-        low: currentCandle.low,
-        close: currentCandle.close,
-      });
+      try {
+        const candleTime = Number(currentCandle.time);
+        if (candleTime >= lastBarTimeRef.current) {
+          lastBarTimeRef.current = candleTime;
+          candleSeriesRef.current.update({
+            time: candleTime as any,
+            open: currentCandle.open,
+            high: currentCandle.high,
+            low: currentCandle.low,
+            close: currentCandle.close,
+          });
+        }
+      } catch (err) {
+        console.warn("Skipping out-of-order candle update:", err);
+      }
     }
   }, [currentCandle]);
 

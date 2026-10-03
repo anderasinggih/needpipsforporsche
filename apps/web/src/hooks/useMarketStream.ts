@@ -30,18 +30,24 @@ export function useMarketStream(url: string) {
 
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout;
+    let isMounted = true;
 
     const connect = () => {
+      if (!isMounted) return;
       try {
+        if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+          return;
+        }
         const ws = new WebSocket(resolvedUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
+          if (!isMounted) return;
           setIsConnected(true);
-          console.log("Connected to Market Data Engine WebSocket");
         };
 
         ws.onmessage = (event) => {
+          if (!isMounted) return;
           try {
             const data = JSON.parse(event.data);
             if (data.type === "POSITIONS" && Array.isArray(data.positions)) {
@@ -55,15 +61,21 @@ export function useMarketStream(url: string) {
         };
 
         ws.onclose = () => {
+          if (!isMounted) return;
           setIsConnected(false);
-          reconnectTimeout = setTimeout(connect, 3000);
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connect, 5000);
         };
 
         ws.onerror = () => {
-          ws.close();
+          if (wsRef.current) {
+            wsRef.current.close();
+          }
         };
       } catch (err) {
-        reconnectTimeout = setTimeout(connect, 3000);
+        if (!isMounted) return;
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connect, 5000);
       }
     };
 
@@ -109,6 +121,7 @@ export function useMarketStream(url: string) {
     }, 1000);
 
     return () => {
+      isMounted = false;
       clearInterval(tickInterval);
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
