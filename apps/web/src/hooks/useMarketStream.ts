@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { CandleData, PositionLine } from "@/components/chart/TradingViewChart";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { CandleData } from "@/components/chart/TradingViewChart";
 
 export interface Position {
   ticket: number;
@@ -16,21 +16,42 @@ export interface Position {
   time: number;
 }
 
-export function useMarketStream(url: string) {
+export function useMarketStream(activeSymbol: string = "XAUUSD") {
   const [currentCandle, setCurrentCandle] = useState<CandleData | null>(null);
+  const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const simPriceRef = useRef<number>(2648.5);
 
-  // Dynamic WebSocket URL resolver: in browser, use current host IP with port 8080
-  const resolvedUrl = typeof window !== "undefined" && url.includes("localhost")
-    ? `ws://${window.location.hostname}:8080/ws/live`
-    : url;
+  // Map symbol to Binance pair
+  const binanceSymbol = activeSymbol === "XAUUSD" ? "paxgusdt" : activeSymbol.toLowerCase();
 
+  // 1. Initial Load: Fetch 100 historical 1m candles for immediate chart rendering
+  const fetchHistorical = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/market/candles?symbol=${activeSymbol}&limit=120`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
+          setHistoricalCandles(data.candles);
+          setCurrentCandle(data.candles[data.candles.length - 1]);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch historical candles, will stream live:", err);
+    }
+  }, [activeSymbol]);
+
+  useEffect(() => {
+    fetchHistorical();
+  }, [fetchHistorical]);
+
+  // 2. Real-Time Stream: Connect directly to Binance 1m Kline WebSocket
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
+
+    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@kline_1m`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -38,12 +59,12 @@ export function useMarketStream(url: string) {
         if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
           return;
         }
-        const ws = new WebSocket(resolvedUrl);
+
+        const ws = new WebSocket(streamUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
           if (!isMounted) return;
-          console.log("🟢 [Engine WS] Connected to:", resolvedUrl);
           setIsConnected(true);
         };
 
@@ -51,37 +72,21 @@ export function useMarketStream(url: string) {
           if (!isMounted) return;
           try {
             const data = JSON.parse(event.data);
-            console.log("📨 [Engine WS Message]:", data);
-            if (data.type === "POSITIONS" && Array.isArray(data.positions)) {
-              setPositions(data.positions);
-            } else if (data.open !== undefined && data.close !== undefined) {
-              setCurrentCandle(data as CandleData);
-            } else if (data.type === "TICK" && data.price !== undefined) {
-              const nowSec = Math.floor((data.timestamp || Date.now()) / 1000);
-              const barTime = Math.floor(nowSec / 60) * 60;
-              const p = Number(data.price);
-              setCurrentCandle((prev) => {
-                if (prev && prev.time === barTime) {
-                  return {
-                    ...prev,
-                    high: Math.max(prev.high, p),
-                    low: Math.min(prev.low, p),
-                    close: p,
-                    volume: prev.volume + (data.volume || 1),
-                  };
-                }
-                return {
-                  time: barTime,
-                  open: prev ? prev.close : p,
-                  high: p,
-                  low: p,
-                  close: p,
-                  volume: data.volume || 1,
-                };
-              });
+            if (data.k) {
+              const k = data.k;
+              const candle: CandleData = {
+                time: Math.floor(Number(k.t) / 1000), // bar open time in seconds
+                open: parseFloat(k.o),
+                high: parseFloat(k.h),
+                low: parseFloat(k.l),
+                close: parseFloat(k.c),
+                volume: parseFloat(k.v),
+                is_closed: k.x,
+              };
+              setCurrentCandle(candle);
             }
           } catch (err) {
-            console.error("Failed to parse message:", err);
+            console.error("Error parsing Binance kline stream:", err);
           }
         };
 
@@ -89,7 +94,7 @@ export function useMarketStream(url: string) {
           if (!isMounted) return;
           setIsConnected(false);
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connect, 5000);
+          reconnectTimeout = setTimeout(connect, 3000);
         };
 
         ws.onerror = () => {
@@ -100,7 +105,7 @@ export function useMarketStream(url: string) {
       } catch (err) {
         if (!isMounted) return;
         clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(connect, 5000);
+        reconnectTimeout = setTimeout(connect, 3000);
       }
     };
 
@@ -113,7 +118,7 @@ export function useMarketStream(url: string) {
         wsRef.current.close();
       }
     };
-  }, [resolvedUrl]);
+  }, [binanceSymbol]);
 
-  return { currentCandle, positions, isConnected };
+  return { currentCandle, historicalCandles, positions, isConnected };
 }

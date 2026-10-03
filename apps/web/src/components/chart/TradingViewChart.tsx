@@ -112,24 +112,31 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     };
   }, []);
 
+  // Update chart when historicalCandles arrive
+  useEffect(() => {
+    if (candleSeriesRef.current && historicalCandles.length > 0) {
+      candleSeriesRef.current.setData(historicalCandles as any);
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
+    }
+  }, [historicalCandles]);
+
   const lastBarTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (candleSeriesRef.current && currentCandle) {
       try {
         const candleTime = Number(currentCandle.time);
-        if (candleTime >= lastBarTimeRef.current) {
-          lastBarTimeRef.current = candleTime;
-          candleSeriesRef.current.update({
-            time: candleTime as any,
-            open: currentCandle.open,
-            high: currentCandle.high,
-            low: currentCandle.low,
-            close: currentCandle.close,
-          });
-        }
+        candleSeriesRef.current.update({
+          time: candleTime as any,
+          open: currentCandle.open,
+          high: currentCandle.high,
+          low: currentCandle.low,
+          close: currentCandle.close,
+        });
       } catch (err) {
-        console.warn("Skipping out-of-order candle update:", err);
+        console.warn("Candle update:", err);
       }
     }
   }, [currentCandle]);

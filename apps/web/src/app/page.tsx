@@ -48,14 +48,12 @@ interface EvaluationResult {
 }
 
 export default function DashboardPage() {
-  const wsUrl = process.env.NEXT_PUBLIC_ENGINE_WS_URL || "ws://localhost:8080/ws/live";
-  const { currentCandle, positions, isConnected } = useMarketStream(wsUrl);
-
+  const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
+  const { currentCandle, historicalCandles, positions, isConnected } = useMarketStream(activeSymbol);
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
@@ -218,7 +216,12 @@ export default function DashboardPage() {
           {/* Main Chart Section (8 cols) */}
           <div className="space-y-4 lg:col-span-8">
             <Card className="border-neutral-800 bg-black p-1 shadow-2xl overflow-hidden">
-              <TradingViewChart currentCandle={currentCandle} positions={positions} symbol={activeSymbol} />
+              <TradingViewChart
+                currentCandle={currentCandle}
+                historicalCandles={historicalCandles}
+                positions={positions}
+                symbol={activeSymbol}
+              />
             </Card>
 
             {/* Metrics Overview Row */}
