@@ -48,11 +48,11 @@ func main() {
 	tradeHub := hub.NewTradeHub()
 	go wsHub.Run()
 
-	// Create aggregator for 1m candles (XAUUSD)
+	// Create aggregator for 1m candles
 	candleAgg := aggregator.NewCandleAggregator("XAUUSD", 60)
 
-	// Start mock provider (can be disabled for live HFM feed)
-	if os.Getenv("DISABLE_MOCK_PROVIDER") != "true" {
+	// Mock provider: strictly disabled by default so only real broker tick data is used
+	if os.Getenv("ENABLE_MOCK_PROVIDER") == "true" {
 		mockProvider := provider.NewMockProvider()
 		tickChan, err := mockProvider.Start()
 		if err != nil {
@@ -63,10 +63,10 @@ func main() {
 					candleAgg.ProcessTick(tick)
 				}
 			}()
-			log.Println("🧪 Mock XAU/USD provider started")
+			log.Println("🧪 Mock provider explicitly enabled")
 		}
 	} else {
-		log.Println("🚫 Mock provider disabled - expecting live feed from MT5 bridge")
+		log.Println("🚫 Mock provider DISABLED — accepting ONLY live tick data from MT5 broker bridge")
 	}
 
 	// Broadcast candles from aggregator

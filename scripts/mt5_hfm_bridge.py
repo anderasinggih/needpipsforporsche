@@ -7,16 +7,17 @@ import websockets
 import MetaTrader5 as mt5
 
 # --- KONFIGURASI HFM MT5 ---
-HFM_ACCOUNT = int(os.getenv("MT5_ACCOUNT", "12345678")) # Nomor akun HFM (bisa akun demo/real)
-HFM_PASSWORD = os.getenv("MT5_PASSWORD", "your_password")
-HFM_SERVER = os.getenv("MT5_SERVER", "HFMarketsSV-Live") # atau HFMarkets-Demo
-SYMBOL = "XAUUSD" # atau "GOLD" sesuai penamaan di Market Watch HFM
+HFM_ACCOUNT = int(os.getenv("MT5_ACCOUNT", "223052814"))
+HFM_PASSWORD = os.getenv("MT5_PASSWORD", "Lalalalisa123!#")
+HFM_SERVER = os.getenv("MT5_SERVER", "HFMarketsGlobal-Live18")
+SYMBOL = os.getenv("MT5_SYMBOL", "XAUUSDc") # Auto-detects XAUUSDc, GOLDc, XAUUSD
 
 # Endpoint Go Ingestion Engine
 GO_ENGINE_WS_URL = os.getenv("GO_ENGINE_URL", "ws://localhost:8080/ws/ingest/mt5")
 
 def initialize_mt5():
     """Inisialisasi koneksi ke terminal MT5 HFM yang terinstall di VPS"""
+    global SYMBOL
     if not mt5.initialize():
         print(f"❌ Gagal inisialisasi MT5: {mt5.last_error()}")
         return False
@@ -25,8 +26,12 @@ def initialize_mt5():
     authorized = mt5.login(HFM_ACCOUNT, password=HFM_PASSWORD, server=HFM_SERVER)
     if authorized:
         print(f"✅ Berhasil terhubung ke Akun HFM: {HFM_ACCOUNT} di server {HFM_SERVER}")
-        # Pastikan simbol XAUUSD aktif di Market Watch
-        mt5.symbol_select(SYMBOL, True)
+        # Cek ketersediaan simbol (cent vs standard)
+        for sym_candidate in [SYMBOL, "XAUUSDc", "GOLDc", "XAUUSD", "GOLD"]:
+            if mt5.symbol_select(sym_candidate, True):
+                SYMBOL = sym_candidate
+                print(f"🎯 Simbol aktif terpilih: {SYMBOL}")
+                break
         return True
     else:
         print(f"❌ Gagal login ke HFM: {mt5.last_error()}")
