@@ -9,9 +9,9 @@ The bridge runs on Windows VPS (195.88.211.100). SSH access: Administrator / Lal
 3. Copy `scripts/mt5_hfm_bridge.py` to VPS
 4. Create `.env` with credentials:
 ```env
-MT5_ACCOUNT=YOUR_ACCOUNT
-MT5_PASSWORD=YOUR_PASSWORD
-MT5_SERVER=HFMarketsSV-Live
+MT5_ACCOUNT=223052814
+MT5_PASSWORD='Lalalalisa123!#'
+MT5_SERVER=HFMarketsGlobal-Live18
 GO_ENGINE_URL=ws://195.88.211.100:8080/ws/ingest/mt5
 ```
 5. Run: `python mt5_hfm_bridge.py`

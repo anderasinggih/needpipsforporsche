@@ -32,6 +32,63 @@ def initialize_mt5():
         print(f"❌ Gagal login ke HFM: {mt5.last_error()}")
         return False
 
+
+def execute_order(action, symbol, volume, sl=0.0, tp=0.0, magic=911911):
+    """Execute BUY/SELL order via MT5 order_send"""
+    if not mt5.symbol_select(symbol, True):
+        return {"success": False, "error": f"Failed to select symbol {symbol}", "retcode": -1}
+    
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is None:
+        return {"success": False, "error": "Symbol info not available", "retcode": -2}
+    
+    # Set filling type if available
+    filling_type = mt5.ORDER_FILLING_FOK
+    if symbol_info.filling_mode & mt5.ORDER_FILLING_IOC:
+        filling_type = mt5.ORDER_FILLING_IOC
+    
+    order_type = mt5.ORDER_TYPE_BUY if action.upper() == "BUY" else mt5.ORDER_TYPE_SELL
+    price = mt5.symbol_info_tick(symbol).ask if action.upper() == "BUY" else mt5.symbol_info_tick(symbol).bid
+    
+    request = {
+        "action": mt5.TRADE_ACTION_DEAL,
+        "symbol": symbol,
+        "volume": float(volume),
+        "type": order_type,
+        "price": price,
+        "sl": float(sl),
+        "tp": float(tp),
+        "deviation": 20,
+        "magic": magic,
+        "comment": "NeedPipsForPorsche AI",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": filling_type,
+    }
+    
+    result = mt5.order_send(request)
+    if result is None:
+        return {"success": False, "error": "order_send returned None", "retcode": -3}
+    
+    if result.retcode == mt5.TRADE_RETCODE_DONE:
+        return {
+            "success": True,
+            "retcode": result.retcode,
+            "order": result.order,
+            "volume": result.volume,
+            "price": result.price,
+            "bid": result.bid,
+            "ask": result.ask,
+            "comment": result.comment,
+        }
+    else:
+        return {
+            "success": False,
+            "retcode": result.retcode,
+            "error": f"Trade failed with retcode {result.retcode}",
+            "order": getattr(result, 'order', 0),
+        }
+
+
 async def stream_hfm_ticks():
     """Membaca tick XAUUSD & open positions secara live dan mengirimkan ke Go Engine"""
     while True:
@@ -41,6 +98,39 @@ async def stream_hfm_ticks():
                 print(f"🚀 Streaming tick {SYMBOL} & open positions aktif...")
                 last_time_msc = 0
                 last_pos_check = 0
+
+                async def handle_engine_message(msg):
+                    try:
+                        data = json.loads(msg)
+                        if data.get("type") == "EXECUTE_ORDER":
+                            res = execute_order(
+                                data.get("action", "BUY"),
+                                data.get("symbol", "XAUUSD"),
+                                data.get("volume", 0.01),
+                                data.get("sl", 0.0),
+                                data.get("tp", 0.0),
+                                data.get("magic", 911911),
+                            )
+                            resp = {
+                                "type": "ORDER_RESPONSE",
+                                "request_id": data.get("request_id"),
+                                "symbol": data.get("symbol"),
+                                "action": data.get("action"),
+                                "volume": data.get("volume"),
+                                "result": res,
+                            }
+                            await ws.send(json.dumps(resp))
+                    except Exception as e:
+                        await ws.send(json.dumps({"type": "ORDER_RESPONSE", "error": str(e)}))
+
+                async def receive_loop():
+                    try:
+                        async for msg in ws:
+                            await handle_engine_message(msg if isinstance(msg, str) else msg.decode())
+                    except Exception:
+                        pass
+
+                receiver = asyncio.create_task(receive_loop())
 
                 while True:
                     now = time.time()

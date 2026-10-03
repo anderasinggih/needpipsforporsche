@@ -6,6 +6,7 @@ import { useMarketStream } from "@/hooks/useMarketStream";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { TradeJournalForm, JournalEntry } from "@/components/journal/TradeJournalForm";
 import { JournalHistoryTable } from "@/components/journal/JournalHistoryTable";
+import { TradeExecutionModal } from "@/components/trade/TradeExecutionModal";
 import {
   ShieldCheck,
   Key,
@@ -13,6 +14,7 @@ import {
   BookOpen,
   Plus,
   Loader2,
+  Zap,
 } from "lucide-react";
 
 interface JournalRow {
@@ -50,6 +52,9 @@ export default function DashboardPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [isExecModalOpen, setIsExecModalOpen] = useState(false);
+  const [execDirection, setExecDirection] = useState<"BUY" | "SELL">("BUY");
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const rules = selectedSkill?.rules_checklist ?? [];
   const allRequiredMet = rules
@@ -144,6 +149,61 @@ export default function DashboardPage() {
     showToast("Trade journal entry saved");
   };
 
+  const handleExecuteTrade = async (volume: number, sl: number, tp: number) => {
+    try {
+      setIsExecuting(true);
+      const res = await fetch("/api/trade/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: "XAUUSD",
+          action: execDirection,
+          volume,
+          sl,
+          tp,
+          magic: 911911,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ticket = data.result?.order || data.result?.ticket || "N/A";
+        showToast(`Order ${execDirection} ${volume} XAUUSD Executed! Ticket #${ticket}`);
+        setIsExecModalOpen(false);
+        // Auto journal
+        try {
+          await fetch("/api/journal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              symbol: "XAUUSD",
+              direction: execDirection,
+              entryPrice: currentCandle?.close ?? entryForDirection(),
+              stopLoss: sl,
+              takeProfit: tp,
+              lotSize: volume,
+              status: "OPEN",
+              skillId: selectedSkill?.id,
+              rulesCompliance: rules.map((r) => ({ id: r.id, text: r.text, checked: !!checkedRules[r.id] })),
+              aiValidationSummary: evaluation ? JSON.stringify(evaluation) : null,
+              notes: `Auto-journaled from live execution (Ticket: ${ticket})`,
+            }),
+          });
+          await fetchJournal();
+        } catch (e) {
+          console.error("Auto-journal failed:", e);
+        }
+      } else {
+        showToast(`Execution failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      showToast("Trade execution request failed");
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const entryForDirection = () => currentCandle?.close ?? 2650.5;
+
   return (
     <main className="min-h-screen bg-[#090A0F] text-slate-200">
       <header className="sticky top-0 z-50 border-b border-border/80 bg-[#0D0F17]/90 px-6 py-3.5 backdrop-blur-md">
@@ -224,7 +284,20 @@ export default function DashboardPage() {
                   <div>
                     <span className="font-bold uppercase text-slate-400">Recommendation:</span>{" "}
                     <span className="text-emerald-400">{evaluation.recommendation}</span>
-                  </div>
+                  </div>                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => { setExecDirection("BUY"); setIsExecModalOpen(true); }}
+                        className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-400 transition hover:bg-emerald-500/20"
+                      >
+                        🚀 EXECUTE BUY TO HFM
+                      </button>
+                      <button
+                        onClick={() => { setExecDirection("SELL"); setIsExecModalOpen(true); }}
+                        className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-400 transition hover:bg-red-500/20"
+                      >
+                        🚀 EXECUTE SELL TO HFM
+                      </button>
+                    </div>
                   <div className="border-t border-border/40 pt-2 text-[11px] text-slate-500">
                     {evaluation.notes}
                   </div>
@@ -348,6 +421,18 @@ export default function DashboardPage() {
           {toast}
         </div>
       )}
+
+      <TradeExecutionModal
+        isOpen={isExecModalOpen}
+        onClose={() => setIsExecModalOpen(false)}
+        direction={execDirection}
+        entryPrice={currentCandle?.close ?? entryForDirection()}
+        stopLoss={entryForDirection() - (execDirection === "BUY" ? 5.0 : -5.0)}
+        takeProfit={entryForDirection() + (execDirection === "BUY" ? 12.5 : -12.5)}
+        symbol="XAUUSD"
+        onConfirm={handleExecuteTrade}
+        isExecuting={isExecuting}
+      />
     </main>
   );
 }
