@@ -14,6 +14,11 @@ import {
   BookOpen,
   Plus,
   Loader2,
+  TrendingUp,
+  Activity,
+  CheckCircle2,
+  Layers,
+  Send,
   Zap,
 } from "lucide-react";
 
@@ -52,6 +57,8 @@ export default function DashboardPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Trade Execution Modal State
   const [isExecModalOpen, setIsExecModalOpen] = useState(false);
   const [execDirection, setExecDirection] = useState<"BUY" | "SELL">("BUY");
   const [isExecuting, setIsExecuting] = useState(false);
@@ -90,7 +97,7 @@ export default function DashboardPage() {
     setCheckedRules({});
     setEvaluation(null);
     setIsSkillModalOpen(false);
-    showToast(`Skill loaded: ${skill.title}`);
+    showToast(`Skill aktif: ${skill.title}`);
   };
 
   const handleEvaluate = async () => {
@@ -105,7 +112,7 @@ export default function DashboardPage() {
           price: currentCandle.close,
           direction: "BUY",
           checklistMet: allRequiredMet,
-          indicatorsSummary: `Live 1m candle O:${currentCandle.open.toFixed(2)} H:${currentCandle.high.toFixed(2)} L:${currentCandle.low.toFixed(2)} C:${currentCandle.close.toFixed(2)}`,
+          indicatorsSummary: `XAU/USD 1m bar Open: ${currentCandle.open.toFixed(2)}, High: ${currentCandle.high.toFixed(2)}, Low: ${currentCandle.low.toFixed(2)}, Close: ${currentCandle.close.toFixed(2)}`,
           rules: rules.map((r) => ({ ...r, checked: !!checkedRules[r.id] })),
         }),
       });
@@ -113,7 +120,7 @@ export default function DashboardPage() {
       setEvaluation(data.evaluation);
     } catch (err) {
       console.error("Evaluation failed:", err);
-      showToast("AI evaluation failed");
+      showToast("Evaluasi AI gagal");
     } finally {
       setIsEvaluating(false);
     }
@@ -137,16 +144,14 @@ export default function DashboardPage() {
           text: r.text,
           checked: !!checkedRules[r.id],
         })),
-        aiValidationSummary: evaluation
-          ? JSON.stringify(evaluation)
-          : null,
+        aiValidationSummary: evaluation ? JSON.stringify(evaluation) : null,
       }),
     });
     if (!res.ok) {
-      throw new Error("Failed to save trade journal entry");
+      throw new Error("Gagal menyimpan jurnal");
     }
     await fetchJournal();
-    showToast("Trade journal entry saved");
+    showToast("Trade berhasil dicatat ke jurnal");
   };
 
   const handleExecuteTrade = async (volume: number, sl: number, tp: number) => {
@@ -167,9 +172,8 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         const ticket = data.result?.order || data.result?.ticket || "N/A";
-        showToast(`Order ${execDirection} ${volume} XAUUSD Executed! Ticket #${ticket}`);
+        showToast(`Order ${execDirection} ${volume} XAUUSD Berhasil! Ticket #${ticket}`);
         setIsExecModalOpen(false);
-        // Auto journal
         try {
           await fetch("/api/journal", {
             method: "POST",
@@ -177,7 +181,7 @@ export default function DashboardPage() {
             body: JSON.stringify({
               symbol: "XAUUSD",
               direction: execDirection,
-              entryPrice: currentCandle?.close ?? entryForDirection(),
+              entryPrice: currentCandle?.close ?? 2650.0,
               stopLoss: sl,
               takeProfit: tp,
               lotSize: volume,
@@ -185,7 +189,7 @@ export default function DashboardPage() {
               skillId: selectedSkill?.id,
               rulesCompliance: rules.map((r) => ({ id: r.id, text: r.text, checked: !!checkedRules[r.id] })),
               aiValidationSummary: evaluation ? JSON.stringify(evaluation) : null,
-              notes: `Auto-journaled from live execution (Ticket: ${ticket})`,
+              notes: `Order otomatis dari live trade execution (Ticket: ${ticket})`,
             }),
           });
           await fetchJournal();
@@ -193,174 +197,194 @@ export default function DashboardPage() {
           console.error("Auto-journal failed:", e);
         }
       } else {
-        showToast(`Execution failed: ${data.error || "Unknown error"}`);
+        showToast(`Eksekusi gagal: ${data.error || "Cek terminal MT5"}`);
       }
     } catch (err) {
-      showToast("Trade execution request failed");
+      showToast("Gagal mengirim order ke MT5 bridge");
     } finally {
       setIsExecuting(false);
     }
   };
 
-  const entryForDirection = () => currentCandle?.close ?? 2650.5;
+  const currentPriceFormatted = currentCandle ? currentCandle.close.toFixed(2) : "---.--";
 
   return (
-    <main className="min-h-screen bg-[#090A0F] text-slate-200">
-      <header className="sticky top-0 z-50 border-b border-border/80 bg-[#0D0F17]/90 px-6 py-3.5 backdrop-blur-md">
+    <div className="min-h-screen bg-[#0E1117] text-zinc-100 font-sans antialiased selection:bg-zinc-700 selection:text-white">
+      {/* Top Application Bar - Clean & Utilitarian */}
+      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-[#0E1117]/95 px-5 py-2.5 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 text-lg font-black text-amber-400">
-              911
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 font-mono font-semibold tracking-tight text-white text-sm">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 text-[10px] font-bold text-zinc-300 border border-zinc-700">
+                P
+              </span>
+              NEEDPIPS<span className="text-zinc-500 font-normal">/</span>FORPORSCHE
             </div>
-            <div>
-              <h1 className="text-base font-bold tracking-wide text-white">
-                NEEDPIPS<span className="text-amber-400">FORPORSCHE</span>
-              </h1>
-              <p className="text-[10px] tracking-wider text-slate-400">
-                XAU/USD INTELLIGENCE &amp; DISCIPLINE HUB
-              </p>
+            <div className="hidden sm:flex items-center gap-2 border-l border-zinc-800 pl-4 text-xs text-zinc-400 font-mono">
+              <span>XAUUSD</span>
+              <span className="text-zinc-600">·</span>
+              <span className="font-semibold text-zinc-200">${currentPriceFormatted}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 rounded-full border border-border bg-[#141724] px-3 py-1">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs font-mono">
               <span
-                className={`h-2 w-2 rounded-full ${
-                  isConnected ? "animate-pulse bg-emerald-500" : "bg-red-500"
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isConnected ? "bg-emerald-500" : "bg-zinc-500"
                 }`}
               />
-              <span className="text-xs font-medium text-slate-300">
-                {isConnected ? "HFM FEED ACTIVE" : "RECONNECTING"}
+              <span className="text-zinc-400 text-[11px]">
+                {isConnected ? "HFM BRIDGE ACTIVE" : "OFFLINE / MOCK"}
               </span>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl p-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="space-y-6 lg:col-span-2">
-            <TradingViewChart currentCandle={currentCandle} positions={positions} />
+      {/* Main Workspace */}
+      <div className="mx-auto max-w-7xl px-5 py-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          {/* Main Chart Section (8 cols) */}
+          <div className="space-y-4 lg:col-span-8">
+            <div className="rounded border border-zinc-800 bg-[#12151D] p-1 shadow-sm">
+              <TradingViewChart currentCandle={currentCandle} positions={positions} />
+            </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="rounded-xl border border-border bg-surface p-4">
-                <div className="text-xs text-slate-400">TARGET PAIR</div>
-                <div className="mt-1 text-lg font-bold text-white">XAU/USD (Gold)</div>
+            {/* Metric Row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Instrumen</div>
+                <div className="mt-1 font-mono text-sm font-semibold text-zinc-200">Spot Gold (XAU/USD)</div>
               </div>
-              <div className="rounded-xl border border-border bg-surface p-4">
-                <div className="text-xs text-slate-400">ACTIVE STRATEGY</div>
-                <div className="mt-1 truncate text-lg font-bold text-amber-400">
-                  {selectedSkill ? selectedSkill.title : "No Skill Selected"}
+              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Strategi Terpilih</div>
+                <div className="mt-1 truncate text-sm font-medium text-zinc-200">
+                  {selectedSkill ? selectedSkill.title : "Pilih Skill..."}
                 </div>
               </div>
-              <div className="rounded-xl border border-border bg-surface p-4">
-                <div className="text-xs text-slate-400">TARGET RR MIN</div>
-                <div className="mt-1 text-lg font-bold text-emerald-400">
+              <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Min. Risk:Reward</div>
+                <div className="mt-1 font-mono text-sm font-semibold text-zinc-300">
                   1 : {selectedSkill?.risk_reward_min ?? 2.5}
                 </div>
               </div>
             </div>
 
+            {/* AI Technical Context Card */}
             {evaluation && (
-              <div className="rounded-xl border border-amber-500/30 bg-surface p-5 shadow-xl">
-                <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-                  <Sparkles className="h-5 w-5 text-amber-400" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-                    AI Setup Evaluation
-                  </h2>
-                  <span className="ml-auto rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-amber-400">
-                    {evaluation.rating} · {evaluation.confidence}%
+              <div className="rounded border border-zinc-700 bg-zinc-900/60 p-4">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                    <Activity className="h-4 w-4 text-zinc-400" />
+                    Analisis Rasionalitas Setup
+                  </div>
+                  <span className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] font-medium text-zinc-300 border border-zinc-700">
+                    {evaluation.rating} · Conf {evaluation.confidence}%
                   </span>
                 </div>
-                <div className="mt-4 space-y-3 text-xs leading-relaxed">
+                <div className="mt-3 space-y-2 text-xs leading-relaxed">
                   <div>
-                    <span className="font-bold uppercase text-slate-400">Thesis:</span>{" "}
-                    <span className="text-slate-200">{evaluation.thesis}</span>
+                    <span className="font-semibold text-zinc-400">Thesis:</span>{" "}
+                    <span className="text-zinc-200">{evaluation.thesis}</span>
                   </div>
                   <div>
-                    <span className="font-bold uppercase text-slate-400">Invalidation:</span>{" "}
-                    <span className="text-red-400">{evaluation.riskInvalidation}</span>
+                    <span className="font-semibold text-zinc-400">Invalidasi:</span>{" "}
+                    <span className="font-mono text-zinc-300">{evaluation.riskInvalidation}</span>
                   </div>
                   <div>
-                    <span className="font-bold uppercase text-slate-400">Recommendation:</span>{" "}
-                    <span className="text-emerald-400">{evaluation.recommendation}</span>
-                  </div>                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        onClick={() => { setExecDirection("BUY"); setIsExecModalOpen(true); }}
-                        className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-emerald-400 transition hover:bg-emerald-500/20"
-                      >
-                        🚀 EXECUTE BUY TO HFM
-                      </button>
-                      <button
-                        onClick={() => { setExecDirection("SELL"); setIsExecModalOpen(true); }}
-                        className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-400 transition hover:bg-red-500/20"
-                      >
-                        🚀 EXECUTE SELL TO HFM
-                      </button>
-                    </div>
-                  <div className="border-t border-border/40 pt-2 text-[11px] text-slate-500">
-                    {evaluation.notes}
+                    <span className="font-semibold text-zinc-400">Rekomendasi:</span>{" "}
+                    <span className="text-zinc-200">{evaluation.recommendation}</span>
+                  </div>
+
+                  {/* Clean Execution Trigger Buttons */}
+                  <div className="mt-4 flex items-center gap-2 pt-2 border-t border-zinc-800/80">
+                    <button
+                      onClick={() => { setExecDirection("BUY"); setIsExecModalOpen(true); }}
+                      className="flex items-center gap-1.5 rounded bg-emerald-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 active:scale-[0.98]"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Eksekusi Buy HFM
+                    </button>
+                    <button
+                      onClick={() => { setExecDirection("SELL"); setIsExecModalOpen(true); }}
+                      className="flex items-center gap-1.5 rounded bg-rose-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-rose-500 active:scale-[0.98]"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 rotate-180" />
+                      Eksekusi Sell HFM
+                    </button>
                   </div>
                 </div>
               </div>
             )}
 
-            <div>
+            {/* Trade Journal Table */}
+            <div className="rounded border border-zinc-800 bg-[#12151D] p-4">
               <div className="mb-3 flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Trade Journal History
-                </h2>
+                <BookOpen className="h-4 w-4 text-zinc-400" />
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                  Riwayat Trade Journal
+                </h3>
               </div>
               <JournalHistoryTable entries={journalEntries} />
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-xl border border-border bg-surface p-5 shadow-xl">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          {/* Right Sidebar: Rules & Discipline Execution Checklist (4 cols) */}
+          <div className="space-y-4 lg:col-span-4">
+            <div className="rounded border border-zinc-800 bg-[#12151D] p-4">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-amber-400" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-white">
-                    Execution Checklist
-                  </h2>
+                  <ShieldCheck className="h-4 w-4 text-zinc-400" />
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                    Discipline Checklist
+                  </h3>
                 </div>
                 <button
                   onClick={() => setIsSkillModalOpen(true)}
-                  className="flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-bold uppercase text-amber-400 transition hover:bg-amber-500/20"
+                  className="rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-700"
                 >
-                  <Key className="h-3 w-3" />
-                  Skill
+                  Pilih Skill
                 </button>
               </div>
 
               {!selectedSkill ? (
-                <button
-                  onClick={() => setIsSkillModalOpen(true)}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-6 text-xs uppercase tracking-wider text-slate-400 transition hover:border-amber-500/40 hover:text-amber-400"
-                >
-                  <Plus className="h-4 w-4" />
-                  Load Trading Skill
-                </button>
+                <div className="py-8 text-center">
+                  <p className="text-xs text-zinc-500">Belum ada strategi trading yang dimuat.</p>
+                  <button
+                    onClick={() => setIsSkillModalOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Pilih Template Skill
+                  </button>
+                </div>
               ) : (
-                <>
-                  <div className="mt-4 space-y-3">
+                <div className="mt-3">
+                  <div className="mb-3 flex items-center justify-between text-xs text-zinc-400">
+                    <span className="truncate font-medium text-zinc-200">{selectedSkill.title}</span>
+                    <span className="font-mono text-[11px]">
+                      {Object.values(checkedRules).filter(Boolean).length}/{rules.length}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
                     {rules.map((rule) => (
                       <label
                         key={rule.id}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/40 bg-[#0E1018] p-3 transition hover:border-amber-500/40"
+                        className="flex cursor-pointer items-start gap-2.5 rounded border border-zinc-800/80 bg-zinc-900/40 p-2.5 text-xs transition hover:border-zinc-700"
                       >
                         <input
                           type="checkbox"
                           checked={!!checkedRules[rule.id]}
                           onChange={() => toggleRule(rule.id)}
-                          className="mt-0.5 h-4 w-4 rounded border-border bg-background text-amber-500 focus:ring-amber-400 focus:ring-offset-0"
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-zinc-700 bg-zinc-800 text-zinc-200 focus:ring-0"
                         />
-                        <span className="text-xs font-medium leading-relaxed text-slate-300">
+                        <span className="text-zinc-300 leading-snug">
                           {rule.text}
                           {rule.required && (
-                            <span className="ml-2 text-[9px] font-bold uppercase text-red-400">
-                              Required
+                            <span className="ml-1.5 font-mono text-[10px] text-zinc-500 uppercase">
+                              (Wajib)
                             </span>
                           )}
                         </span>
@@ -371,40 +395,37 @@ export default function DashboardPage() {
                   <button
                     onClick={handleEvaluate}
                     disabled={!allRequiredMet || isEvaluating}
-                    className={`mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-xs font-bold uppercase tracking-wider transition ${
+                    className={`mt-4 flex w-full items-center justify-center gap-1.5 rounded py-2 text-xs font-medium transition ${
                       allRequiredMet
-                        ? "bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20"
-                        : "cursor-not-allowed bg-border text-slate-500"
+                        ? "bg-zinc-200 text-zinc-900 hover:bg-white active:scale-[0.99]"
+                        : "cursor-not-allowed bg-zinc-800/60 text-zinc-600"
                     }`}
                   >
                     {isEvaluating ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Evaluating...
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Menganalisis...
                       </>
                     ) : (
-                      "Validate Setup with AI"
+                      "Evaluasi Confluence Setup"
                     )}
                   </button>
-
-                  {!allRequiredMet && (
-                    <p className="mt-2 text-center text-[10px] uppercase tracking-wider text-red-400">
-                      Check all required rules to unlock
-                    </p>
-                  )}
-                </>
+                </div>
               )}
             </div>
 
+            {/* Quick Journal Form when Rules Met */}
             {selectedSkill && allRequiredMet && (
-              <TradeJournalForm
-                skillId={selectedSkill.id}
-                rulesCompliance={rules.map((r) => ({
-                  id: r.id,
-                  text: r.text,
-                  checked: !!checkedRules[r.id],
-                }))}
-                onSubmit={handleJournalSubmit}
-              />
+              <div className="rounded border border-zinc-800 bg-[#12151D] p-4">
+                <TradeJournalForm
+                  skillId={selectedSkill.id}
+                  rulesCompliance={rules.map((r) => ({
+                    id: r.id,
+                    text: r.text,
+                    checked: !!checkedRules[r.id],
+                  }))}
+                  onSubmit={handleJournalSubmit}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -416,23 +437,21 @@ export default function DashboardPage() {
         onSkillSelect={handleSkillSelect}
       />
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-lg border border-amber-500/30 bg-[#12141C] px-4 py-2.5 text-xs font-medium text-amber-400 shadow-2xl">
-          {toast}
-        </div>
-      )}
-
       <TradeExecutionModal
         isOpen={isExecModalOpen}
         onClose={() => setIsExecModalOpen(false)}
-        direction={execDirection}
-        entryPrice={currentCandle?.close ?? entryForDirection()}
-        stopLoss={entryForDirection() - (execDirection === "BUY" ? 5.0 : -5.0)}
-        takeProfit={entryForDirection() + (execDirection === "BUY" ? 12.5 : -12.5)}
-        symbol="XAUUSD"
         onConfirm={handleExecuteTrade}
+        symbol="XAUUSD"
+        direction={execDirection}
+        currentPrice={currentCandle?.close ?? 2650.0}
         isExecuting={isExecuting}
       />
-    </main>
+
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 rounded border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs text-zinc-200 shadow-lg">
+          {toast}
+        </div>
+      )}
+    </div>
   );
 }
