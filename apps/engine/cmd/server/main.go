@@ -51,8 +51,30 @@ func main() {
 	// Create aggregator for 1m candles
 	candleAgg := aggregator.NewCandleAggregator("XAUUSD", 60)
 
-	// Mock provider: strictly disabled by default so only real broker tick data is used
-	if os.Getenv("ENABLE_MOCK_PROVIDER") == "true" {
+	// Massive.com WebSocket Provider: Live real-time Forex/Gold streaming
+	massiveKey := os.Getenv("MASSIVE_API_KEY")
+	if massiveKey == "" {
+		massiveKey = "isbqihiqbZ3b9gOxZQUQGxOpCJDfj47f"
+	}
+
+	if massiveKey != "" {
+		massiveSym := os.Getenv("MASSIVE_SYMBOL")
+		if massiveSym == "" {
+			massiveSym = "C:XAUUSD"
+		}
+		massiveProvider := provider.NewMassiveProvider(massiveKey, massiveSym)
+		tickChan, err := massiveProvider.Start()
+		if err != nil {
+			log.Printf("Failed to start Massive provider: %v", err)
+		} else {
+			go func() {
+				for tick := range tickChan {
+					candleAgg.ProcessTick(tick)
+				}
+			}()
+			log.Printf("🚀 Massive.com live feed provider ACTIVE for %s", massiveSym)
+		}
+	} else if os.Getenv("ENABLE_MOCK_PROVIDER") == "true" {
 		mockProvider := provider.NewMockProvider()
 		tickChan, err := mockProvider.Start()
 		if err != nil {
