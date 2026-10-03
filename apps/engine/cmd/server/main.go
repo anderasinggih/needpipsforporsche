@@ -4,162 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
+
+	"needpipsforporsche/engine/internal/aggregator"
+	"needpipsforporsche/engine/internal/hub"
+	"needpipsforporsche/engine/internal/provider"
+	"needpipsforporsche/engine/internal/types"
 )
-
-type MarketTick struct {
-	Symbol    string  `json:"symbol"`
-	Timestamp int64   `json:"timestamp"`
-	Bid       float64 `json:"bid"`
-	Ask       float64 `json:"ask"`
-	Price     float64 `json:"price"`
-	Volume    float64 `json:"volume"`
-}
-
-type Candle struct {
-	Symbol    string  `json:"symbol"`
-	Timeframe string  `json:"timeframe"`
-	Time      int64   `json:"time"` // Unix seconds
-	Open      float64 `json:"open"`
-	High      float64 `json:"high"`
-	Low       float64 `json:"low"`
-	Close     float64 `json:"close"`
-	Volume    float64 `json:"volume"`
-	IsClosed  bool    `json:"is_closed"`
-}
-
-type Hub struct {
-	clients    map[*websocket.Conn]bool
-	broadcast  chan []byte
-	register   chan *websocket.Conn
-	unregister chan *websocket.Conn
-	mutex      sync.RWMutex
-}
-
-func newHub() *Hub {
-	return &Hub{
-		clients:    make(map[*websocket.Conn]bool),
-		broadcast:  make(chan []byte, 1024),
-		register:   make(chan *websocket.Conn),
-		unregister: make(chan *websocket.Conn),
-	}
-}
-
-func (h *Hub) run() {
-	for {
-		select {
-		case client := <-h.register:
-			h.mutex.Lock()
-			h.clients[client] = true
-			h.mutex.Unlock()
-			log.Println("👤 Client UI connected to Engine WS")
-
-		case client := <-h.unregister:
-			h.mutex.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				client.Close()
-				log.Println("❌ Client UI disconnected")
-			}
-			h.mutex.Unlock()
-
-		case message := <-h.broadcast:
-			h.mutex.RLock()
-			for client := range h.clients {
-				err := client.WriteMessage(websocket.TextMessage, message)
-				if err != nil {
-					log.Printf("⚠️ Error sending to client: %v", err)
-					client.Close()
-					delete(h.clients, client)
-				}
-			}
-			h.mutex.RUnlock()
-		}
-	}
-}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow all for development & local Next.js client
 	},
-}
-
-// Current active candle state (1m)
-var (
-	currentCandle   *Candle
-	candleMutex     sync.Mutex
-	lastCandleTime  int64
-)
-
-func processTick(tick MarketTick, hub *Hub) {
-	candleMutex.Lock()
-	defer candleMutex.Unlock()
-
-	// Align to 1m (60 seconds) boundary
-	candleSec := (tick.Timestamp / 1000 / 60) * 60
-
-	if currentCandle == nil || candleSec > lastCandleTime {
-		if currentCandle != nil {
-			currentCandle.IsClosed = true
-			data, _ := json.Marshal(currentCandle)
-			hub.broadcast <- data
-		}
-
-		currentCandle = &Candle{
-			Symbol:    tick.Symbol,
-			Timeframe: "1m",
-			Time:      candleSec,
-			Open:      tick.Price,
-			High:      tick.Price,
-			Low:       tick.Price,
-			Close:     tick.Price,
-			Volume:    tick.Volume,
-			IsClosed:  false,
-		}
-		lastCandleTime = candleSec
-	} else {
-		if tick.Price > currentCandle.High {
-			currentCandle.High = tick.Price
-		}
-		if tick.Price < currentCandle.Low {
-			currentCandle.Low = tick.Price
-		}
-		currentCandle.Close = tick.Price
-		currentCandle.Volume += tick.Volume
-	}
-
-	data, _ := json.Marshal(currentCandle)
-	hub.broadcast <- data
-}
-
-// Synthetic Mock Generator for offline/local dev before VPS MT5 is connected
-func startMockXAUUSDGenerator(hub *Hub) {
-	log.Println("🧪 Mock XAU/USD Tick Generator active (Base Price: ~$2650.00)")
-	price := 2650.00
-	ticker := time.NewTicker(250 * time.Millisecond)
-
-	for range ticker.C {
-		delta := (rand.Float64() - 0.495) * 0.40 // Slight fluctuation
-		price += delta
-		spread := 0.20
-
-		tick := MarketTick{
-			Symbol:    "XAUUSD",
-			Timestamp: time.Now().UnixMilli(),
-			Bid:       price,
-			Ask:       price + spread,
-			Price:     price,
-			Volume:    float64(rand.Intn(10) + 1),
-		}
-
-		processTick(tick, hub)
-	}
 }
 
 func main() {
@@ -168,55 +28,107 @@ func main() {
 		port = "8080"
 	}
 
-	hub := newHub()
-	go hub.run()
+	wsHub := hub.NewHub()
+	go wsHub.Run()
 
-	// 1. Endpoint untuk MT5 Python Bridge di VPS mengirim tick
+	// Create aggregator for 1m candles (XAUUSD)
+	candleAgg := aggregator.NewCandleAggregator("XAUUSD", 60)
+
+	// Start mock provider
+	mockProvider := provider.NewMockProvider()
+	tickChan, err := mockProvider.Start()
+	if err != nil {
+		log.Fatalf("Failed to start mock provider: %v", err)
+	}
+
+	// Process ticks from provider
+	go func() {
+		for tick := range tickChan {
+			candleAgg.ProcessTick(tick)
+		}
+	}()
+
+	// Broadcast candles from aggregator
+	go func() {
+		for candle := range candleAgg.GetCandleChannel() {
+			wsHub.BroadcastJSON(candle)
+		}
+	}()
+
+	// 1. Endpoint for MT5 Python Bridge in VPS to send tick data and positions
+	mt5Clients := make(map[*websocket.Conn]bool)
+	var mt5Mu sync.Mutex
 	http.HandleFunc("/ws/ingest/mt5", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Printf("Failed to upgrade MT5 ingestion: %v", err)
 			return
 		}
-		defer conn.Close()
+		mt5Mu.Lock()
+		mt5Clients[conn] = true
+		mt5Mu.Unlock()
 		log.Println("🔥 MT5 HFM Python Bridge Connected successfully!")
+
+		defer func() {
+			conn.Close()
+			mt5Mu.Lock()
+			delete(mt5Clients, conn)
+			mt5Mu.Unlock()
+			log.Println("⚠️ MT5 Bridge disconnected")
+		}()
 
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("⚠️ MT5 Bridge disconnected")
 				break
 			}
 
-			var tick MarketTick
-			if err := json.Unmarshal(msg, &tick); err == nil {
-				processTick(tick, hub)
+			var mt5Msg types.MT5Message
+			if err := json.Unmarshal(msg, &mt5Msg); err == nil {
+				if mt5Msg.Type == "TICK" || mt5Msg.Type == "" {
+					tick := types.MarketTick{
+						Symbol:    mt5Msg.Symbol,
+						Timestamp: mt5Msg.Timestamp,
+						Bid:       mt5Msg.Bid,
+						Ask:       mt5Msg.Ask,
+						Price:     mt5Msg.Price,
+						Volume:    mt5Msg.Volume,
+					}
+					if tick.Symbol == "" {
+						tick.Symbol = "XAUUSD"
+					}
+					candleAgg.ProcessTick(tick)
+				} else if mt5Msg.Type == "POSITIONS" {
+					// Broadcast positions to clients
+					posData := map[string]interface{}{
+						"type":      "POSITIONS",
+						"positions": mt5Msg.Positions,
+					}
+					wsHub.BroadcastJSON(posData)
+				}
 			}
 		}
 	})
 
-	// 2. Endpoint untuk Next.js Frontend Dashboard subscribe live candlestick stream
+	// 2. Endpoint for Next.js Frontend Dashboard - live stream (candles + positions)
 	http.HandleFunc("/ws/live", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Printf("Failed to upgrade client: %v", err)
 			return
 		}
-		hub.register <- conn
+		wsHub.Register(conn)
 
 		// Read pump to detect disconnection
 		go func() {
 			for {
 				if _, _, err := conn.NextReader(); err != nil {
-					hub.unregister <- conn
+					wsHub.Unregister(conn)
 					break
 				}
 			}
 		}()
 	})
-
-	// Jalankan Mock Generator jika MT5 belum tersambung
-	go startMockXAUUSDGenerator(hub)
 
 	serverAddr := fmt.Sprintf(":%s", port)
 	log.Printf("🚀 NeedPipsForPorsche Engine listening on http://localhost%s", serverAddr)

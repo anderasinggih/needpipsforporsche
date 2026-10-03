@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { createChart, IChartApi, ISeriesApi } from "lightweight-charts";
+import { createChart, IChartApi, ISeriesApi, LineType, LineStyle } from "lightweight-charts";
 
 export interface CandleData {
   time: number; // Unix seconds
@@ -13,23 +13,46 @@ export interface CandleData {
   is_closed?: boolean;
 }
 
+export interface PositionLine {
+  id: string;
+  price: number;
+  type: "ENTRY" | "SL" | "TP";
+  direction: "BUY" | "SELL";
+  label: string;
+}
+
+export interface Position {
+  ticket: number;
+  symbol: string;
+  type: "BUY" | "SELL";
+  volume: number;
+  open_price: number;
+  current_price: number;
+  sl: number;
+  tp: number;
+  profit: number;
+  time: number;
+}
+
 interface TradingViewChartProps {
   currentCandle: CandleData | null;
+  positions?: Position[];
   historicalCandles?: CandleData[];
 }
 
 export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   currentCandle,
+  positions = [],
   historicalCandles = [],
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const lineSeriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Create TradingView Chart Instance
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { color: "#0D0F17" },
@@ -69,7 +92,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
 
-    // Handle responsive resize
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
@@ -83,10 +105,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
+      lineSeriesMap.current.clear();
     };
   }, []);
 
-  // Update live tick/candle
   useEffect(() => {
     if (candleSeriesRef.current && currentCandle) {
       candleSeriesRef.current.update({
@@ -99,6 +121,67 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [currentCandle]);
 
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const lineMap = lineSeriesMap.current;
+    const activeLineIds = new Set<string>();
+
+    positions.forEach((pos) => {
+      const entryId = `pos_${pos.ticket}_entry`;
+      activeLineIds.add(entryId);
+      if (!lineMap.has(entryId)) {
+        const line = chartRef.current!.addLineSeries({
+          color: pos.type === "BUY" ? "#10B981" : "#EF4444",
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          title: `${pos.type} Entry @ ${pos.open_price.toFixed(2)}`,
+        });
+        line.setData([{ time: pos.time as any, value: pos.open_price }]);
+        lineMap.set(entryId, line);
+      }
+
+      const slId = `pos_${pos.ticket}_sl`;
+      if (pos.sl > 0) {
+        activeLineIds.add(slId);
+        if (!lineMap.has(slId)) {
+          const line = chartRef.current!.addLineSeries({
+            color: "#EF4444",
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            title: `SL @ ${pos.sl.toFixed(2)}`,
+          });
+          line.setData([{ time: pos.time as any, value: pos.sl }]);
+          lineMap.set(slId, line);
+        }
+      }
+
+      const tpId = `pos_${pos.ticket}_tp`;
+      if (pos.tp > 0) {
+        activeLineIds.add(tpId);
+        if (!lineMap.has(tpId)) {
+          const line = chartRef.current!.addLineSeries({
+            color: "#10B981",
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            title: `TP @ ${pos.tp.toFixed(2)}`,
+          });
+          line.setData([{ time: pos.time as any, value: pos.tp }]);
+          lineMap.set(tpId, line);
+        }
+      }
+    });
+
+    lineMap.forEach((line, id) => {
+      if (!activeLineIds.has(id)) {
+        chartRef.current!.removeSeries(line);
+        lineMap.delete(id);
+      }
+    });
+  }, [positions]);
+
+  const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
+
   return (
     <div className="relative w-full rounded-xl border border-border bg-[#0D0F17] p-2 shadow-2xl">
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
@@ -107,12 +190,27 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/20">
             1M TIMEFRAME
           </span>
+          {positions.length > 0 && (
+            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/20">
+              {positions.length} OPEN POSITION{positions.length > 1 ? 'S' : ''}
+            </span>
+          )}
         </div>
-        <div className="text-right">
-          <div className="text-xs text-porsche-muted">CURRENT PRICE</div>
-          <div className="text-base font-mono font-bold text-porsche-gold">
-            {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Connecting..."}
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <div className="text-xs text-porsche-muted">CURRENT PRICE</div>
+            <div className="text-base font-mono font-bold text-porsche-gold">
+              {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Connecting..."}
+            </div>
           </div>
+          {positions.length > 0 && (
+            <div className="text-right">
+              <div className="text-xs text-porsche-muted">FLOATING PnL</div>
+              <div className={`text-base font-mono font-bold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                ${totalPnL.toFixed(2)}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div ref={chartContainerRef} className="w-full" />
