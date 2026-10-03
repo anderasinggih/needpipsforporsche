@@ -27,16 +27,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Load existing settings from localStorage if available
+    if (typeof window === "undefined") return;
     const savedHfmAcc = localStorage.getItem("hfm_account");
     if (savedHfmAcc) setHfmAccount(savedHfmAcc);
+    const savedHfmPass = localStorage.getItem("hfm_password");
+    if (savedHfmPass) setHfmPassword(savedHfmPass);
     const savedHfmServ = localStorage.getItem("hfm_server");
     if (savedHfmServ) setHfmServer(savedHfmServ);
+    const savedHfmSym = localStorage.getItem("hfm_symbol");
+    if (savedHfmSym) setHfmSymbol(savedHfmSym);
     const savedGemini = localStorage.getItem("gemini_api_key");
     if (savedGemini) setGeminiKey(savedGemini);
     const savedModel = localStorage.getItem("ai_model");
     if (savedModel) setSelectedModel(savedModel);
-  }, []);
+    const savedGroq = localStorage.getItem("groq_api_key");
+    if (savedGroq) setGroqKey(savedGroq);
+    const savedOpenai = localStorage.getItem("openai_api_key");
+    if (savedOpenai) setOpenaiKey(savedOpenai);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -45,10 +53,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     setIsSaving(true);
     try {
       localStorage.setItem("hfm_account", hfmAccount);
+      localStorage.setItem("hfm_password", hfmPassword);
       localStorage.setItem("hfm_server", hfmServer);
       localStorage.setItem("hfm_symbol", hfmSymbol);
 
-      // Save to encrypted vault API
+      // Save to encrypted vault API (PostgreSQL database)
       await fetch("/api/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,6 +84,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     try {
       localStorage.setItem("gemini_api_key", geminiKey);
       localStorage.setItem("ai_model", selectedModel);
+      localStorage.setItem("groq_api_key", groqKey);
+      localStorage.setItem("openai_api_key", openaiKey);
 
       if (geminiKey) {
         await fetch("/api/vault", {
@@ -97,7 +108,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           body: JSON.stringify({ provider: "openai", keyIdentifier: "OPENAI_API_KEY", apiKey: openaiKey }),
         });
       }
-      onSaved("Pengaturan AI Model & API Keys berhasil disimpan");
+      onSaved("Pengaturan AI Model & API Keys berhasil disimpan di Database");
       onClose();
     } catch (err) {
       onSaved("Pengaturan AI disimpan lokal");

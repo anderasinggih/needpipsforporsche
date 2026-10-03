@@ -81,48 +81,8 @@ export function useMarketStream(url: string) {
 
     connect();
 
-    // Fallback real-time tick interval: ensures chart and price are ALWAYS alive and ticking
-    const tickInterval = setInterval(() => {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const delta = (Math.random() - 0.49) * 0.45;
-      simPriceRef.current = Number((simPriceRef.current + delta).toFixed(2));
-      const p = simPriceRef.current;
-      setCurrentCandle((prev) => {
-        if (!prev) {
-          return {
-            time: Math.floor(nowSec / 60) * 60,
-            open: p,
-            high: p + 0.2,
-            low: p - 0.2,
-            close: p,
-            volume: 1,
-          };
-        }
-        const barTime = Math.floor(nowSec / 60) * 60;
-        if (prev.time === barTime) {
-          return {
-            ...prev,
-            high: Math.max(prev.high, p),
-            low: Math.min(prev.low, p),
-            close: p,
-            volume: prev.volume + 1,
-          };
-        } else {
-          return {
-            time: barTime,
-            open: prev.close,
-            high: Math.max(prev.close, p),
-            low: Math.min(prev.close, p),
-            close: p,
-            volume: 1,
-          };
-        }
-      });
-    }, 1000);
-
     return () => {
       isMounted = false;
-      clearInterval(tickInterval);
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.close();
