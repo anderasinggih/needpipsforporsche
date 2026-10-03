@@ -241,12 +241,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   onChange={(e) => setSelectedModel(e.target.value)}
                   className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-100 focus:border-zinc-600 focus:outline-none"
                 >
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (Super Cepat &amp; Presisi)</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep SMC Reasoning)</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                  <option value="llama3-8b-8192">Groq Llama-3 8B (Ultra Low Latency)</option>
-                  <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
+                  <optgroup label="Google Gemini (Terbaru &amp; Rekomendasi)">
+                    <option value="gemini-3.8-flash">Gemini 3.8 Flash (Paling Baru &amp; Tercepat)</option>
+                    <option value="gemini-3.7-flash">Gemini 3.7 Flash (Hybrid Reasoning)</option>
+                    <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                    <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Ringan &amp; Cepat)</option>
+                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    <option value="custom">-- Custom Model ID (Ketik Sendiri) --</option>
+                  </optgroup>
+                  <optgroup label="Alternatif Lain">
+                    <option value="llama3-8b-8192">Groq Llama-3 8B (Ultra Low Latency)</option>
+                    <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
+                  </optgroup>
                 </select>
+
+                {selectedModel === "custom" && (
+                  <input
+                    type="text"
+                    placeholder="Contoh: gemini-3.8-flash atau model ID lainnya"
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="mt-2 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-zinc-500 focus:outline-none"
+                  />
+                )}
               </div>
 
               <div>
