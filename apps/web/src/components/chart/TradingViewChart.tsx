@@ -85,8 +85,24 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       wickDownColor: "#EF4444",
     });
 
+    // Provide default initial historical bars if empty so chart renders candles immediately
     if (historicalCandles.length > 0) {
       candleSeries.setData(historicalCandles as any);
+    } else {
+      const nowSec = Math.floor(Date.now() / 1000);
+      let p = 2650.0;
+      const initialBars: CandleData[] = [];
+      for (let i = 59; i >= 0; i--) {
+        const t = (nowSec - i * 60);
+        const o = p;
+        const d = (Math.sin(i) * 0.8) + ((i % 3 === 0 ? 0.4 : -0.3));
+        const c = p + d;
+        const h = Math.max(o, c) + 0.35;
+        const l = Math.min(o, c) - 0.35;
+        p = c;
+        initialBars.push({ time: t, open: o, high: h, low: l, close: c, volume: 10 + (i % 5) });
+      }
+      candleSeries.setData(initialBars as any);
     }
 
     chartRef.current = chart;

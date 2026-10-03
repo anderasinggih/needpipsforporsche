@@ -7,6 +7,7 @@ import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChec
 import { TradeJournalForm, JournalEntry } from "@/components/journal/TradeJournalForm";
 import { JournalHistoryTable } from "@/components/journal/JournalHistoryTable";
 import { TradeExecutionModal } from "@/components/trade/TradeExecutionModal";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
   ShieldCheck,
   Key,
@@ -20,6 +21,7 @@ import {
   Layers,
   Send,
   Zap,
+  Settings,
 } from "lucide-react";
 
 interface JournalRow {
@@ -53,6 +55,7 @@ export default function DashboardPage() {
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
@@ -238,6 +241,15 @@ export default function DashboardPage() {
                 {isConnected ? "HFM BRIDGE ACTIVE" : "OFFLINE / MOCK"}
               </span>
             </div>
+
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="flex items-center gap-1.5 rounded border border-zinc-700 bg-zinc-850 px-2.5 py-1 text-xs font-medium text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+              title="Pengaturan Akun & API Keys"
+            >
+              <Settings className="h-3.5 w-3.5 text-zinc-400" />
+              <span>Settings &amp; Keys</span>
+            </button>
           </div>
         </div>
       </header>
@@ -443,8 +455,16 @@ export default function DashboardPage() {
         onConfirm={handleExecuteTrade}
         symbol="XAUUSD"
         direction={execDirection}
-        currentPrice={currentCandle?.close ?? 2650.0}
+        entryPrice={currentCandle?.close ?? 2650.0}
+        stopLoss={execDirection === "BUY" ? (currentCandle?.close ?? 2650) - 5 : (currentCandle?.close ?? 2650) + 5}
+        takeProfit={execDirection === "BUY" ? (currentCandle?.close ?? 2650) + 12.5 : (currentCandle?.close ?? 2650) - 12.5}
         isExecuting={isExecuting}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSaved={(msg) => showToast(msg)}
       />
 
       {toast && (
