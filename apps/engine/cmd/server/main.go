@@ -51,30 +51,8 @@ func main() {
 	// Create aggregator for 1m candles
 	candleAgg := aggregator.NewCandleAggregator("XAUUSD", 60)
 
-	// Massive.com WebSocket Provider: Live real-time Forex/Gold streaming
-	massiveKey := os.Getenv("MASSIVE_API_KEY")
-	if massiveKey == "" {
-		massiveKey = "isbqihiqbZ3b9gOxZQUQGxOpCJDfj47f"
-	}
-
-	if massiveKey != "" {
-		massiveSym := os.Getenv("MASSIVE_SYMBOL")
-		if massiveSym == "" {
-			massiveSym = "C:XAUUSD"
-		}
-		massiveProvider := provider.NewMassiveProvider(massiveKey, massiveSym)
-		tickChan, err := massiveProvider.Start()
-		if err != nil {
-			log.Printf("Failed to start Massive provider: %v", err)
-		} else {
-			go func() {
-				for tick := range tickChan {
-					candleAgg.ProcessTick(tick)
-				}
-			}()
-			log.Printf("🚀 Massive.com live feed provider ACTIVE for %s", massiveSym)
-		}
-	} else if os.Getenv("ENABLE_MOCK_PROVIDER") == "true" {
+	// Live real-time Forex/Gold streaming provider
+	if os.Getenv("ENABLE_MOCK_PROVIDER") == "true" {
 		mockProvider := provider.NewMockProvider()
 		tickChan, err := mockProvider.Start()
 		if err != nil {
@@ -88,7 +66,19 @@ func main() {
 			log.Println("🧪 Mock provider explicitly enabled")
 		}
 	} else {
-		log.Println("🚫 Mock provider DISABLED — accepting ONLY live tick data from MT5 broker bridge")
+		// Live 24/7 Spot Gold stream (real-world price feed)
+		goldProvider := provider.NewBinanceGoldProvider()
+		tickChan, err := goldProvider.Start()
+		if err != nil {
+			log.Printf("Failed to start Gold provider: %v", err)
+		} else {
+			go func() {
+				for tick := range tickChan {
+					candleAgg.ProcessTick(tick)
+				}
+			}()
+			log.Printf("🚀 24/7 Real-Time Live Gold (XAU/USD) Stream ACTIVE")
+		}
 	}
 
 	// Broadcast candles from aggregator

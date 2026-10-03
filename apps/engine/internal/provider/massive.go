@@ -92,25 +92,14 @@ func (m *MassiveProvider) connectAndStream() {
 		m.conn = conn
 		m.mu.Unlock()
 
-		// 1. Send Authentication message
-		authReq := map[string]string{
-			"action": "auth",
-			"params": m.apiKey,
-		}
-		if err := conn.WriteJSON(authReq); err != nil {
-			log.Printf("❌ [Massive Provider] Auth failed: %v", err)
-			conn.Close()
-			time.Sleep(3 * time.Second)
-			continue
-		}
-
-		// 2. Read messages loop
+		// 2. Read messages loop: wait for connected before auth
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Printf("⚠️ [Massive Provider] Read error: %v", err)
 				break
 			}
+			log.Printf("📥 [Massive Raw Message]: %s", string(message))
 
 			var msgs []MassiveMessage
 			if err := json.Unmarshal(message, &msgs); err != nil {
@@ -126,7 +115,12 @@ func (m *MassiveProvider) connectAndStream() {
 			for _, msg := range msgs {
 				if msg.Ev == "status" {
 					if msg.Status == "connected" {
-						log.Printf("🟢 [Massive Provider] Connected: %s", msg.Msg)
+						log.Printf("🟢 [Massive Provider] Connected: %s -> Sending Auth...", msg.Msg)
+						authReq := map[string]string{
+							"action": "auth",
+							"params": m.apiKey,
+						}
+						_ = conn.WriteJSON(authReq)
 					} else if msg.Status == "auth_success" {
 						log.Printf("🔑 [Massive Provider] Authentication Successful!")
 						// Subscribe to per-minute aggregates (AM) and quotes

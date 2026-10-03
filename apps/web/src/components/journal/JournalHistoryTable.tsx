@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Badge } from "@/components/ui/badge";
 
 interface JournalRow {
   id: string;
@@ -23,42 +24,65 @@ interface JournalHistoryTableProps {
 
 export const JournalHistoryTable: React.FC<JournalHistoryTableProps> = ({ entries }) => {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border/60 bg-[#0E1018]">
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Date</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Symbol</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Dir</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Entry</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Exit</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">PnL</th>
-            <th className="px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400">Status</th>
+    <div className="overflow-x-auto rounded-md border border-zinc-800 bg-[#0C0E14]">
+      <table className="w-full text-left text-xs">
+        <thead className="border-b border-zinc-800 bg-zinc-900/60 text-[10px] uppercase tracking-wider text-zinc-400">
+          <tr>
+            <th className="px-3.5 py-2.5">Waktu</th>
+            <th className="px-3.5 py-2.5">Simbol</th>
+            <th className="px-3.5 py-2.5">Posisi</th>
+            <th className="px-3.5 py-2.5">Entry</th>
+            <th className="px-3.5 py-2.5">Exit</th>
+            <th className="px-3.5 py-2.5">P&amp;L</th>
+            <th className="px-3.5 py-2.5">Status</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-zinc-800/60 font-mono text-zinc-300">
           {entries.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">
-                No trade journal entries yet
+              <td colSpan={7} className="px-4 py-6 text-center font-sans text-xs text-zinc-500">
+                Belum ada catatan jurnal trading
               </td>
             </tr>
           ) : (
             entries.map((entry) => (
-              <tr key={entry.id} className="border-b border-border/30 last:border-0 hover:bg-white/5">
-                <td className="px-4 py-2 text-xs text-slate-300">
-                  {new Date(entry.created_at).toLocaleDateString()}
+              <tr key={entry.id} className="transition-colors hover:bg-zinc-850/40">
+                <td className="px-3.5 py-2 font-sans text-[11px] text-zinc-400">
+                  {new Date(entry.created_at).toLocaleDateString("id-ID", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </td>
-                <td className="px-4 py-2 text-xs font-semibold text-white">{entry.symbol}</td>
-                <td className={`px-4 py-2 text-xs font-bold ${entry.direction === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {entry.direction}
+                <td className="px-3.5 py-2 font-bold text-zinc-100">{entry.symbol}</td>
+                <td className="px-3.5 py-2 font-bold">
+                  {entry.direction === "BUY" ? (
+                    <span className="text-emerald-400">BUY</span>
+                  ) : (
+                    <span className="text-red-400">SELL</span>
+                  )}
                 </td>
-                <td className="px-4 py-2 text-xs font-mono text-slate-300">{entry.entry_price.toFixed(2)}</td>
-                <td className="px-4 py-2 text-xs font-mono text-slate-300">{entry.exit_price?.toFixed(2) || '-'}</td>
-                <td className={`px-4 py-2 text-xs font-bold ${entry.pnl && entry.pnl > 0 ? 'text-emerald-400' : entry.pnl && entry.pnl < 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                  {entry.pnl !== null && entry.pnl !== undefined ? entry.pnl.toFixed(2) : '-'}
+                <td className="px-3.5 py-2 text-zinc-300">{Number(entry.entry_price).toFixed(2)}</td>
+                <td className="px-3.5 py-2 text-zinc-400">
+                  {entry.exit_price ? Number(entry.exit_price).toFixed(2) : "-"}
                 </td>
-                <td className="px-4 py-2 text-xs uppercase">{entry.status}</td>
+                <td className="px-3.5 py-2 font-bold">
+                  {entry.pnl !== null && entry.pnl !== undefined ? (
+                    entry.pnl > 0 ? (
+                      <span className="text-emerald-400">+{Number(entry.pnl).toFixed(2)}</span>
+                    ) : (
+                      <span className="text-red-400">{Number(entry.pnl).toFixed(2)}</span>
+                    )
+                  ) : (
+                    <span className="text-zinc-500">-</span>
+                  )}
+                </td>
+                <td className="px-3.5 py-2 font-sans">
+                  <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                    {entry.status}
+                  </Badge>
+                </td>
               </tr>
             ))
           )}

@@ -1,7 +1,18 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Key, Shield, Check, Server, Bot } from "lucide-react";
+import { Bot, Key, Radio, Sparkles } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,33 +20,20 @@ interface SettingsModalProps {
   onSaved: (msg: string) => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved }) => {
-  const [tab, setTab] = useState<"hfm" | "ai">("hfm");
-
-  // HFM Account Form State
-  const [hfmAccount, setHfmAccount] = useState("223052814");
-  const [hfmPassword, setHfmPassword] = useState("Lalalalisa123!#");
-  const [hfmServer, setHfmServer] = useState("HFMarketsGlobal-Live18");
-  const [hfmSymbol, setHfmSymbol] = useState("XAUUSD");
-
-  // AI Keys & Model Form State
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  onSaved,
+}) => {
   const [geminiKey, setGeminiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [groqKey, setGroqKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
-
+  const [activeSymbol, setActiveSymbol] = useState("XAUUSD");
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const savedHfmAcc = localStorage.getItem("hfm_account");
-    if (savedHfmAcc) setHfmAccount(savedHfmAcc);
-    const savedHfmPass = localStorage.getItem("hfm_password");
-    if (savedHfmPass) setHfmPassword(savedHfmPass);
-    const savedHfmServ = localStorage.getItem("hfm_server");
-    if (savedHfmServ) setHfmServer(savedHfmServ);
-    const savedHfmSym = localStorage.getItem("hfm_symbol");
-    if (savedHfmSym) setHfmSymbol(savedHfmSym);
     const savedGemini = localStorage.getItem("gemini_api_key");
     if (savedGemini) setGeminiKey(savedGemini);
     const savedModel = localStorage.getItem("ai_model");
@@ -44,41 +42,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     if (savedGroq) setGroqKey(savedGroq);
     const savedOpenai = localStorage.getItem("openai_api_key");
     if (savedOpenai) setOpenaiKey(savedOpenai);
+    const savedSym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
+    if (savedSym) setActiveSymbol(savedSym);
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
-  const handleSaveHfm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    try {
-      localStorage.setItem("hfm_account", hfmAccount);
-      localStorage.setItem("hfm_password", hfmPassword);
-      localStorage.setItem("hfm_server", hfmServer);
-      localStorage.setItem("hfm_symbol", hfmSymbol);
-
-      // Save to encrypted vault API (PostgreSQL database)
-      await fetch("/api/vault", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: "hfm",
-          keyIdentifier: `HFM_${hfmAccount}_${hfmServer}`,
-          apiKey: JSON.stringify({ account: hfmAccount, password: hfmPassword, server: hfmServer, symbol: hfmSymbol }),
-        }),
-      });
-
-      onSaved("Konfigurasi akun HFM tersimpan di Vault & Storage");
-      onClose();
-    } catch (err) {
-      onSaved("Pengaturan akun HFM disimpan lokal");
-      onClose();
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveAi = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
@@ -86,32 +54,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       localStorage.setItem("ai_model", selectedModel);
       localStorage.setItem("groq_api_key", groqKey);
       localStorage.setItem("openai_api_key", openaiKey);
+      localStorage.setItem("active_symbol", activeSymbol);
+      localStorage.setItem("hfm_symbol", activeSymbol);
 
       if (geminiKey) {
         await fetch("/api/vault", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: "gemini", keyIdentifier: "GEMINI_API_KEY", apiKey: geminiKey }),
-        });
+          body: JSON.stringify({
+            provider: "gemini",
+            keyIdentifier: "GEMINI_API_KEY",
+            apiKey: geminiKey,
+          }),
+        }).catch(() => {});
       }
       if (groqKey) {
         await fetch("/api/vault", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: "groq", keyIdentifier: "GROQ_API_KEY", apiKey: groqKey }),
-        });
+          body: JSON.stringify({
+            provider: "groq",
+            keyIdentifier: "GROQ_API_KEY",
+            apiKey: groqKey,
+          }),
+        }).catch(() => {});
       }
-      if (openaiKey) {
-        await fetch("/api/vault", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: "openai", keyIdentifier: "OPENAI_API_KEY", apiKey: openaiKey }),
-        });
-      }
-      onSaved("Pengaturan AI Model & API Keys berhasil disimpan di Database");
+
+      onSaved("Konfigurasi AI Engine & Model tersimpan!");
       onClose();
-    } catch (err) {
-      onSaved("Pengaturan AI disimpan lokal");
+    } catch {
+      onSaved("Pengaturan disimpan lokal");
       onClose();
     } finally {
       setIsSaving(false);
@@ -119,204 +91,113 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-lg border border-zinc-800 bg-[#12151D] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3.5">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md border-zinc-800 bg-[#11131B]">
+        <DialogHeader>
           <div className="flex items-center gap-2">
-            <Key className="h-4 w-4 text-zinc-400" />
-            <h2 className="text-sm font-semibold tracking-wide text-zinc-100 uppercase">
-              Pengaturan Akun &amp; API Keys
-            </h2>
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <Bot className="h-4 w-4" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold tracking-wide text-zinc-100">
+                AI Trading Model &amp; Feed Engine
+              </DialogTitle>
+              <DialogDescription className="text-xs text-zinc-400">
+                Konfigurasi evaluasi AI realtime &amp; symbol feed pasar
+              </DialogDescription>
+            </div>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        {/* Tab Header */}
-        <div className="flex border-b border-zinc-800 bg-zinc-900/40 text-xs font-medium">
-          <button
-            onClick={() => setTab("hfm")}
-            className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 transition border-b-2 ${
-              tab === "hfm"
-                ? "border-zinc-300 text-white bg-zinc-800/40 font-semibold"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Server className="h-3.5 w-3.5" />
-            Akun Broker HFM
-          </button>
-          <button
-            onClick={() => setTab("ai")}
-            className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 transition border-b-2 ${
-              tab === "ai"
-                ? "border-zinc-300 text-white bg-zinc-800/40 font-semibold"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Bot className="h-3.5 w-3.5" />
-            AI Evaluator Keys
-          </button>
-        </div>
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="active-symbol">Trading Symbol / Pair</Label>
+            <Input
+              id="active-symbol"
+              type="text"
+              value={activeSymbol}
+              onChange={(e) => setActiveSymbol(e.target.value.toUpperCase())}
+              placeholder="XAUUSD"
+              className="font-mono text-zinc-100 uppercase"
+              required
+            />
+            <p className="text-[10px] text-zinc-500">
+              Contoh: XAUUSD (Gold 24/7), BTCUSDT, EURUSD
+            </p>
+          </div>
 
-        {/* Form Content */}
-        <div className="p-5">
-          {tab === "hfm" ? (
-            <form onSubmit={handleSaveHfm} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Nomor Akun MT5 HFM
-                </label>
-                <input
-                  type="text"
-                  value={hfmAccount}
-                  onChange={(e) => setHfmAccount(e.target.value)}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                  required
-                />
-              </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ai-model">Pilih Model AI Evaluator</Label>
+            <select
+              id="ai-model"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-zinc-800 bg-[#0C0E14] px-3 py-1.5 text-xs text-zinc-100 shadow-sm focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            >
+              <optgroup label="Google Gemini (Rekomendasi)">
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Paling Stabil &amp; Cepat)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Reasoning)</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+              </optgroup>
+              <optgroup label="Alternatif High-Speed">
+                <option value="llama3-8b-8192">Groq Llama-3 8B (Sub-second)</option>
+                <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
+              </optgroup>
+            </select>
+          </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Password Akun / Investor Pass
-                </label>
-                <input
-                  type="password"
-                  value={hfmPassword}
-                  onChange={(e) => setHfmPassword(e.target.value)}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                  required
-                />
-              </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="gemini-key">Google Gemini API Key</Label>
+              <span className="text-[10px] text-amber-400 font-mono">Gratis di aistudio.google.com</span>
+            </div>
+            <Input
+              id="gemini-key"
+              type="password"
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+              placeholder="AIzaSy..."
+              className="font-mono"
+            />
+          </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Server HFM
-                </label>
-                <input
-                  type="text"
-                  value={hfmServer}
-                  onChange={(e) => setHfmServer(e.target.value)}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                  placeholder="HFMarketsGlobal-Live18"
-                  required
-                />
-              </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="groq-key">Groq API Key (Opsional)</Label>
+            <Input
+              id="groq-key"
+              type="password"
+              value={groqKey}
+              onChange={(e) => setGroqKey(e.target.value)}
+              placeholder="gsk_..."
+              className="font-mono"
+            />
+          </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Simbol Emas
-                </label>
-                <input
-                  type="text"
-                  value={hfmSymbol}
-                  onChange={(e) => setHfmSymbol(e.target.value)}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                  placeholder="XAUUSD"
-                  required
-                />
-              </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="openai-key">OpenAI API Key (Opsional)</Label>
+            <Input
+              id="openai-key"
+              type="password"
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value)}
+              placeholder="sk-..."
+              className="font-mono"
+            />
+          </div>
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="w-full rounded bg-zinc-200 py-2 font-medium text-zinc-900 hover:bg-white active:scale-[0.99] transition"
-                >
-                  {isSaving ? "Menyimpan..." : "Simpan Pengaturan HFM"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSaveAi} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Google Gemini API Key (Rekomendasi)
-                </label>
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  placeholder="AIzaSy..."
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                />
-                <p className="mt-1 text-[10px] text-zinc-500">Dapatkan gratis di aistudio.google.com</p>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Pilih Model AI Evaluator
-                </label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                >
-                  <optgroup label="Google Gemini (Terbaru &amp; Rekomendasi)">
-                    <option value="gemini-3.8-flash">Gemini 3.8 Flash (Paling Baru &amp; Tercepat)</option>
-                    <option value="gemini-3.7-flash">Gemini 3.7 Flash (Hybrid Reasoning)</option>
-                    <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                    <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Ringan &amp; Cepat)</option>
-                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    <option value="custom">-- Custom Model ID (Ketik Sendiri) --</option>
-                  </optgroup>
-                  <optgroup label="Alternatif Lain">
-                    <option value="llama3-8b-8192">Groq Llama-3 8B (Ultra Low Latency)</option>
-                    <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
-                  </optgroup>
-                </select>
-
-                {selectedModel === "custom" && (
-                  <input
-                    type="text"
-                    placeholder="Contoh: gemini-3.8-flash atau model ID lainnya"
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="mt-2 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-1.5 font-mono text-xs text-zinc-100 focus:border-zinc-500 focus:outline-none"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Groq API Key (Alternatif Gratis)
-                </label>
-                <input
-                  type="password"
-                  value={groqKey}
-                  onChange={(e) => setGroqKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  OpenAI API Key (Opsional)
-                </label>
-                <input
-                  type="password"
-                  value={openaiKey}
-                  onChange={(e) => setOpenaiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="w-full rounded bg-zinc-200 py-2 font-medium text-zinc-900 hover:bg-white active:scale-[0.99] transition"
-                >
-                  {isSaving ? "Menyimpan..." : "Simpan Pengaturan AI"}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
-    </div>
+          <DialogFooter className="pt-2">
+            <Button
+              type="submit"
+              variant="porsche"
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-2"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>{isSaving ? "Menyimpan..." : "Simpan Pengaturan"}</span>
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
