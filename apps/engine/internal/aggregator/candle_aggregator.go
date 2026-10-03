@@ -40,7 +40,7 @@ func (ca *CandleAggregator) ProcessTick(tick types.MarketTick) {
 		}
 
 		ca.currentCandle = &types.Candle{
-			Symbol:    ca.symbol,
+			Symbol:    tick.Symbol,
 			Timeframe: getTimeframeString(ca.timeframeSeconds),
 			Time:      candleSec,
 			Open:      tick.Price,

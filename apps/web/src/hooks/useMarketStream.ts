@@ -52,8 +52,31 @@ export function useMarketStream(url: string) {
             const data = JSON.parse(event.data);
             if (data.type === "POSITIONS" && Array.isArray(data.positions)) {
               setPositions(data.positions);
-            } else if (data.symbol && data.open !== undefined) {
+            } else if (data.open !== undefined && data.close !== undefined) {
               setCurrentCandle(data as CandleData);
+            } else if (data.type === "TICK" && data.price !== undefined) {
+              const nowSec = Math.floor((data.timestamp || Date.now()) / 1000);
+              const barTime = Math.floor(nowSec / 60) * 60;
+              const p = Number(data.price);
+              setCurrentCandle((prev) => {
+                if (prev && prev.time === barTime) {
+                  return {
+                    ...prev,
+                    high: Math.max(prev.high, p),
+                    low: Math.min(prev.low, p),
+                    close: p,
+                    volume: prev.volume + (data.volume || 1),
+                  };
+                }
+                return {
+                  time: barTime,
+                  open: prev ? prev.close : p,
+                  high: p,
+                  low: p,
+                  close: p,
+                  volume: data.volume || 1,
+                };
+              });
             }
           } catch (err) {
             console.error("Failed to parse message:", err);

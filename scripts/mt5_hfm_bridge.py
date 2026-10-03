@@ -137,16 +137,32 @@ async def stream_hfm_ticks():
 
                 receiver = asyncio.create_task(receive_loop())
 
+                # Initial load: dapatkan candle/tick penutupan terakhir dari MT5 jika market sedang tutup
+                rates = mt5.copy_rates_from_pos(SYMBOL, mt5.TIMEFRAME_M1, 0, 1)
+                if rates is not None and len(rates) > 0:
+                    last_rate = rates[0]
+                    last_close_payload = {
+                        "type": "TICK",
+                        "symbol": SYMBOL,
+                        "timestamp": int(last_rate["time"]) * 1000,
+                        "bid": float(last_rate["close"]),
+                        "ask": float(last_rate["close"]),
+                        "price": float(last_rate["close"]),
+                        "volume": float(last_rate["tick_volume"]),
+                    }
+                    await ws.send(json.dumps(last_close_payload))
+                    print(f"📊 Initial price dikirim dari MT5: {SYMBOL} = {last_rate['close']}")
+
                 while True:
                     now = time.time()
-                    # 1. Stream Tick Harga XAUUSD
+                    # 1. Stream Tick Harga
                     tick = mt5.symbol_info_tick(SYMBOL)
                     if tick is not None and tick.time_msc != last_time_msc:
                         last_time_msc = tick.time_msc
                         
                         tick_payload = {
                             "type": "TICK",
-                            "symbol": "XAUUSD",
+                            "symbol": SYMBOL,
                             "timestamp": tick.time_msc,
                             "bid": tick.bid,
                             "ask": tick.ask,

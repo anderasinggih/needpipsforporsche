@@ -38,12 +38,14 @@ interface TradingViewChartProps {
   currentCandle: CandleData | null;
   positions?: Position[];
   historicalCandles?: CandleData[];
+  symbol?: string;
 }
 
 export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   currentCandle,
   positions = [],
   historicalCandles = [],
+  symbol = "XAUUSD",
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -197,7 +199,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     <div className="relative w-full rounded-xl border border-border bg-[#0D0F17] p-2 shadow-2xl">
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-white tracking-wide">XAU/USD</span>
+          <span className="text-lg font-bold text-white tracking-wide">{symbol}</span>
           <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/20">
             1M TIMEFRAME
           </span>
@@ -211,7 +213,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           <div className="text-right">
             <div className="text-xs text-porsche-muted">CURRENT PRICE</div>
             <div className="text-base font-mono font-bold text-porsche-gold">
-              {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Connecting..."}
+              {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Awaiting Data..."}
             </div>
           </div>
           {positions.length > 0 && (

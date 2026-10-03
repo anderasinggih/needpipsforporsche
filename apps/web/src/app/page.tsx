@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
@@ -73,6 +74,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchJournal();
+    if (typeof window !== "undefined") {
+      const sym = localStorage.getItem("hfm_symbol");
+      if (sym) setActiveSymbol(sym);
+    }
   }, []);
 
   const fetchJournal = useCallback(async () => {
@@ -233,7 +238,7 @@ export default function DashboardPage() {
               NEEDPIPS<span className="text-zinc-500 font-normal">/</span>FORPORSCHE
             </div>
             <div className="hidden sm:flex items-center gap-2 border-l border-zinc-800 pl-4 text-xs text-zinc-400 font-mono">
-              <span>XAUUSD</span>
+              <span className="font-bold text-zinc-300">{activeSymbol}</span>
               <span className="text-zinc-600">·</span>
               <span className="font-semibold text-zinc-200">${currentPriceFormatted}</span>
             </div>
@@ -269,14 +274,14 @@ export default function DashboardPage() {
           {/* Main Chart Section (8 cols) */}
           <div className="space-y-4 lg:col-span-8">
             <div className="rounded border border-zinc-800 bg-[#12151D] p-1 shadow-sm">
-              <TradingViewChart currentCandle={currentCandle} positions={positions} />
+              <TradingViewChart currentCandle={currentCandle} positions={positions} symbol={activeSymbol} />
             </div>
 
             {/* Metric Row */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Instrumen</div>
-                <div className="mt-1 font-mono text-sm font-semibold text-zinc-200">Spot Gold (XAU/USD)</div>
+                <div className="mt-1 font-mono text-sm font-semibold text-zinc-200">{activeSymbol}</div>
               </div>
               <div className="rounded border border-zinc-800 bg-zinc-900/40 p-3">
                 <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Strategi Terpilih</div>
@@ -462,7 +467,7 @@ export default function DashboardPage() {
         isOpen={isExecModalOpen}
         onClose={() => setIsExecModalOpen(false)}
         onConfirm={handleExecuteTrade}
-        symbol="XAUUSD"
+        symbol={activeSymbol}
         direction={execDirection}
         entryPrice={currentCandle?.close ?? 2650.0}
         stopLoss={execDirection === "BUY" ? (currentCandle?.close ?? 2650) - 5 : (currentCandle?.close ?? 2650) + 5}
@@ -472,8 +477,16 @@ export default function DashboardPage() {
 
       <SettingsModal
         isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-        onSaved={(msg) => showToast(msg)}
+        onClose={() => {
+          setIsSettingsModalOpen(false);
+          const sym = localStorage.getItem("hfm_symbol");
+          if (sym) setActiveSymbol(sym);
+        }}
+        onSaved={(msg) => {
+          showToast(msg);
+          const sym = localStorage.getItem("hfm_symbol");
+          if (sym) setActiveSymbol(sym);
+        }}
       />
 
       {toast && (
