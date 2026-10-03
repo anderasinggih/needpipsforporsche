@@ -42,17 +42,59 @@ Focus on risk management, confluence, and probability. Be objective and conserva
     // Try multiple providers if keys exist (OpenAI, Groq, Anthropic, Ollama)
     let responseData: any = null;
     
-    // Try Groq first (fast, common)
-    if (process.env.GROQ_API_KEY) {
+    const apiKey = (request.headers.get("x-gemini-key") || process.env.GEMINI_API_KEY || "").trim();
+    const userModel = (request.headers.get("x-ai-model") || "gemini-2.5-flash").trim();
+
+    // 1. Try Google Gemini first if key provided
+    if (apiKey || process.env.GEMINI_API_KEY) {
+      const activeGeminiKey = apiKey || process.env.GEMINI_API_KEY;
+      const targetModel = userModel.startsWith("gemini") ? userModel : "gemini-2.5-flash";
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${activeGeminiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${prompt}\n\nIMPORTANT: Return ONLY valid, raw JSON without markdown tags, backticks or commentary.` }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.4,
+              responseMimeType: "application/json"
+            }
+          }),
+        });
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            responseData = JSON.parse(text);
+          }
+        } else {
+          console.error("Gemini API error:", await geminiRes.text());
+        }
+      } catch (e) {
+        console.error('Gemini API call failed:', e);
+      }
+    }
+
+    // 2. Try Groq (fast, fallback)
+    if (!responseData && (process.env.GROQ_API_KEY || request.headers.get("x-groq-key"))) {
+      const activeGroqKey = request.headers.get("x-groq-key") || process.env.GROQ_API_KEY;
       try {
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+            'Authorization': `Bearer ${activeGroqKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama3-8b-8192',
+            model: userModel.startsWith("llama") ? userModel : 'llama3-8b-8192',
             messages: [
               { role: 'system', content: 'You are a professional trade evaluator. Return only valid JSON.' },
               { role: 'user', content: prompt }
@@ -71,17 +113,18 @@ Focus on risk management, confluence, and probability. Be objective and conserva
       }
     }
 
-    // Try OpenAI if no Groq success
-    if (!responseData && process.env.OPENAI_API_KEY) {
+    // 3. Try OpenAI
+    if (!responseData && (process.env.OPENAI_API_KEY || request.headers.get("x-openai-key"))) {
+      const activeOpenaiKey = request.headers.get("x-openai-key") || process.env.OPENAI_API_KEY;
       try {
         const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            'Authorization': `Bearer ${activeOpenaiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: userModel.startsWith("gpt") ? userModel : 'gpt-4o-mini',
             messages: [
               { role: 'system', content: 'You are a professional trade evaluator. Return only valid JSON.' },
               { role: 'user', content: prompt }

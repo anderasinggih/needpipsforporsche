@@ -107,9 +107,18 @@ export default function DashboardPage() {
     if (!currentCandle || !selectedSkill) return;
     try {
       setIsEvaluating(true);
+      const geminiKey = localStorage.getItem("gemini_api_key") || "";
+      const aiModel = localStorage.getItem("ai_model") || "gemini-2.5-flash";
+      const groqKey = localStorage.getItem("groq_api_key") || "";
+
       const res = await fetch("/api/ai/evaluate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-gemini-key": geminiKey,
+          "x-ai-model": aiModel,
+          "x-groq-key": groqKey,
+        },
         body: JSON.stringify({
           symbol: "XAUUSD",
           price: currentCandle.close,

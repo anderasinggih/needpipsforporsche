@@ -18,7 +18,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [hfmServer, setHfmServer] = useState("HFMarketsGlobal-Live18");
   const [hfmSymbol, setHfmSymbol] = useState("XAUUSD");
 
-  // AI Keys Form State
+  // AI Keys & Model Form State
+  const [geminiKey, setGeminiKey] = useState("");
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [groqKey, setGroqKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
 
@@ -30,6 +32,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     if (savedHfmAcc) setHfmAccount(savedHfmAcc);
     const savedHfmServ = localStorage.getItem("hfm_server");
     if (savedHfmServ) setHfmServer(savedHfmServ);
+    const savedGemini = localStorage.getItem("gemini_api_key");
+    if (savedGemini) setGeminiKey(savedGemini);
+    const savedModel = localStorage.getItem("ai_model");
+    if (savedModel) setSelectedModel(savedModel);
   }, []);
 
   if (!isOpen) return null;
@@ -67,6 +73,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     e.preventDefault();
     setIsSaving(true);
     try {
+      localStorage.setItem("gemini_api_key", geminiKey);
+      localStorage.setItem("ai_model", selectedModel);
+
+      if (geminiKey) {
+        await fetch("/api/vault", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "gemini", keyIdentifier: "GEMINI_API_KEY", apiKey: geminiKey }),
+        });
+      }
       if (groqKey) {
         await fetch("/api/vault", {
           method: "POST",
@@ -81,10 +97,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
           body: JSON.stringify({ provider: "openai", keyIdentifier: "OPENAI_API_KEY", apiKey: openaiKey }),
         });
       }
-      onSaved("API Key AI berhasil disimpan di Encrypted Vault");
+      onSaved("Pengaturan AI Model & API Keys berhasil disimpan");
       onClose();
     } catch (err) {
-      onSaved("Gagal menyimpan ke vault");
+      onSaved("Pengaturan AI disimpan lokal");
+      onClose();
     } finally {
       setIsSaving(false);
     }
@@ -203,7 +220,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             <form onSubmit={handleSaveAi} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
-                  Groq API Key (Gratis &amp; Cepat)
+                  Google Gemini API Key (Rekomendasi)
+                </label>
+                <input
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
+                />
+                <p className="mt-1 text-[10px] text-zinc-500">Dapatkan gratis di aistudio.google.com</p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
+                  Pilih Model AI Evaluator
+                </label>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-100 focus:border-zinc-600 focus:outline-none"
+                >
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (Super Cepat &amp; Presisi)</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep SMC Reasoning)</option>
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                  <option value="llama3-8b-8192">Groq Llama-3 8B (Ultra Low Latency)</option>
+                  <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
+                  Groq API Key (Alternatif Gratis)
                 </label>
                 <input
                   type="password"
@@ -212,7 +260,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   placeholder="gsk_..."
                   className="w-full rounded border border-zinc-800 bg-zinc-900 px-3 py-2 font-mono text-zinc-100 focus:border-zinc-600 focus:outline-none"
                 />
-                <p className="mt-1 text-[10px] text-zinc-500">Dapatkan gratis di console.groq.com</p>
               </div>
 
               <div>
@@ -234,7 +281,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                   disabled={isSaving}
                   className="w-full rounded bg-zinc-200 py-2 font-medium text-zinc-900 hover:bg-white active:scale-[0.99] transition"
                 >
-                  {isSaving ? "Menyimpan..." : "Simpan API Keys"}
+                  {isSaving ? "Menyimpan..." : "Simpan Pengaturan AI"}
                 </button>
               </div>
             </form>
