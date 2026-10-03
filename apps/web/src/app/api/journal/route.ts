@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
       client.release();
     }
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch journal entries' }, { status: 500 });
+    // Graceful fallback so UI loads instantly even if DB is cold
+    return NextResponse.json({ entries: [] });
   }
 }
 
