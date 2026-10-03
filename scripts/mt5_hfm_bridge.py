@@ -24,31 +24,50 @@ GO_ENGINE_WS_URL = os.getenv("GO_ENGINE_URL", "ws://localhost:8080/ws/ingest/mt5
 def initialize_mt5():
     """Inisialisasi koneksi ke terminal MT5 HFM yang terinstall di VPS"""
     global SYMBOL
-    # Pastikan mengarah ke terminal64.exe HFM jika belum terbuka
     terminal_path = r"C:\Program Files\MetaTrader 5\terminal64.exe"
+    
+    # Passing path, login, password, server, dan timeout langsung ke initialize
     if os.path.exists(terminal_path):
-        init_ok = mt5.initialize(terminal_path)
+        init_ok = mt5.initialize(
+            path=terminal_path,
+            login=HFM_ACCOUNT,
+            password=HFM_PASSWORD,
+            server=HFM_SERVER,
+            timeout=60000,
+            portable=False
+        )
     else:
-        init_ok = mt5.initialize()
+        init_ok = mt5.initialize(
+            login=HFM_ACCOUNT,
+            password=HFM_PASSWORD,
+            server=HFM_SERVER,
+            timeout=60000
+        )
+
+    if not init_ok:
+        # Fallback coba initialize tanpa parameter path jika terminal64 sudah terbuka
+        init_ok = mt5.initialize(timeout=30000)
 
     if not init_ok:
         print(f"[!] Gagal inisialisasi MT5: {mt5.last_error()}")
         return False
     
-    # Login otomatis ke akun HFM
-    authorized = mt5.login(HFM_ACCOUNT, password=HFM_PASSWORD, server=HFM_SERVER)
-    if authorized:
-        print(f"✅ Berhasil terhubung ke Akun HFM: {HFM_ACCOUNT} di server {HFM_SERVER}")
-        # Cek ketersediaan simbol (cent vs standard)
-        for sym_candidate in [SYMBOL, "XAUUSDc", "GOLDc", "XAUUSD", "GOLD"]:
-            if mt5.symbol_select(sym_candidate, True):
-                SYMBOL = sym_candidate
-                print(f"🎯 Simbol aktif terpilih: {SYMBOL}")
-                break
-        return True
+    # Verifikasi status koneksi / login
+    account_info = mt5.account_info()
+    if account_info is not None:
+        print(f"Berhasil terhubung ke Akun HFM: {account_info.login} ({account_info.server})")
+        print(f"Balance: {account_info.balance} {account_info.currency} | Leverage: 1:{account_info.leverage}")
     else:
-        print(f"❌ Gagal login ke HFM: {mt5.last_error()}")
-        return False
+        authorized = mt5.login(HFM_ACCOUNT, password=HFM_PASSWORD, server=HFM_SERVER)
+        if not authorized:
+            print(f"[!] Gagal login ke HFM: {mt5.last_error()}")
+            return False
+    for sym_candidate in [SYMBOL, "XAUUSDc", "GOLDc", "BTCUSDr", "XAUUSD", "GOLD"]:
+        if mt5.symbol_select(sym_candidate, True):
+            SYMBOL = sym_candidate
+            print(f"Simbol aktif terpilih: {SYMBOL}")
+            break
+    return True
 
 
 def execute_order(action, symbol, volume, sl=0.0, tp=0.0, magic=911911):
