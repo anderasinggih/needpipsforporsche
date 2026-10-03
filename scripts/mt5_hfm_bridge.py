@@ -33,21 +33,24 @@ def initialize_mt5():
         return False
 
 async def stream_hfm_ticks():
-    """Membaca tick XAUUSD secara live dan mengirimkan via WebSocket ke Go Engine"""
+    """Membaca tick XAUUSD & open positions secara live dan mengirimkan ke Go Engine"""
     while True:
         try:
             print(f"🔌 Menghubungkan ke Go Engine di {GO_ENGINE_WS_URL}...")
             async with websockets.connect(GO_ENGINE_WS_URL) as ws:
-                print(f"🚀 Streaming tick {SYMBOL} dari HFM aktif...")
+                print(f"🚀 Streaming tick {SYMBOL} & open positions aktif...")
                 last_time_msc = 0
+                last_pos_check = 0
 
                 while True:
-                    # Ambil tick paling mutakhir dari terminal MT5
+                    now = time.time()
+                    # 1. Stream Tick Harga XAUUSD
                     tick = mt5.symbol_info_tick(SYMBOL)
                     if tick is not None and tick.time_msc != last_time_msc:
                         last_time_msc = tick.time_msc
                         
-                        payload = {
+                        tick_payload = {
+                            "type": "TICK",
                             "symbol": "XAUUSD",
                             "timestamp": tick.time_msc,
                             "bid": tick.bid,
@@ -55,11 +58,36 @@ async def stream_hfm_ticks():
                             "price": (tick.bid + tick.ask) / 2.0,
                             "volume": float(tick.volume_real if tick.volume_real > 0 else tick.volume)
                         }
+                        await ws.send(json.dumps(tick_payload))
+
+                    # 2. Baca Posisi Trading Aktif (Setiap 500ms)
+                    if now - last_pos_check > 0.5:
+                        last_pos_check = now
+                        positions = mt5.positions_get(symbol=SYMBOL)
+                        pos_list = []
+                        if positions is not None:
+                            for pos in positions:
+                                pos_list.append({
+                                    "ticket": pos.ticket,
+                                    "symbol": pos.symbol,
+                                    "type": "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL",
+                                    "volume": pos.volume,
+                                    "open_price": pos.price_open,
+                                    "current_price": pos.price_current,
+                                    "sl": pos.sl,
+                                    "tp": pos.tp,
+                                    "profit": pos.profit,
+                                    "time": pos.time
+                                })
                         
-                        await ws.send(json.dumps(payload))
+                        pos_payload = {
+                            "type": "POSITIONS",
+                            "positions": pos_list
+                        }
+                        await ws.send(json.dumps(pos_payload))
                     
-                    # Polling 10-20ms untuk zero-latency
-                    await asyncio.sleep(0.01)
+                    # Polling 15ms untuk real-time update
+                    await asyncio.sleep(0.015)
 
         except (websockets.ConnectionClosed, ConnectionRefusedError):
             print("⚠️ Koneksi ke Go Engine terputus. Mencoba reconnect dalam 3 detik...")
