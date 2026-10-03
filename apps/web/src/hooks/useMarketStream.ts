@@ -43,6 +43,7 @@ export function useMarketStream(url: string) {
 
         ws.onopen = () => {
           if (!isMounted) return;
+          console.log("🟢 [Engine WS] Connected to:", resolvedUrl);
           setIsConnected(true);
         };
 
@@ -50,6 +51,7 @@ export function useMarketStream(url: string) {
           if (!isMounted) return;
           try {
             const data = JSON.parse(event.data);
+            console.log("📨 [Engine WS Message]:", data);
             if (data.type === "POSITIONS" && Array.isArray(data.positions)) {
               setPositions(data.positions);
             } else if (data.open !== undefined && data.close !== undefined) {

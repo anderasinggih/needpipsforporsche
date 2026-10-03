@@ -1,10 +1,16 @@
 # MT5 HFM (HF Markets) Data Ingestion Bridge
 import os
+import sys
 import time
 import json
 import asyncio
 import websockets
 import MetaTrader5 as mt5
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # --- KONFIGURASI HFM MT5 ---
 HFM_ACCOUNT = int(os.getenv("MT5_ACCOUNT", "223052814"))
@@ -18,8 +24,15 @@ GO_ENGINE_WS_URL = os.getenv("GO_ENGINE_URL", "ws://localhost:8080/ws/ingest/mt5
 def initialize_mt5():
     """Inisialisasi koneksi ke terminal MT5 HFM yang terinstall di VPS"""
     global SYMBOL
-    if not mt5.initialize():
-        print(f"❌ Gagal inisialisasi MT5: {mt5.last_error()}")
+    # Pastikan mengarah ke terminal64.exe HFM jika belum terbuka
+    terminal_path = r"C:\Program Files\MetaTrader 5\terminal64.exe"
+    if os.path.exists(terminal_path):
+        init_ok = mt5.initialize(terminal_path)
+    else:
+        init_ok = mt5.initialize()
+
+    if not init_ok:
+        print(f"[!] Gagal inisialisasi MT5: {mt5.last_error()}")
         return False
     
     # Login otomatis ke akun HFM
