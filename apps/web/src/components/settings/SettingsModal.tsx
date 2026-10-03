@@ -80,10 +80,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }).catch(() => {});
       }
 
-      onSaved("Konfigurasi AI Engine & Model tersimpan!");
+      onSaved("Engine & Model configurations saved successfully.");
       onClose();
     } catch {
-      onSaved("Pengaturan disimpan lokal");
+      onSaved("Saved locally.");
       onClose();
     } finally {
       setIsSaving(false);
@@ -92,18 +92,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md border-zinc-800 bg-[#11131B]">
+      <DialogContent className="sm:max-w-md border-neutral-800 bg-[#0A0A0A]">
         <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20">
               <Bot className="h-4 w-4" />
             </div>
             <div>
-              <DialogTitle className="text-sm font-semibold tracking-wide text-zinc-100">
-                AI Trading Model &amp; Feed Engine
+              <DialogTitle className="text-sm font-semibold tracking-wide text-neutral-100 uppercase">
+                AI Evaluator &amp; Feed Engine
               </DialogTitle>
-              <DialogDescription className="text-xs text-zinc-400">
-                Konfigurasi evaluasi AI realtime &amp; symbol feed pasar
+              <DialogDescription className="text-xs text-neutral-400">
+                Configure real-time AI reasoning model &amp; market symbol
               </DialogDescription>
             </div>
           </div>
@@ -111,35 +111,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           <div className="space-y-1.5">
-            <Label htmlFor="active-symbol">Trading Symbol / Pair</Label>
+            <Label htmlFor="active-symbol">Trading Instrument / Symbol</Label>
             <Input
               id="active-symbol"
               type="text"
               value={activeSymbol}
               onChange={(e) => setActiveSymbol(e.target.value.toUpperCase())}
               placeholder="XAUUSD"
-              className="font-mono text-zinc-100 uppercase"
+              className="font-mono text-neutral-100 uppercase bg-black border-neutral-800"
               required
             />
-            <p className="text-[10px] text-zinc-500">
-              Contoh: XAUUSD (Gold 24/7), BTCUSDT, EURUSD
+            <p className="text-[10px] text-neutral-500 font-mono">
+              e.g. XAUUSD (Gold 24/7), BTCUSDT, ETHUSDT
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="ai-model">Pilih Model AI Evaluator</Label>
+            <Label htmlFor="ai-model">AI Evaluation Model</Label>
             <select
               id="ai-model"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-zinc-800 bg-[#0C0E14] px-3 py-1.5 text-xs text-zinc-100 shadow-sm focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="flex h-9 w-full rounded-md border border-neutral-800 bg-black px-3 py-1.5 text-xs text-neutral-100 shadow-sm focus:outline-none focus:ring-1 focus:ring-[#00FF66] font-mono"
             >
-              <optgroup label="Google Gemini (Rekomendasi)">
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Paling Stabil &amp; Cepat)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Reasoning)</option>
+              <optgroup label="Google Gemini (Recommended)">
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ultra Fast &amp; Balanced)</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Quantitative Reasoning)</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
               </optgroup>
-              <optgroup label="Alternatif High-Speed">
+              <optgroup label="High-Throughput Alternatives">
                 <option value="llama3-8b-8192">Groq Llama-3 8B (Sub-second)</option>
                 <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
               </optgroup>
@@ -149,7 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="gemini-key">Google Gemini API Key</Label>
-              <span className="text-[10px] text-amber-400 font-mono">Gratis di aistudio.google.com</span>
+              <span className="text-[10px] text-[#00FF66] font-mono">Free at aistudio.google.com</span>
             </div>
             <Input
               id="gemini-key"
@@ -157,43 +157,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               value={geminiKey}
               onChange={(e) => setGeminiKey(e.target.value)}
               placeholder="AIzaSy..."
-              className="font-mono"
+              className="font-mono bg-black border-neutral-800"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="groq-key">Groq API Key (Opsional)</Label>
+            <Label htmlFor="groq-key">Groq API Key (Optional)</Label>
             <Input
               id="groq-key"
               type="password"
               value={groqKey}
               onChange={(e) => setGroqKey(e.target.value)}
               placeholder="gsk_..."
-              className="font-mono"
+              className="font-mono bg-black border-neutral-800"
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="openai-key">OpenAI API Key (Opsional)</Label>
+            <Label htmlFor="openai-key">OpenAI API Key (Optional)</Label>
             <Input
               id="openai-key"
               type="password"
               value={openaiKey}
               onChange={(e) => setOpenaiKey(e.target.value)}
               placeholder="sk-..."
-              className="font-mono"
+              className="font-mono bg-black border-neutral-800"
             />
           </div>
 
           <DialogFooter className="pt-2">
             <Button
               type="submit"
-              variant="porsche"
+              variant="electric"
               disabled={isSaving}
               className="w-full flex items-center justify-center gap-2"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>{isSaving ? "Menyimpan..." : "Simpan Pengaturan"}</span>
+              <span>{isSaving ? "Saving..." : "Save Configuration"}</span>
             </Button>
           </DialogFooter>
         </form>

@@ -57,21 +57,21 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: "#0D0F17" },
-        textColor: "#94A3B8",
+        background: { color: "#000000" },
+        textColor: "#737373",
       },
       grid: {
-        vertLines: { color: "#1A1D2B" },
-        horzLines: { color: "#1A1D2B" },
+        vertLines: { color: "#171717" },
+        horzLines: { color: "#171717" },
       },
       crosshair: {
         mode: 1,
       },
       rightPriceScale: {
-        borderColor: "#1E2230",
+        borderColor: "#262626",
       },
       timeScale: {
-        borderColor: "#1E2230",
+        borderColor: "#262626",
         timeVisible: true,
         secondsVisible: false,
       },
@@ -80,11 +80,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     });
 
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#10B981",
-      downColor: "#EF4444",
+      upColor: "#00FF66",
+      downColor: "#FF3366",
       borderVisible: false,
-      wickUpColor: "#10B981",
-      wickDownColor: "#EF4444",
+      wickUpColor: "#00FF66",
+      wickDownColor: "#FF3366",
     });
 
     // Only load candles when provided from real data feed

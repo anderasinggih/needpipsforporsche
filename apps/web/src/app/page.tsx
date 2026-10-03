@@ -19,8 +19,8 @@ import {
   Activity,
   CheckCircle2,
   Settings,
-  Flame,
   Radio,
+  Sparkles,
 } from "lucide-react";
 
 interface JournalRow {
@@ -69,7 +69,7 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchJournal();
     if (typeof window !== "undefined") {
-      const sym = localStorage.getItem("hfm_symbol");
+      const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
       if (sym) setActiveSymbol(sym);
     }
   }, []);
@@ -80,7 +80,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setJournalEntries(data.entries || []);
     } catch (err) {
-      console.error("Failed to fetch journal:", err);
+      console.error("Failed to fetch journal entries:", err);
     }
   }, []);
 
@@ -99,7 +99,7 @@ export default function DashboardPage() {
     setCheckedRules({});
     setEvaluation(null);
     setIsSkillModalOpen(false);
-    showToast(`Skill aktif: ${skill.title}`);
+    showToast(`Active Strategy: ${skill.title}`);
   };
 
   const handleEvaluate = async () => {
@@ -123,7 +123,7 @@ export default function DashboardPage() {
           price: currentCandle.close,
           direction: "BUY",
           checklistMet: allRequiredMet,
-          indicatorsSummary: `${activeSymbol} 1m bar Open: ${currentCandle.open.toFixed(2)}, High: ${currentCandle.high.toFixed(2)}, Low: ${currentCandle.low.toFixed(2)}, Close: ${currentCandle.close.toFixed(2)}`,
+          indicatorsSummary: `${activeSymbol} 1m bar: Open ${currentCandle.open.toFixed(2)}, High ${currentCandle.high.toFixed(2)}, Low ${currentCandle.low.toFixed(2)}, Close ${currentCandle.close.toFixed(2)}`,
           rules: rules.map((r) => ({ ...r, checked: !!checkedRules[r.id] })),
         }),
       });
@@ -131,7 +131,7 @@ export default function DashboardPage() {
       setEvaluation(data.evaluation);
     } catch (err) {
       console.error("Evaluation failed:", err);
-      showToast("Evaluasi AI gagal");
+      showToast("AI Evaluation request failed");
     } finally {
       setIsEvaluating(false);
     }
@@ -159,52 +159,54 @@ export default function DashboardPage() {
       }),
     });
     if (!res.ok) {
-      throw new Error("Gagal menyimpan jurnal");
+      throw new Error("Failed to record trade entry");
     }
     await fetchJournal();
-    showToast("Trade berhasil dicatat ke jurnal");
+    showToast("Trade successfully logged to journal");
   };
 
   const currentPriceFormatted = currentCandle ? currentCandle.close.toFixed(2) : "---.--";
 
   return (
-    <div className="min-h-screen bg-[#090A0F] text-zinc-100 font-sans antialiased selection:bg-zinc-700 selection:text-white">
-      {/* Top Application Bar with Pure Shadcn Design */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-[#0E1117]/95 px-5 py-2.5 backdrop-blur">
+    <div className="min-h-screen bg-black text-neutral-100 font-sans antialiased selection:bg-[#00FF66]/20 selection:text-[#00FF66]">
+      {/* Top Application Bar with Pure Shadcn Design & Electric Green Accents */}
+      <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-black/95 px-5 py-2.5 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 font-mono font-semibold tracking-tight text-white text-sm">
-              <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/20 text-[10px] font-bold text-amber-400 border border-amber-500/30">
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-[#00FF66]/10 text-[10px] font-bold text-[#00FF66] border border-[#00FF66]/30 shadow-[0_0_8px_rgba(0,255,102,0.2)]">
                 P
               </span>
-              NEEDPIPS<span className="text-zinc-500 font-normal">/</span>FORPORSCHE
+              NEEDPIPS<span className="text-neutral-600 font-normal">/</span>FORPORSCHE
             </div>
-            <div className="hidden sm:flex items-center gap-2 border-l border-zinc-800 pl-4 text-xs text-zinc-400 font-mono">
-              <Badge variant="outline" className="text-zinc-200 bg-zinc-900/60 font-mono">
+            <div className="hidden sm:flex items-center gap-2 border-l border-neutral-800 pl-4 text-xs font-mono">
+              <Badge variant="outline" className="border-neutral-800 bg-neutral-950 font-mono text-neutral-200">
                 {activeSymbol}
               </Badge>
-              <span className="text-zinc-600">·</span>
-              <span className="font-semibold text-amber-400 font-mono">${currentPriceFormatted}</span>
+              <span className="text-neutral-700">·</span>
+              <span className="font-semibold text-[#00FF66] font-mono tracking-wide text-xs">
+                ${currentPriceFormatted}
+              </span>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <Badge
-              variant={isConnected ? "success" : "secondary"}
-              className="flex items-center gap-1.5 py-1 px-2.5 text-[11px]"
+              variant={isConnected ? "live" : "secondary"}
+              className="flex items-center gap-1.5 py-1 px-2.5 text-[10px] font-mono"
             >
-              <Radio className={`h-3 w-3 ${isConnected ? "animate-pulse text-emerald-400" : "text-zinc-500"}`} />
-              <span>{isConnected ? "MASSIVE CLOUD FEED ACTIVE" : "OFFLINE / CONNECTING"}</span>
+              <Radio className={`h-3 w-3 ${isConnected ? "text-[#00FF66]" : "text-neutral-500"}`} />
+              <span>{isConnected ? "LIVE STREAM CONNECTED" : "OFFLINE / RECONNECTING"}</span>
             </Badge>
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center gap-1.5 border-zinc-750 bg-zinc-900/80 hover:bg-zinc-800 hover:text-white"
+              className="flex items-center gap-1.5 border-neutral-800 bg-black hover:border-neutral-700 hover:text-white text-xs h-8"
             >
-              <Settings className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Settings &amp; Keys</span>
+              <Settings className="h-3.5 w-3.5 text-neutral-400" />
+              <span>Settings</span>
             </Button>
           </div>
         </div>
@@ -215,65 +217,73 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           {/* Main Chart Section (8 cols) */}
           <div className="space-y-4 lg:col-span-8">
-            <Card className="border-zinc-800 bg-[#0D0F17] p-1.5 shadow-2xl overflow-hidden">
+            <Card className="border-neutral-800 bg-black p-1 shadow-2xl overflow-hidden">
               <TradingViewChart currentCandle={currentCandle} positions={positions} symbol={activeSymbol} />
             </Card>
 
-            {/* Metric Row */}
+            {/* Metrics Overview Row */}
             <div className="grid grid-cols-3 gap-3">
-              <Card className="p-3 bg-zinc-900/40 border-zinc-800">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Feed Source</div>
-                <div className="mt-1 font-mono text-sm font-semibold text-zinc-200">Massive.com Cloud WS</div>
-              </Card>
-              <Card className="p-3 bg-zinc-900/40 border-zinc-800">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Strategi Terpilih</div>
-                <div className="mt-1 truncate text-sm font-medium text-zinc-200">
-                  {selectedSkill ? selectedSkill.title : "Pilih Skill..."}
+              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
+                  Data Stream Feed
+                </div>
+                <div className="mt-1 font-mono text-xs font-semibold text-neutral-200">
+                  Binance / Massive WS
                 </div>
               </Card>
-              <Card className="p-3 bg-zinc-900/40 border-zinc-800">
-                <div className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Min. Risk:Reward</div>
-                <div className="mt-1 font-mono text-sm font-semibold text-zinc-300">
+              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
+                  Active Framework
+                </div>
+                <div className="mt-1 truncate text-xs font-medium text-neutral-200">
+                  {selectedSkill ? selectedSkill.title : "Select Strategy..."}
+                </div>
+              </Card>
+              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
+                  Min. Target Ratio
+                </div>
+                <div className="mt-1 font-mono text-xs font-semibold text-[#00FF66]">
                   1 : {selectedSkill?.risk_reward_min ?? 2.5}
                 </div>
               </Card>
             </div>
 
-            {/* AI Technical Context Card */}
+            {/* AI Technical Evaluation Card */}
             {evaluation && (
-              <Card className="border-zinc-700 bg-zinc-900/60 p-4">
-                <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                    <Activity className="h-4 w-4 text-zinc-400" />
-                    Analisis Rasionalitas Setup
+              <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
+                <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
+                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-300">
+                    <Activity className="h-4 w-4 text-[#00FF66]" />
+                    AI Quantitative Setup Evaluation
                   </CardTitle>
-                  <Badge variant="live">
-                    {evaluation.rating} · Conf {evaluation.confidence}%
+                  <Badge variant="electric">
+                    {evaluation.rating} · Confidence {evaluation.confidence}%
                   </Badge>
                 </CardHeader>
                 <CardContent className="p-0 pt-3 space-y-2 text-xs leading-relaxed">
                   <div>
-                    <span className="font-semibold text-zinc-400">Thesis:</span>{" "}
-                    <span className="text-zinc-200">{evaluation.thesis}</span>
+                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Thesis:</span>{" "}
+                    <span className="text-neutral-200">{evaluation.thesis}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-zinc-400">Invalidasi:</span>{" "}
-                    <span className="font-mono text-zinc-300">{evaluation.riskInvalidation}</span>
+                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Invalidation:</span>{" "}
+                    <span className="font-mono text-neutral-300">{evaluation.riskInvalidation}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-zinc-400">Rekomendasi:</span>{" "}
-                    <span className="text-zinc-200">{evaluation.recommendation}</span>
+                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Recommendation:</span>{" "}
+                    <span className="text-neutral-200">{evaluation.recommendation}</span>
                   </div>
                 </CardContent>
               </Card>
             )}
 
             {/* Trade Journal Table Card */}
-            <Card className="border-zinc-800 bg-[#12151D] p-4">
+            <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
               <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2">
-                <BookOpen className="h-4 w-4 text-zinc-400" />
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                  Riwayat Trade Journal
+                <BookOpen className="h-4 w-4 text-neutral-400" />
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
+                  Trade Performance Journal
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -284,11 +294,11 @@ export default function DashboardPage() {
 
           {/* Right Sidebar: Rules & Discipline Execution Checklist (4 cols) */}
           <div className="space-y-4 lg:col-span-4">
-            <Card className="border-zinc-800 bg-[#12151D] p-4">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
+            <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
+              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-zinc-400" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                  <ShieldCheck className="h-4 w-4 text-[#00FF66]" />
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-200">
                     Discipline Checklist
                   </CardTitle>
                 </div>
@@ -296,94 +306,94 @@ export default function DashboardPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsSkillModalOpen(true)}
-                  className="h-7 text-[11px] px-2.5 bg-zinc-800 border-zinc-700 hover:bg-zinc-700"
+                  className="h-7 text-[11px] px-2.5 bg-black border-neutral-800 hover:border-neutral-700"
                 >
-                  Pilih Skill
+                  Strategies
                 </Button>
               </CardHeader>
 
               {!selectedSkill ? (
                 <div className="py-8 text-center">
-                  <p className="text-xs text-zinc-500">Belum ada strategi trading yang dimuat.</p>
+                  <p className="text-xs text-neutral-500">No trading strategy loaded yet.</p>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsSkillModalOpen(true)}
-                    className="mt-3 text-xs border-dashed border-zinc-700"
+                    className="mt-3 text-xs border-neutral-800 bg-black hover:border-neutral-700"
                   >
-                    Muat Skill Trading
+                    Load Quantitative Skill
                   </Button>
                 </div>
               ) : (
                 <div className="mt-3 space-y-3">
-                  <div className="rounded bg-zinc-900/60 p-2.5 border border-zinc-800">
+                  <div className="rounded border border-neutral-800 bg-black p-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-zinc-200 text-xs">{selectedSkill.title}</span>
-                      <Badge variant="outline" className="text-[10px] font-mono">
+                      <span className="font-semibold text-neutral-200 text-xs">{selectedSkill.title}</span>
+                      <Badge variant="outline" className="text-[10px] font-mono border-neutral-800">
                         {selectedSkill.timeframes?.join(", ") || "M1 / M5"}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-[11px] text-zinc-400 leading-normal">
+                    <p className="mt-1.5 text-[11px] text-neutral-400 leading-normal">
                       {selectedSkill.description}
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
-                      Rules Checklist ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
+                    <div className="text-[10px] font-mono font-medium text-neutral-400 uppercase tracking-wider">
+                      Execution Rules ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
                     </div>
                     {rules.map((rule) => (
                       <div
                         key={rule.id}
                         onClick={() => toggleRule(rule.id)}
-                        className={`flex cursor-pointer items-start gap-2.5 rounded border p-2 text-xs transition ${
+                        className={`flex cursor-pointer items-start gap-2.5 rounded border p-2.5 text-xs transition ${
                           checkedRules[rule.id]
-                            ? "border-emerald-800/60 bg-emerald-950/20 text-emerald-300"
-                            : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                            ? "border-[#00FF66]/40 bg-[#00FF66]/5 text-neutral-100"
+                            : "border-neutral-800/80 bg-black text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
                         }`}
                       >
                         <div
                           className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                             checkedRules[rule.id]
-                              ? "border-emerald-500 bg-emerald-600 text-white"
-                              : "border-zinc-700 bg-zinc-800"
+                              ? "border-[#00FF66] bg-[#00FF66] text-black"
+                              : "border-neutral-700 bg-neutral-900"
                           }`}
                         >
-                          {checkedRules[rule.id] && <CheckCircle2 className="h-3 w-3" />}
+                          {checkedRules[rule.id] && <CheckCircle2 className="h-3.5 w-3.5 stroke-[3]" />}
                         </div>
                         <div className="leading-tight">
                           <span>{rule.text}</span>
                           {rule.required && (
-                            <span className="ml-1 text-[10px] text-amber-500 font-mono">(wajib)</span>
+                            <span className="ml-1 text-[10px] text-[#00FF66] font-mono font-semibold">[REQUIRED]</span>
                           )}
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* AI Evaluation Button */}
+                  {/* AI Evaluation Trigger */}
                   <div className="pt-2">
                     <Button
                       onClick={handleEvaluate}
                       disabled={!allRequiredMet || isEvaluating}
-                      variant={allRequiredMet ? "porsche" : "secondary"}
+                      variant="electric"
                       className="w-full flex items-center justify-center gap-2"
                     >
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Menganalisis Setup AI...</span>
+                          <span>Evaluating Setup with AI...</span>
                         </>
                       ) : (
                         <>
-                          <Flame className="h-3.5 w-3.5" />
-                          <span>Evaluasi Rasionalitas Setup</span>
+                          <Sparkles className="h-3.5 w-3.5" />
+                          <span>Evaluate Setup Rationality</span>
                         </>
                       )}
                     </Button>
                     {!allRequiredMet && (
-                      <p className="mt-1.5 text-center text-[11px] text-zinc-500">
-                        Lengkapi semua checklist wajib untuk membuka validasi AI
+                      <p className="mt-1.5 text-center text-[10px] font-mono text-neutral-500">
+                        Complete all mandatory rules to unlock AI evaluation
                       </p>
                     )}
                   </div>
@@ -391,13 +401,13 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            {/* Manual Journal Entry Form */}
+            {/* Manual Journal Entry Card */}
             {selectedSkill && (
-              <Card className="border-zinc-800 bg-[#12151D] p-4">
-                <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2 border-b border-zinc-800">
-                  <Plus className="h-4 w-4 text-zinc-400" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                    Catat Jurnal Manual
+              <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
+                <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2 border-b border-neutral-800">
+                  <Plus className="h-4 w-4 text-neutral-400" />
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
+                    Record Trade to Journal
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 pt-3">
@@ -427,18 +437,18 @@ export default function DashboardPage() {
         isOpen={isSettingsModalOpen}
         onClose={() => {
           setIsSettingsModalOpen(false);
-          const sym = localStorage.getItem("hfm_symbol");
+          const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
           if (sym) setActiveSymbol(sym);
         }}
         onSaved={(msg) => {
           showToast(msg);
-          const sym = localStorage.getItem("hfm_symbol");
+          const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
           if (sym) setActiveSymbol(sym);
         }}
       />
 
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs text-zinc-200 shadow-lg font-mono">
+        <div className="fixed bottom-5 right-5 z-50 rounded border border-neutral-800 bg-neutral-950 px-3.5 py-2 text-xs text-neutral-200 shadow-xl font-mono border-l-2 border-l-[#00FF66]">
           {toast}
         </div>
       )}

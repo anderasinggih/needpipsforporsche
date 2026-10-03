@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export interface Rule {
   id: string;
@@ -129,18 +128,18 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl border-zinc-800 bg-[#10121A] p-6 shadow-2xl">
-        <DialogHeader className="border-b border-zinc-800 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+      <DialogContent className="max-w-4xl border-neutral-800 bg-[#0A0A0A] p-6 shadow-2xl">
+        <DialogHeader className="border-b border-neutral-800 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20">
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <DialogTitle className="text-sm font-semibold tracking-wide text-zinc-100">
-                Pilih Skill &amp; Disiplin Trading Kuantitatif
+              <DialogTitle className="text-sm font-semibold tracking-wide text-neutral-100 uppercase">
+                Quantitative Trading Strategies &amp; Rules
               </DialogTitle>
-              <DialogDescription className="text-xs text-zinc-400">
-                Gunakan rule baku dari library strategi (Risk Management, Sizing, Exit, Microstructure)
+              <DialogDescription className="text-xs text-neutral-400">
+                Enforce institutional execution rules from the strategy library
               </DialogDescription>
             </div>
           </div>
@@ -148,19 +147,19 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-12 pt-2 h-[480px]">
           {/* List of Skills (5 cols) */}
-          <div className="md:col-span-5 flex flex-col h-full border-r border-zinc-800/80 pr-4 overflow-hidden">
+          <div className="md:col-span-5 flex flex-col h-full border-r border-neutral-800 pr-4 overflow-hidden">
             <div className="flex items-center justify-between pb-3">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                Daftar Skill Aktif ({skills.length})
+              <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400">
+                Active Library ({skills.length})
               </span>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setIsCreating(!isCreating)}
-                className="h-7 text-[11px] px-2.5 border-zinc-700 bg-zinc-900"
+                className="h-7 text-[11px] px-2.5 border-neutral-800 bg-black hover:border-neutral-700"
               >
-                <Plus className="mr-1 h-3 w-3" />
-                {isCreating ? "Kembali" : "Buat Baru"}
+                <Plus className="mr-1 h-3 w-3 text-[#00FF66]" />
+                {isCreating ? "Back" : "New Strategy"}
               </Button>
             </div>
 
@@ -176,17 +175,17 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                     }}
                     className={`cursor-pointer rounded-lg border p-3 transition text-left ${
                       isSelected
-                        ? "border-amber-500/50 bg-amber-500/5 text-zinc-100"
-                        : "border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                        ? "border-[#00FF66]/50 bg-[#00FF66]/5 text-neutral-100"
+                        : "border-neutral-800 bg-neutral-950 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-zinc-100">{skill.title}</div>
-                      <Badge variant="outline" className="text-[10px] font-mono">
+                      <div className="text-xs font-semibold text-neutral-100">{skill.title}</div>
+                      <Badge variant="electric" className="text-[10px]">
                         RR 1:{skill.risk_reward_min}
                       </Badge>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-[11px] text-zinc-400">
+                    <div className="mt-1 line-clamp-2 text-[11px] text-neutral-400">
                       {skill.description}
                     </div>
                   </div>
@@ -200,28 +199,28 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
             {isCreating ? (
               <form onSubmit={handleCreateSkill} className="space-y-3.5">
                 <div className="space-y-1">
-                  <Label htmlFor="skill-title">Nama Strategi / Skill</Label>
+                  <Label htmlFor="skill-title">Strategy Title</Label>
                   <Input
                     id="skill-title"
                     value={newSkill.title}
                     onChange={(e) => setNewSkill({ ...newSkill, title: e.target.value })}
-                    placeholder="Contoh: Gold Liquidity Sweep & Breakeven"
+                    placeholder="e.g., Gold Liquidity Sweep & Breakeven"
                     required
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="skill-desc">Deskripsi &amp; Logika</Label>
+                  <Label htmlFor="skill-desc">Description &amp; Logic</Label>
                   <Input
                     id="skill-desc"
                     value={newSkill.description}
                     onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
-                    placeholder="Ringkasan cara kerja rule trading ini"
+                    placeholder="Overview of strategy execution mechanics"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <Label htmlFor="skill-rr">Min. Risk to Reward Ratio (1 : X)</Label>
+                  <Label htmlFor="skill-rr">Min. Risk-to-Reward Ratio (1 : X)</Label>
                   <Input
                     id="skill-rr"
                     type="number"
@@ -233,13 +232,13 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label>Aturan Wajib (Rules Checklist)</Label>
+                    <Label>Mandatory Rules Checklist</Label>
                     <button
                       type="button"
                       onClick={addRule}
-                      className="text-[11px] font-medium text-amber-400 hover:underline"
+                      className="text-[11px] font-mono text-[#00FF66] hover:underline"
                     >
-                      + Tambah Rule
+                      + Add Rule
                     </button>
                   </div>
                   {newSkill.rules.map((rule, idx) => (
@@ -257,7 +256,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                           variant="ghost"
                           size="icon"
                           onClick={() => removeRule(rule.id)}
-                          className="h-8 w-8 text-zinc-500 hover:text-red-400"
+                          className="h-8 w-8 text-neutral-500 hover:text-red-400"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -267,8 +266,8 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                 </div>
 
                 <div className="pt-2">
-                  <Button type="submit" variant="porsche" disabled={loading} className="w-full">
-                    Simpan Skill Baru
+                  <Button type="submit" variant="electric" disabled={loading} className="w-full">
+                    Save New Strategy
                   </Button>
                 </div>
               </form>
@@ -277,26 +276,26 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                 <div className="space-y-3">
                   <div>
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-zinc-100">{selectedPreview.title}</h3>
-                      <Badge variant="live">R:R ≥ 1:{selectedPreview.risk_reward_min}</Badge>
+                      <h3 className="text-sm font-bold text-neutral-100">{selectedPreview.title}</h3>
+                      <Badge variant="electric">R:R ≥ 1:{selectedPreview.risk_reward_min}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+                    <p className="mt-1 text-xs text-neutral-400 leading-relaxed">
                       {selectedPreview.description}
                     </p>
                   </div>
 
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                      Standard Checklist ({selectedPreview.rules_checklist.length} Aturan)
+                  <div className="rounded-lg border border-neutral-800 bg-black p-3.5 space-y-2">
+                    <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400">
+                      Execution Rules ({selectedPreview.rules_checklist.length} Conditions)
                     </span>
-                    <div className="space-y-1.5 pt-1">
+                    <div className="space-y-2 pt-1">
                       {selectedPreview.rules_checklist.map((rule, idx) => (
-                        <div key={rule.id || idx} className="flex items-start gap-2 text-xs text-zinc-300">
-                          <CheckCircle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                        <div key={rule.id || idx} className="flex items-start gap-2 text-xs text-neutral-300">
+                          <CheckCircle className="h-3.5 w-3.5 text-[#00FF66] mt-0.5 shrink-0" />
                           <div className="leading-snug">
                             <span>{rule.text}</span>
                             {rule.required && (
-                              <span className="ml-1 text-[10px] text-amber-500 font-mono">(wajib)</span>
+                              <span className="ml-1 text-[10px] text-[#00FF66] font-mono font-bold">[MANDATORY]</span>
                             )}
                           </div>
                         </div>
@@ -307,7 +306,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
                 <div className="pt-2">
                   <Button
-                    variant="porsche"
+                    variant="electric"
                     onClick={() => {
                       if (onSkillSelect && selectedPreview) {
                         onSkillSelect(selectedPreview);
@@ -315,14 +314,14 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                     }}
                     className="w-full flex items-center justify-center gap-2"
                   >
-                    <span>Aktifkan Skill Ini ke Workspace</span>
+                    <span>Load Strategy to Workspace</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center text-xs text-zinc-500">
-                Pilih salah satu skill dari daftar sebelah kiri
+              <div className="flex h-full items-center justify-center text-xs text-neutral-500 font-mono">
+                Select a strategy from the left panel
               </div>
             )}
           </div>

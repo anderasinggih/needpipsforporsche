@@ -10,15 +10,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#090A0F",
-        surface: "#12141C",
-        border: "#1E2230",
-        porsche: {
-          gold: "#D4AF37",
-          green: "#10B981",
-          red: "#EF4444",
-          muted: "#94A3B8"
-        }
+        background: "#000000",
+        surface: "#0A0A0A",
+        border: "#171717",
+        electric: {
+          DEFAULT: "#00FF66",
+          glow: "#00FF6633",
+          dim: "#00CC52",
+          dark: "#003314",
+        },
       },
     },
   },

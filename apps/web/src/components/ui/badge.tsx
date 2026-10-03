@@ -3,20 +3,23 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/components/ui/button"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 select-none",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
+          "border-transparent bg-neutral-900 text-neutral-200",
         secondary:
-          "border-transparent bg-zinc-850 text-zinc-300 hover:bg-zinc-800",
+          "border-neutral-800 bg-neutral-900/60 text-neutral-400",
         destructive:
-          "border-transparent bg-red-950 text-red-400 border border-red-800/40",
-        outline: "text-zinc-300 border-zinc-750",
-        success: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400 font-mono",
-        warning: "border-amber-500/20 bg-amber-500/10 text-amber-400 font-mono",
-        live: "border-blue-500/20 bg-blue-500/10 text-blue-400 font-mono",
+          "border-red-900/60 bg-red-950/30 text-red-400",
+        outline: "border-neutral-800 text-neutral-300",
+        electric:
+          "border-[#00FF66]/30 bg-[#00FF66]/10 text-[#00FF66] shadow-[0_0_10px_rgba(0,255,102,0.15)]",
+        live:
+          "border-[#00FF66]/40 bg-[#00FF66]/10 text-[#00FF66] animate-pulse",
+        success:
+          "border-[#00FF66]/30 bg-[#00FF66]/10 text-[#00FF66]",
       },
     },
     defaultVariants: {
