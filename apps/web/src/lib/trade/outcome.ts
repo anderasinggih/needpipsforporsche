@@ -71,8 +71,12 @@ export const resolveTradeOutcome = (
 
   let extremeHigh = -Infinity;
   let extremeLow = Infinity;
-  let entryFilled = false;
-  let filledTime: number | undefined;
+  // An evaluation with a direct BUY/SELL signal is an immediate market entry,
+  // or entry filled as soon as price is at or crosses entry level.
+  let entryFilled = levels.setupPrice !== undefined 
+    ? Math.abs(levels.setupPrice - entryPrice) <= Math.max(1, entryPrice * 0.002) 
+    : true;
+  let filledTime: number | undefined = entryFilled ? anchorTime : undefined;
   let resolvedAt: { outcome: "WIN" | "LOSE"; price: number; time: number } | undefined;
 
   const track = (high: number, low: number, time: number) => {
@@ -92,18 +96,9 @@ export const resolveTradeOutcome = (
     }
   };
 
-  // A setup whose entry IS the market price at evaluation is a market entry: it
-  // is filled the moment the council speaks, so it must not sit waiting for a
-  // retest that will never come.
-  const setupPrice = levels.setupPrice;
-  if (setupPrice !== undefined && Math.abs(setupPrice - entryPrice) <= 0.05) {
-    entryFilled = true;
-    filledTime = anchorTime;
-  }
-
   const ordered = bars
     .filter(isUsableBar)
-    .filter((b) => b.time > anchorTime)
+    .filter((b) => b.time >= anchorTime)
     .sort((a, b) => a.time - b.time);
 
   for (const bar of ordered) {

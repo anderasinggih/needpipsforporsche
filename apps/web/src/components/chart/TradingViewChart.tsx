@@ -241,12 +241,20 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const unique = sorted.filter((item, index, self) =>
         index === 0 || item.time > self[index - 1].time
       );
+
+      // Preserve user viewport scroll position if they are viewing past candles
+      const timeScale = chartRef.current?.timeScale();
+      const prevRange = timeScale?.getVisibleLogicalRange();
+
       candleSeriesRef.current.setData(unique as any);
 
       if (chartRef.current && !isDataSetRef.current) {
         chartRef.current.timeScale().fitContent();
+        isDataSetRef.current = true;
+      } else if (prevRange && timeScale) {
+        // Restore range so chart does not snap forward
+        timeScale.setVisibleLogicalRange(prevRange);
       }
-      isDataSetRef.current = true;
     }
   }, [historicalCandles, symbol, timeframe]);
 
@@ -458,7 +466,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     });
   }, [aiMapping, aiSignal, historicalCandles]);
 
-  const [isBoxSelected, setIsBoxSelected] = useState(true);
+  const [isBoxSelected, setIsBoxSelected] = useState(false);
   const positionBoxBoundsRef = useRef<{ left: number; right: number; top: number; bottom: number } | null>(null);
 
   // Live feed mirrored into refs: the position box runs on requestAnimationFrame
@@ -635,68 +643,71 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const slPriceStr = formatPrice(aiSignal.stopLoss);
 
       // 5. In-Chart Price Badges with Labels on the Top, Middle & Bottom edges of the Box
-      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      // HANYA MUNCUL KETIKA POSITION BOX DI-KLIK / HOVER (SELECTED) agar tidak menutupi candle!
+      if (isBoxSelected) {
+        ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-      const drawBoxPriceLabel = (
-        text: string,
-        priceVal: string,
-        x: number,
-        y: number,
-        bgColor: string,
-        borderColor: string
-      ) => {
-        const fullText = `${text}: ${priceVal}`;
-        const textWidth = ctx.measureText(fullText).width;
-        const padX = 6;
-        const padY = 3;
-        const badgeW = textWidth + padX * 2;
-        const badgeH = 18;
-        const badgeX = x + 8;
-        const badgeY = y - badgeH / 2;
+        const drawBoxPriceLabel = (
+          text: string,
+          priceVal: string,
+          x: number,
+          y: number,
+          bgColor: string,
+          borderColor: string
+        ) => {
+          const fullText = `${text}: ${priceVal}`;
+          const textWidth = ctx.measureText(fullText).width;
+          const padX = 6;
+          const padY = 3;
+          const badgeW = textWidth + padX * 2;
+          const badgeH = 18;
+          const badgeX = x + 8;
+          const badgeY = y - badgeH / 2;
 
-        ctx.fillStyle = bgColor;
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 3);
-        } else {
-          ctx.rect(badgeX, badgeY, badgeW, badgeH);
-        }
-        ctx.fill();
-        ctx.stroke();
+          ctx.fillStyle = bgColor;
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 3);
+          } else {
+            ctx.rect(badgeX, badgeY, badgeW, badgeH);
+          }
+          ctx.fill();
+          ctx.stroke();
 
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(fullText, badgeX + padX, badgeY + badgeH / 2);
-      };
+          ctx.fillStyle = "#FFFFFF";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillText(fullText, badgeX + padX, badgeY + badgeH / 2);
+        };
 
-      // Draw inside/edge badges for TP, Entry, SL
-      drawBoxPriceLabel(
-        "TP",
-        tpPriceStr,
-        boxLeft,
-        yTP,
-        "rgba(8, 153, 129, 0.9)",
-        "#089981"
-      );
-      drawBoxPriceLabel(
-        "Entry",
-        entryPriceStr,
-        boxLeft,
-        yEntry,
-        "rgba(39, 39, 42, 0.9)",
-        "#71717A"
-      );
-      drawBoxPriceLabel(
-        "SL",
-        slPriceStr,
-        boxLeft,
-        ySL,
-        "rgba(242, 54, 69, 0.9)",
-        "#f23645"
-      );
+        // Draw inside/edge badges for TP, Entry, SL only when selected/clicked
+        drawBoxPriceLabel(
+          "TP",
+          tpPriceStr,
+          boxLeft,
+          yTP,
+          "rgba(8, 153, 129, 0.9)",
+          "#089981"
+        );
+        drawBoxPriceLabel(
+          "Entry",
+          entryPriceStr,
+          boxLeft,
+          yEntry,
+          "rgba(39, 39, 42, 0.9)",
+          "#71717A"
+        );
+        drawBoxPriceLabel(
+          "SL",
+          slPriceStr,
+          boxLeft,
+          ySL,
+          "rgba(242, 54, 69, 0.9)",
+          "#f23645"
+        );
+      }
 
       // 6. Right Price Scale Floating Badges (Persis TradingView: Gambar 2)
       // When the component is active/selected, render vivid price tags on the far right price scale
@@ -908,6 +919,25 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       <div 
         className="relative w-full h-[640px]"
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const bounds = positionBoxBoundsRef.current;
+          if (bounds) {
+            const isInside = 
+              mouseX >= bounds.left &&
+              mouseX <= bounds.right &&
+              mouseY >= bounds.top &&
+              mouseY <= bounds.bottom;
+            if (isInside !== isBoxSelected) {
+              setIsBoxSelected(isInside);
+            }
+          }
+        }}
+        onMouseLeave={() => {
+          setIsBoxSelected(false);
+        }}
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const clickX = e.clientX - rect.left;
@@ -920,11 +950,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
               clickY >= bounds.top &&
               clickY <= bounds.bottom
             ) {
-              setIsBoxSelected(true);
+              setIsBoxSelected((prev) => !prev);
               return;
             }
           }
-          // If clicked outside, keep selected or toggle
+          setIsBoxSelected(false);
         }}
       >
         <div ref={chartContainerRef} className="w-full h-full" />
