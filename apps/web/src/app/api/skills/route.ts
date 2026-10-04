@@ -154,6 +154,18 @@ const PRESET_SKILLS: DefaultSkill[] = [
       { id: "mtf_4", text: "No trading when Multi-Timeframe Matrix indicates CONFLICT status", required: true },
     ],
   },
+  {
+    title: "Take Risk & Aggressive Momentum Exploitation",
+    description: "High-conviction aggressive scalping for brave traders: capitalizes on immediate impulsive momentum, high-impact volatility expansion, and front-running orderflow with tight SL and asymmetric 1:3+ reward targets.",
+    timeframes: ["M1", "M5"],
+    risk_reward_min: 3.0,
+    rules_checklist: [
+      { id: "risk_1", text: "High-velocity momentum spike detected (aggressive institutional market order surge)", required: true },
+      { id: "risk_2", text: "Willingness to take bold calculated risk with tight invalidation beyond immediate impulse wick", required: true },
+      { id: "risk_3", text: "Minimum 1:3.0 Risk-to-Reward asymmetric upside potential mapped out", required: true },
+      { id: "risk_4", text: "Trailing stop or aggressive partial profit taking activated as soon as trade pushes +1.5R", required: false },
+    ],
+  },
 ];
 
 export async function GET(request: NextRequest) {

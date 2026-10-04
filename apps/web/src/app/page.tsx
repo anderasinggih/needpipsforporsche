@@ -389,6 +389,11 @@ export default function DashboardPage() {
           timeframe,
           targetRr,
           checklistMet: allRequiredMet,
+          selectedSkill: selectedSkill ? {
+            title: selectedSkill.title,
+            riskRewardMin: selectedSkill.risk_reward_min,
+            rules: selectedSkill.rules_checklist,
+          } : undefined,
           indicatorsSummary: `${activeSymbol} ${timeframe.toUpperCase()} @ ${currentCandle.close.toFixed(2)}`,
           // Enough history for genuine swing structure, Fibonacci anchors and
           // harmonic ratio validation on the server side.

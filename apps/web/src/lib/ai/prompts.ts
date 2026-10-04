@@ -215,6 +215,11 @@ export interface AgentPromptContext {
   fibText: string;
   harmonicText: string;
   checklistMet: boolean;
+  strategySkill?: {
+    title: string;
+    riskRewardMin: number;
+    rules: Array<{ id: string; text: string; required: boolean }>;
+  };
   debateTranscript?: string;
   rebuttalTarget?: {
     agentName: string;
@@ -230,7 +235,16 @@ TIMEFRAME AKTIF: ${ctx.timeframe.toUpperCase()} | HARGA SEKARANG: $${ctx.price}
 MANDAT:
 ${ctx.role.mandate}
 
-EDGE WAJIB (tanpa ini suara-mu diabaikan):
+${
+  ctx.strategySkill
+    ? `STRATEGI INSTITUTIONAL AKTIF DARI TRADER:
+Nama Strategi: "${ctx.strategySkill.title}"
+Target Minimum RR: 1:${ctx.strategySkill.riskRewardMin}
+Aturan Checklist Strategi:
+${ctx.strategySkill.rules.map((r) => `- [${r.required ? "WAJIB" : "OPSIONAL"}] ${r.text}`).join("\n")}
+*PERHATIAN KHUSUS:* Sesuaikan analisa dan bobot risikomu dengan strategi di atas! Jika ini adalah strategi agresif "Take Risk", trader siap mengambil risiko momentum tinggi dengan invalidasi ketat (high-risk high-reward).\n`
+    : ""
+}EDGE WAJIB (tanpa ini suara-mu diabaikan):
 ${ctx.role.edgeCriteria.map((c) => `- ${c}`).join("\n")}
 
 DATA MULTI-TIMEFRAME REAL (M1 / M5 / M15 / H1):

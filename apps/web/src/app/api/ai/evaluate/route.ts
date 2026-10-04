@@ -84,6 +84,11 @@ interface EvaluateRequest {
   price?: unknown;
   direction?: unknown;
   checklistMet?: unknown;
+  selectedSkill?: {
+    title?: string;
+    riskRewardMin?: number;
+    rules?: Array<{ id: string; text: string; required: boolean }>;
+  };
   indicatorsSummary?: unknown;
   timeframe?: unknown;
   candles?: unknown;
@@ -97,6 +102,11 @@ interface ParsedRequest {
   timeframe: string;
   candles: Candle[];
   checklistMet: boolean;
+  selectedSkill?: {
+    title: string;
+    riskRewardMin: number;
+    rules: Array<{ id: string; text: string; required: boolean }>;
+  } | undefined;
   keySlots: KeySlotPayload[];
   currentUnix: number;
   targetRr?: number | undefined;
@@ -159,6 +169,15 @@ const parseRequest = (body: EvaluateRequest): { errors: string[]; payload: Parse
   const targetRrNum = Number(body.targetRr);
   const targetRr = (Number.isFinite(targetRrNum) && targetRrNum >= 1 && targetRrNum <= 10) ? Number(targetRrNum.toFixed(1)) : undefined;
 
+  const rawSkill = body.selectedSkill;
+  const selectedSkill = rawSkill && typeof rawSkill === "object" && typeof rawSkill.title === "string"
+    ? {
+        title: String(rawSkill.title).trim(),
+        riskRewardMin: Number(rawSkill.riskRewardMin) || 2.0,
+        rules: Array.isArray(rawSkill.rules) ? rawSkill.rules : [],
+      }
+    : undefined;
+
   return {
     errors,
     payload: {
@@ -167,6 +186,7 @@ const parseRequest = (body: EvaluateRequest): { errors: string[]; payload: Parse
       timeframe,
       candles,
       checklistMet: body.checklistMet === false ? false : true,
+      selectedSkill,
       keySlots: sanitizeSlots(body.keySlots),
       currentUnix: candles.length ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000),
       targetRr,
@@ -750,7 +770,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Permintaan tidak valid.", details: errors }, { status: 400 });
   }
 
-  const { symbol, price, timeframe, candles, checklistMet, keySlots, currentUnix, targetRr } = payload;
+  const { symbol, price, timeframe, candles, checklistMet, selectedSkill, keySlots, currentUnix, targetRr } = payload;
   const spec = getSpec(symbol);
   const tfSeconds = parseTimeframeSeconds(timeframe);
 
@@ -881,6 +901,7 @@ export async function POST(request: NextRequest) {
         fibText,
         harmonicText,
         checklistMet,
+        strategySkill: selectedSkill,
         rebuttalTarget: extra?.rebuttalTarget,
         debateTranscript: extra?.debateTranscript,
       });
