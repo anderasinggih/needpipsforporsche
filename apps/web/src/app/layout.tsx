@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { BackgroundAudioPlayer } from "@/components/audio/BackgroundAudioPlayer";
 
 export const metadata: Metadata = {
   title: "NeedPipsForPorsche — XAU/USD Trading Intelligence",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-background text-slate-100 antialiased">{children}</body>
+      <body className="bg-background text-slate-100 antialiased">
+        {children}
+        <BackgroundAudioPlayer />
+      </body>
     </html>
   );
 }

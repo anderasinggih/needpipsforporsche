@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Key, ArrowLeft, CheckCircle2, Eye, EyeOff, Plus, Trash2, Cpu, ShieldCheck } from "lucide-react";
+import { Key, ArrowLeft, CheckCircle2, Eye, EyeOff, Plus, Trash2, Cpu, ShieldCheck, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,12 +84,16 @@ const DEFAULT_SLOTS: KeySlot[] = [
 
 export default function OwnerKeyPage() {
   const [slots, setSlots] = useState<KeySlot[]>(DEFAULT_SLOTS);
+  const [youtubeLinks, setYoutubeLinks] = useState<string>("");
   const [isSaved, setIsSaved] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
   const [testingStatus, setTestingStatus] = useState<Record<string, { loading: boolean; ok?: boolean; msg?: string }>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      const savedMusic = localStorage.getItem("bg_music_youtube_links") || "";
+      setYoutubeLinks(savedMusic);
+
       const saved = localStorage.getItem("ai_council_keys_10");
       if (saved) {
         try {
@@ -178,6 +182,7 @@ export default function OwnerKeyPage() {
     e.preventDefault();
     if (typeof window !== "undefined") {
       localStorage.setItem("ai_council_keys_10", JSON.stringify(slots));
+      localStorage.setItem("bg_music_youtube_links", youtubeLinks.trim());
 
       // Also set primary keys for backward compatibility
       const geminiSlot = slots.find((s) => s.provider === "gemini" && s.apiKey.trim());
@@ -245,6 +250,40 @@ export default function OwnerKeyPage() {
                 Anda bebas mengisi hingga 10 API Key (misal 3 Gemini, 2 Groq, 2 OpenAI, DeepSeek, dll.).
                 Tersedia tombol <span className="text-zinc-200 font-semibold">Test Key</span> untuk langsung memverifikasi apakah kunci dan kuota model Anda valid sebelum digunakan scalping secara live.
               </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* YouTube Background Music Playlist Configuration Card */}
+        <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
+          <div className="flex items-start gap-3">
+            <Music className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase font-mono tracking-wider text-zinc-200">
+                  Background Music Audio Player (YouTube Embed)
+                </div>
+                <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-cyan-400">
+                  Auto-Loop &bull; Multi-Link
+                </Badge>
+              </div>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Masukkan URL atau Video ID YouTube untuk musik background saat trading.
+                Mendukung banyak lagu sekaligus (pisahkan dengan tanda koma <span className="text-zinc-200 font-mono">,</span>). Pemutar lagu akan otomatis memutar dan mengulang (loop) secara berurutan.
+              </p>
+              <div>
+                <Label htmlFor="yt-music" className="text-[11px] font-mono text-zinc-400">
+                  YouTube Video URLs / Video IDs (Pisahkan dengan koma):
+                </Label>
+                <textarea
+                  id="yt-music"
+                  rows={2}
+                  value={youtubeLinks}
+                  onChange={(e) => setYoutubeLinks(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=jfKfPfyJRdk, https://youtu.be/5qap5aO4i9A"
+                  className="mt-1.5 w-full rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
         </Card>
