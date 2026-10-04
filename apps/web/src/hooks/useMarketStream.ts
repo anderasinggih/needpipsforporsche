@@ -66,9 +66,14 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    // Use Binance multiplex stream endpoint:
-    const klineStream = `${binanceStream}@kline_${timeframe}`;
-    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade/${binanceStream}@ticker`;
+    // Map timeframe to Binance supported kline intervals: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+    // (Binance WS does not support 1s kline, fallback to 1m for kline but keep raw trade stream for sub-second ticks)
+    let binanceInterval = timeframe;
+    if (timeframe === "1s") binanceInterval = "1m";
+
+    // Use Binance direct combined stream endpoint:
+    const klineStream = `${binanceStream}@kline_${binanceInterval}`;
+    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -108,7 +113,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               setCurrentCandle(candle);
               setLastTickTimestamp(Date.now());
             }
-            // Handle individual trade tick event (@trade)
+            // Handle individual real-time trade tick event (@trade)
             else if (eventType === "trade" && payload.p) {
               const tradePrice = parseFloat(payload.p);
               setCurrentCandle((prev) => {
@@ -122,20 +127,6 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               });
               setLastTickTimestamp(Date.now());
             }
-            // Handle ticker heartbeat event (@ticker)
-            else if (eventType === "24hrTicker" && payload.c) {
-              const currentPrice = parseFloat(payload.c);
-              setCurrentCandle((prev) => {
-                if (!prev) return null;
-                return {
-                  ...prev,
-                  high: Math.max(prev.high, currentPrice),
-                  low: Math.min(prev.low, currentPrice),
-                  close: currentPrice,
-                };
-              });
-              setLastTickTimestamp(Date.now());
-            }
           } catch (err) {
             console.error("Error parsing Binance stream message:", err);
           }
@@ -145,18 +136,18 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
           if (!isMounted) return;
           setIsConnected(false);
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connect, 3000);
+          reconnectTimeout = setTimeout(connect, 2000);
         };
 
         ws.onerror = () => {
-          if (wsRef.current) {
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.close();
           }
         };
       } catch (err) {
         if (!isMounted) return;
         clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(connect, 3000);
+        reconnectTimeout = setTimeout(connect, 2000);
       }
     };
 
@@ -167,6 +158,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, [binanceStream, timeframe]);
