@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { createChart, IChartApi, ISeriesApi, LineType, LineStyle } from "lightweight-charts";
+import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType } from "lightweight-charts";
 
 export interface CandleData {
   time: number; // Unix seconds
@@ -11,14 +11,6 @@ export interface CandleData {
   close: number;
   volume: number;
   is_closed?: boolean;
-}
-
-export interface PositionLine {
-  id: string;
-  price: number;
-  type: "ENTRY" | "SL" | "TP";
-  direction: "BUY" | "SELL";
-  label: string;
 }
 
 export interface Position {
@@ -45,7 +37,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   currentCandle,
   positions = [],
   historicalCandles = [],
-  symbol = "XAUUSD",
+  symbol = "BTCUSDT",
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -57,18 +49,19 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: "#000000" },
+        background: { type: ColorType.Solid, color: "#000000" },
         textColor: "#737373",
       },
       grid: {
-        vertLines: { color: "#171717" },
-        horzLines: { color: "#171717" },
+        vertLines: { color: "#141414" },
+        horzLines: { color: "#141414" },
       },
       crosshair: {
         mode: 1,
       },
       rightPriceScale: {
         borderColor: "#262626",
+        autoScale: true,
       },
       timeScale: {
         borderColor: "#262626",
@@ -76,7 +69,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         secondsVisible: false,
       },
       width: chartContainerRef.current.clientWidth,
-      height: 520,
+      height: 640,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -85,12 +78,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       borderVisible: false,
       wickUpColor: "#00FF66",
       wickDownColor: "#FF3366",
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01,
+      },
     });
-
-    // Only load candles when provided from real data feed
-    if (historicalCandles.length > 0) {
-      candleSeries.setData(historicalCandles as any);
-    }
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
@@ -112,18 +105,19 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     };
   }, []);
 
-  // Update chart when historicalCandles arrive
+  // Update whole series when historicalCandles arrive
   useEffect(() => {
     if (candleSeriesRef.current && historicalCandles.length > 0) {
-      candleSeriesRef.current.setData(historicalCandles as any);
+      // Ensure sorted ascending
+      const sorted = [...historicalCandles].sort((a, b) => a.time - b.time);
+      candleSeriesRef.current.setData(sorted as any);
       if (chartRef.current) {
         chartRef.current.timeScale().fitContent();
       }
     }
   }, [historicalCandles]);
 
-  const lastBarTimeRef = useRef<number>(0);
-
+  // Real-time tick update
   useEffect(() => {
     if (candleSeriesRef.current && currentCandle) {
       try {
@@ -136,11 +130,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           close: currentCandle.close,
         });
       } catch (err) {
-        console.warn("Candle update:", err);
+        console.warn("Candle update error:", err);
       }
     }
   }, [currentCandle]);
 
+  // Position SL/TP markers
   useEffect(() => {
     if (!chartRef.current) return;
 
@@ -152,7 +147,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       activeLineIds.add(entryId);
       if (!lineMap.has(entryId)) {
         const line = chartRef.current!.addLineSeries({
-          color: pos.type === "BUY" ? "#10B981" : "#EF4444",
+          color: pos.type === "BUY" ? "#00FF66" : "#FF3366",
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           title: `${pos.type} Entry @ ${pos.open_price.toFixed(2)}`,
@@ -166,7 +161,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         activeLineIds.add(slId);
         if (!lineMap.has(slId)) {
           const line = chartRef.current!.addLineSeries({
-            color: "#EF4444",
+            color: "#FF3366",
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
             title: `SL @ ${pos.sl.toFixed(2)}`,
@@ -181,7 +176,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         activeLineIds.add(tpId);
         if (!lineMap.has(tpId)) {
           const line = chartRef.current!.addLineSeries({
-            color: "#10B981",
+            color: "#00FF66",
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
             title: `TP @ ${pos.tp.toFixed(2)}`,
@@ -203,37 +198,37 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
   return (
-    <div className="relative w-full rounded-xl border border-border bg-[#0D0F17] p-2 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
+    <div className="relative w-full rounded-lg bg-black border border-neutral-800 p-2 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold text-white tracking-wide">{symbol}</span>
-          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/20">
+          <span className="text-sm font-bold text-white tracking-wide font-mono uppercase">{symbol}</span>
+          <span className="rounded bg-[#00FF66]/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-[#00FF66] border border-[#00FF66]/20">
             1M TIMEFRAME
           </span>
           {positions.length > 0 && (
-            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-400 border border-amber-500/20">
+            <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400 border border-amber-500/20">
               {positions.length} OPEN POSITION{positions.length > 1 ? 'S' : ''}
             </span>
           )}
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-xs text-porsche-muted">CURRENT PRICE</div>
-            <div className="text-base font-mono font-bold text-porsche-gold">
+            <div className="text-[10px] font-mono text-neutral-500 uppercase">CURRENT PRICE</div>
+            <div className="text-sm font-mono font-bold text-[#00FF66]">
               {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Awaiting Data..."}
             </div>
           </div>
           {positions.length > 0 && (
             <div className="text-right">
-              <div className="text-xs text-porsche-muted">FLOATING PnL</div>
-              <div className={`text-base font-mono font-bold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              <div className="text-[10px] font-mono text-neutral-500 uppercase">FLOATING PnL</div>
+              <div className={`text-sm font-mono font-bold ${totalPnL >= 0 ? "text-[#00FF66]" : "text-red-400"}`}>
                 ${totalPnL.toFixed(2)}
               </div>
             </div>
           )}
         </div>
       </div>
-      <div ref={chartContainerRef} className="w-full" />
+      <div ref={chartContainerRef} className="w-full h-[640px]" />
     </div>
   );
 };

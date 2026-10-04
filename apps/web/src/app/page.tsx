@@ -15,12 +15,12 @@ import {
   BookOpen,
   Plus,
   Loader2,
-  TrendingUp,
   Activity,
   CheckCircle2,
   Settings,
   Radio,
   Sparkles,
+  Maximize2,
 } from "lucide-react";
 
 interface JournalRow {
@@ -48,7 +48,7 @@ interface EvaluationResult {
 }
 
 export default function DashboardPage() {
-  const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
+  const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSDT");
   const { currentCandle, historicalCandles, positions, isConnected } = useMarketStream(activeSymbol);
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
@@ -167,9 +167,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black text-neutral-100 font-sans antialiased selection:bg-[#00FF66]/20 selection:text-[#00FF66]">
-      {/* Top Application Bar with Pure Shadcn Design & Electric Green Accents */}
-      <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-black/95 px-5 py-2.5 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+      {/* Top Application Bar */}
+      <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-black/95 px-6 py-2.5 backdrop-blur">
+        <div className="mx-auto flex w-full items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 font-mono font-semibold tracking-tight text-white text-sm">
               <span className="flex h-5 w-5 items-center justify-center rounded bg-[#00FF66]/10 text-[10px] font-bold text-[#00FF66] border border-[#00FF66]/30 shadow-[0_0_8px_rgba(0,255,102,0.2)]">
@@ -194,7 +194,7 @@ export default function DashboardPage() {
               className="flex items-center gap-1.5 py-1 px-2.5 text-[10px] font-mono"
             >
               <Radio className={`h-3 w-3 ${isConnected ? "text-[#00FF66]" : "text-neutral-500"}`} />
-              <span>{isConnected ? "LIVE STREAM CONNECTED" : "OFFLINE / RECONNECTING"}</span>
+              <span>{isConnected ? "BINANCE LIVE STREAM ACTIVE" : "CONNECTING..."}</span>
             </Badge>
 
             <Button
@@ -210,33 +210,35 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Workspace Grid */}
-      <div className="mx-auto max-w-7xl px-5 py-5">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-          {/* Main Chart Section (8 cols) */}
-          <div className="space-y-4 lg:col-span-8">
-            <Card className="border-neutral-800 bg-black p-1 shadow-2xl overflow-hidden">
-              <TradingViewChart
-                currentCandle={currentCandle}
-                historicalCandles={historicalCandles}
-                positions={positions}
-                symbol={activeSymbol}
-              />
-            </Card>
+      {/* Full-Width Workspace Layout */}
+      <div className="w-full px-5 py-4 space-y-4">
+        {/* Full-Width Chart Section */}
+        <Card className="border-neutral-800 bg-black p-1 shadow-2xl overflow-hidden">
+          <TradingViewChart
+            currentCandle={currentCandle}
+            historicalCandles={historicalCandles}
+            positions={positions}
+            symbol={activeSymbol}
+          />
+        </Card>
 
-            {/* Metrics Overview Row */}
+        {/* Bottom Split Grid: Metrics, AI Evaluator & Discipline Sidebar */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Left/Main Column: Stream Info, AI Evaluation & Journal (7 cols) */}
+          <div className="space-y-4 lg:col-span-7">
+            {/* Quick Metrics Cards */}
             <div className="grid grid-cols-3 gap-3">
               <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
                 <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
                   Data Stream Feed
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-neutral-200">
-                  Binance / Massive WS
+                  Binance Spot 1m Kline
                 </div>
               </Card>
               <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
                 <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
-                  Active Framework
+                  Active Strategy
                 </div>
                 <div className="mt-1 truncate text-xs font-medium text-neutral-200">
                   {selectedSkill ? selectedSkill.title : "Select Strategy..."}
@@ -295,8 +297,8 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Right Sidebar: Rules & Discipline Execution Checklist (4 cols) */}
-          <div className="space-y-4 lg:col-span-4">
+          {/* Right Column: Discipline Checklist & Manual Journal Entry (5 cols) */}
+          <div className="space-y-4 lg:col-span-5">
             <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
                 <div className="flex items-center gap-2">

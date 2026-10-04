@@ -16,20 +16,31 @@ export interface Position {
   time: number;
 }
 
-export function useMarketStream(activeSymbol: string = "XAUUSD") {
+export function normalizeBinanceStreamSymbol(symbol: string): string {
+  const upper = symbol.toUpperCase().trim();
+  if (upper === "XAUUSD" || upper === "GOLD") return "paxgusdt";
+  if (upper === "BTCUSD" || upper === "BTCUSDT") return "btcusdt";
+  if (upper === "ETHUSD" || upper === "ETHUSDT") return "ethusdt";
+  if (upper === "SOLUSD" || upper === "SOLUSDT") return "solusdt";
+  if (upper.endsWith("USD") && !upper.endsWith("USDT")) {
+    return `${upper.toLowerCase()}t`;
+  }
+  return upper.toLowerCase();
+}
+
+export function useMarketStream(activeSymbol: string = "BTCUSDT") {
   const [currentCandle, setCurrentCandle] = useState<CandleData | null>(null);
   const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Map symbol to Binance pair
-  const binanceSymbol = activeSymbol === "XAUUSD" ? "paxgusdt" : activeSymbol.toLowerCase();
+  const binanceStream = normalizeBinanceStreamSymbol(activeSymbol);
 
-  // 1. Initial Load: Fetch 100 historical 1m candles for immediate chart rendering
+  // 1. Initial Load: Fetch 120 historical 1m candles for immediate chart rendering
   const fetchHistorical = useCallback(async () => {
     try {
-      const res = await fetch(`/api/market/candles?symbol=${activeSymbol}&limit=120`);
+      const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&limit=150`);
       if (res.ok) {
         const data = await res.json();
         if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
@@ -38,7 +49,7 @@ export function useMarketStream(activeSymbol: string = "XAUUSD") {
         }
       }
     } catch (err) {
-      console.warn("Failed to fetch historical candles, will stream live:", err);
+      console.warn("Failed to fetch historical candles:", err);
     }
   }, [activeSymbol]);
 
@@ -51,7 +62,7 @@ export function useMarketStream(activeSymbol: string = "XAUUSD") {
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@kline_1m`;
+    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceStream}@kline_1m`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -118,7 +129,7 @@ export function useMarketStream(activeSymbol: string = "XAUUSD") {
         wsRef.current.close();
       }
     };
-  }, [binanceSymbol]);
+  }, [binanceStream]);
 
   return { currentCandle, historicalCandles, positions, isConnected };
 }
