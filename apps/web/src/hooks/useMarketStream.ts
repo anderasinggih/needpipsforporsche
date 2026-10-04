@@ -28,7 +28,7 @@ export function normalizeBinanceStreamSymbol(symbol: string): string {
   return upper.toLowerCase();
 }
 
-export function useMarketStream(activeSymbol: string = "BTCUSD") {
+export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: string = "1m") {
   const [currentCandle, setCurrentCandle] = useState<CandleData | null>(null);
   const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -38,10 +38,13 @@ export function useMarketStream(activeSymbol: string = "BTCUSD") {
 
   const binanceStream = normalizeBinanceStreamSymbol(activeSymbol);
 
-  // 1. Initial Load: Fetch historical 1m candles for immediate chart rendering
+  // 1. Initial Load: Fetch historical candles for immediate chart rendering
   const fetchHistorical = useCallback(async () => {
+    // Clear old candles when switching symbol/timeframe to avoid mismatch glitch
+    setHistoricalCandles([]);
+    setCurrentCandle(null);
     try {
-      const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&limit=150`);
+      const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=150`);
       if (res.ok) {
         const data = await res.json();
         if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
@@ -52,20 +55,20 @@ export function useMarketStream(activeSymbol: string = "BTCUSD") {
     } catch (err) {
       console.warn("Failed to fetch historical candles:", err);
     }
-  }, [activeSymbol]);
+  }, [activeSymbol, timeframe]);
 
   useEffect(() => {
     fetchHistorical();
   }, [fetchHistorical]);
 
   // 2. Real-Time Stream: Connect directly to Binance multiplex WebSocket stream
-  // Streams: <stream>@kline_1m, <stream>@trade, and <stream>@ticker for guaranteed constant updates
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    // Use Binance multiplex stream endpoint: /stream?streams=<stream1>/<stream2>/<stream3>
-    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${binanceStream}@kline_1m/${binanceStream}@trade/${binanceStream}@ticker`;
+    // Use Binance multiplex stream endpoint:
+    const klineStream = `${binanceStream}@kline_${timeframe}`;
+    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade/${binanceStream}@ticker`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -89,7 +92,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD") {
             const payload = raw.data || raw;
             const eventType = payload.e;
 
-            // Handle kline stream (1m interval bar)
+            // Handle kline stream
             if (eventType === "kline" && payload.k) {
               const k = payload.k;
               const barOpenSec = Math.floor(Number(k.t) / 1000);
@@ -108,78 +111,28 @@ export function useMarketStream(activeSymbol: string = "BTCUSD") {
             // Handle individual trade tick event (@trade)
             else if (eventType === "trade" && payload.p) {
               const tradePrice = parseFloat(payload.p);
-              const tradeTimeMs = Number(payload.T || payload.E || Date.now());
-              const barStartTime = Math.floor(tradeTimeMs / 60000) * 60;
-
               setCurrentCandle((prev) => {
-                if (!prev) {
-                  return {
-                    time: barStartTime,
-                    open: tradePrice,
-                    high: tradePrice,
-                    low: tradePrice,
-                    close: tradePrice,
-                    volume: parseFloat(payload.q || "0"),
-                  };
-                }
-
-                if (prev.time === barStartTime) {
-                  return {
-                    ...prev,
-                    high: Math.max(prev.high, tradePrice),
-                    low: Math.min(prev.low, tradePrice),
-                    close: tradePrice,
-                  };
-                } else if (barStartTime > prev.time) {
-                  return {
-                    time: barStartTime,
-                    open: tradePrice,
-                    high: tradePrice,
-                    low: tradePrice,
-                    close: tradePrice,
-                    volume: parseFloat(payload.q || "0"),
-                  };
-                }
-                return prev;
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  high: Math.max(prev.high, tradePrice),
+                  low: Math.min(prev.low, tradePrice),
+                  close: tradePrice,
+                };
               });
               setLastTickTimestamp(Date.now());
             }
-            // Handle ticker heartbeat event (@ticker - fired every second)
+            // Handle ticker heartbeat event (@ticker)
             else if (eventType === "24hrTicker" && payload.c) {
               const currentPrice = parseFloat(payload.c);
-              const eventTimeMs = Number(payload.E || Date.now());
-              const barStartTime = Math.floor(eventTimeMs / 60000) * 60;
-
               setCurrentCandle((prev) => {
-                if (!prev) {
-                  return {
-                    time: barStartTime,
-                    open: currentPrice,
-                    high: currentPrice,
-                    low: currentPrice,
-                    close: currentPrice,
-                    volume: 0,
-                  };
-                }
-
-                if (prev.time === barStartTime) {
-                  return {
-                    ...prev,
-                    high: Math.max(prev.high, currentPrice),
-                    low: Math.min(prev.low, currentPrice),
-                    close: currentPrice,
-                  };
-                } else if (barStartTime > prev.time) {
-                  return {
-                    time: barStartTime,
-                    open: currentPrice,
-                    high: currentPrice,
-                    low: currentPrice,
-                    close: currentPrice,
-                    volume: 0,
-                  };
-                }
-                return prev;
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  high: Math.max(prev.high, currentPrice),
+                  low: Math.min(prev.low, currentPrice),
+                  close: currentPrice,
+                };
               });
               setLastTickTimestamp(Date.now());
             }
@@ -216,7 +169,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD") {
         wsRef.current.close();
       }
     };
-  }, [binanceStream]);
+  }, [binanceStream, timeframe]);
 
   return { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp };
 }

@@ -16,14 +16,15 @@ function normalizeBinanceSymbol(symbol: string): string {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const rawSymbol = searchParams.get("symbol") || "BTCUSDT";
-  const limit = searchParams.get("limit") || "120";
+  const rawSymbol = searchParams.get("symbol") || "BTCUSD";
+  const interval = searchParams.get("interval") || "1m";
+  const limit = searchParams.get("limit") || "150";
 
   const binanceSymbol = normalizeBinanceSymbol(rawSymbol);
 
   try {
     const res = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&limit=${limit}`,
+      `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
       { cache: "no-store" }
     );
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       volume: parseFloat(k[5]),
     }));
 
-    return NextResponse.json({ symbol: rawSymbol, binanceSymbol, candles });
+    return NextResponse.json({ symbol: rawSymbol, binanceSymbol, interval, candles });
   } catch (err: any) {
     console.error("Candles fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch candles", message: err.message }, { status: 500 });

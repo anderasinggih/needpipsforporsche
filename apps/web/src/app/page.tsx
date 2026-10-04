@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TradingViewChart } from "@/components/chart/TradingViewChart";
+import { TradingViewChart, AIMapping, AISignalOverlay } from "@/components/chart/TradingViewChart";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -16,20 +16,36 @@ import {
   Settings,
   Radio,
   Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Crosshair,
+  Target,
+  Compass,
 } from "lucide-react";
 
 interface EvaluationResult {
-  rating: string;
+  signal?: "BUY" | "SELL" | "WAIT";
+  entryPrice?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskRewardRatio?: string;
   confidence: number;
   thesis: string;
   riskInvalidation: string;
+  chartMapping?: AIMapping;
   recommendation: string;
   notes: string;
 }
 
 export default function DashboardPage() {
+  // Pastikan inisialisasi awal tidak mismatch - gunakan default "BTCUSD" atau state dari storage
   const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
-  const { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp } = useMarketStream(activeSymbol);
+  const [timeframe, setTimeframe] = useState<string>("1m");
+  const [isClientLoaded, setIsClientLoaded] = useState(false);
+
+  // Ambil data stream real-time sesuai pair dan timeframe aktif
+  const { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp } = useMarketStream(activeSymbol, timeframe);
+  
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
@@ -39,18 +55,40 @@ export default function DashboardPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const rules = selectedSkill?.rules_checklist ?? [];
-  const allRequiredMet = rules
+  const allRequiredMet = rules.length === 0 || rules
     .filter((r) => r.required)
     .every((r) => checkedRules[r.id]);
 
+  // Handle client hydration untuk memastikan localStorage sinkron seketika
   useEffect(() => {
+    setIsClientLoaded(true);
     if (typeof window !== "undefined") {
       const sym = localStorage.getItem("active_symbol");
       if (sym === "XAUUSD" || sym === "BTCUSD") {
         setActiveSymbol(sym);
       }
+      const tf = localStorage.getItem("active_timeframe");
+      if (tf) setTimeframe(tf);
     }
   }, []);
+
+  const handleSymbolChange = (sym: string) => {
+    setActiveSymbol(sym);
+    setEvaluation(null);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("active_symbol", sym);
+    }
+    showToast(`Beralih instrumen ke ${sym}`);
+  };
+
+  const handleTimeframeChange = (tf: string) => {
+    setTimeframe(tf);
+    setEvaluation(null);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("active_timeframe", tf);
+    }
+    showToast(`Timeframe diubah ke ${tf.toUpperCase()}`);
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -59,7 +97,6 @@ export default function DashboardPage() {
 
   const toggleRule = (id: string) => {
     setCheckedRules((prev) => ({ ...prev, [id]: !prev[id] }));
-    setEvaluation(null);
   };
 
   const handleSkillSelect = (skill: TradingSkill) => {
@@ -67,11 +104,14 @@ export default function DashboardPage() {
     setCheckedRules({});
     setEvaluation(null);
     setIsSkillModalOpen(false);
-    showToast(`Active Strategy: ${skill.title}`);
+    showToast(`Strategi Aktif: ${skill.title}`);
   };
 
   const handleEvaluate = async () => {
-    if (!currentCandle || !selectedSkill) return;
+    if (!currentCandle) {
+      showToast("Menunggu data harga aktif...");
+      return;
+    }
     try {
       setIsEvaluating(true);
       const geminiKey = localStorage.getItem("gemini_api_key") || "";
@@ -89,17 +129,21 @@ export default function DashboardPage() {
         body: JSON.stringify({
           symbol: activeSymbol,
           price: currentCandle.close,
-          direction: "BUY",
+          timeframe,
           checklistMet: allRequiredMet,
-          indicatorsSummary: `${activeSymbol} 1m bar: Open ${currentCandle.open.toFixed(2)}, High ${currentCandle.high.toFixed(2)}, Low ${currentCandle.low.toFixed(2)}, Close ${currentCandle.close.toFixed(2)}`,
-          rules: rules.map((r) => ({ ...r, checked: !!checkedRules[r.id] })),
+          indicatorsSummary: `${activeSymbol} (${timeframe}) - Open ${currentCandle.open.toFixed(2)}, High ${currentCandle.high.toFixed(2)}, Low ${currentCandle.low.toFixed(2)}, Close ${currentCandle.close.toFixed(2)}`,
+          candles: historicalCandles.slice(-20),
         }),
       });
+
       const data = await res.json();
-      setEvaluation(data.evaluation);
+      if (data.evaluation) {
+        setEvaluation(data.evaluation);
+        showToast(`AI Selesai Mapping & Analisa untuk ${activeSymbol}!`);
+      }
     } catch (err) {
       console.error("Evaluation failed:", err);
-      showToast("AI Evaluation request failed");
+      showToast("Gagal melakukan analisa AI");
     } finally {
       setIsEvaluating(false);
     }
@@ -108,49 +152,43 @@ export default function DashboardPage() {
   const currentPriceFormatted = currentCandle ? currentCandle.close.toFixed(2) : "---.--";
 
   return (
-    <div className="min-h-screen bg-black text-neutral-100 font-sans antialiased selection:bg-[#00FF66]/20 selection:text-[#00FF66]">
+    <div className="min-h-screen bg-[#020610] text-slate-100 font-sans antialiased selection:bg-[#00D2FF]/20 selection:text-[#00D2FF]">
       {/* Top Application Bar */}
-      <header className="sticky top-0 z-40 border-b border-neutral-800/80 bg-black/95 px-6 py-2.5 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#040914]/95 px-6 py-2.5 backdrop-blur">
         <div className="mx-auto flex w-full items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 font-mono font-semibold tracking-tight text-white text-sm">
-              <span className="flex h-5 w-5 items-center justify-center rounded bg-[#00FF66]/10 text-[10px] font-bold text-[#00FF66] border border-[#00FF66]/30 shadow-[0_0_8px_rgba(0,255,102,0.2)]">
-                P
+              <span className="flex h-5 w-5 items-center justify-center rounded bg-[#00D2FF]/15 text-[10px] font-bold text-[#00D2FF] border border-[#00D2FF]/30 shadow-[0_0_10px_rgba(0,210,255,0.3)]">
+                MT5
               </span>
-              NEEDPIPS<span className="text-neutral-600 font-normal">/</span>FORPORSCHE
+              NEEDPIPS<span className="text-slate-600 font-normal">/</span>FORPORSCHE
             </div>
-            <div className="hidden sm:flex items-center gap-2 border-l border-neutral-800 pl-4 text-xs font-mono">
+            <div className="hidden sm:flex items-center gap-2 border-l border-slate-800 pl-4 text-xs font-mono">
               {/* Pair Switcher in Top Bar */}
-              <div className="flex items-center rounded-md bg-neutral-900/90 p-0.5 border border-neutral-800">
+              <div className="flex items-center rounded-md bg-slate-900/90 p-0.5 border border-slate-800">
                 <button
-                  onClick={() => {
-                    setActiveSymbol("BTCUSD");
-                    if (typeof window !== "undefined") localStorage.setItem("active_symbol", "BTCUSD");
-                  }}
+                  onClick={() => handleSymbolChange("BTCUSD")}
                   className={`px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-all ${
                     activeSymbol === "BTCUSD"
-                      ? "bg-[#00FF66] text-black shadow-[0_0_8px_rgba(0,255,102,0.4)]"
-                      : "text-neutral-400 hover:text-white"
+                      ? "bg-[#00D2FF] text-black shadow-[0_0_10px_rgba(0,210,255,0.5)]"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
                   BTCUSD
                 </button>
                 <button
-                  onClick={() => {
-                    setActiveSymbol("XAUUSD");
-                    if (typeof window !== "undefined") localStorage.setItem("active_symbol", "XAUUSD");
-                  }}
+                  onClick={() => handleSymbolChange("XAUUSD")}
                   className={`px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-all ${
                     activeSymbol === "XAUUSD"
-                      ? "bg-[#00FF66] text-black shadow-[0_0_8px_rgba(0,255,102,0.4)]"
-                      : "text-neutral-400 hover:text-white"
+                      ? "bg-[#00D2FF] text-black shadow-[0_0_10px_rgba(0,210,255,0.5)]"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
                   XAUUSD
                 </button>
               </div>
-              <span className="text-neutral-700">·</span>
-              <span className="font-semibold text-[#00FF66] font-mono tracking-wide text-xs">
+              <span className="text-slate-700">·</span>
+              <span className="font-semibold text-[#00D2FF] font-mono tracking-wide text-xs">
                 ${currentPriceFormatted}
               </span>
             </div>
@@ -158,21 +196,21 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-3">
             <Badge
-              variant={isConnected ? "live" : "secondary"}
-              className="flex items-center gap-1.5 py-1 px-2.5 text-[10px] font-mono"
+              variant="outline"
+              className="flex items-center gap-1.5 py-1 px-2.5 text-[10px] font-mono border-slate-800 bg-slate-900/80 text-slate-300"
             >
-              <Radio className={`h-3 w-3 ${isConnected ? "text-[#00FF66]" : "text-neutral-500"}`} />
-              <span>{isConnected ? "BINANCE LIVE STREAM ACTIVE" : "CONNECTING..."}</span>
+              <Radio className={`h-3 w-3 ${isConnected ? "text-[#00D2FF]" : "text-slate-500"}`} />
+              <span>{isConnected ? "FEED AKTIF" : "MENGHUBUNGKAN..."}</span>
             </Badge>
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center gap-1.5 border-neutral-800 bg-black hover:border-neutral-700 hover:text-white text-xs h-8"
+              className="flex items-center gap-1.5 border-slate-800 bg-slate-950 hover:border-slate-700 hover:text-white text-xs h-8 text-slate-300"
             >
-              <Settings className="h-3.5 w-3.5 text-neutral-400" />
-              <span>Settings</span>
+              <Settings className="h-3.5 w-3.5 text-slate-400" />
+              <span>Pengaturan</span>
             </Button>
           </div>
         </div>
@@ -181,98 +219,176 @@ export default function DashboardPage() {
       {/* Full-Width Workspace Layout */}
       <div className="w-full px-5 py-4 space-y-4">
         {/* Full-Width Chart Section */}
-        <Card className="border-neutral-800 bg-black p-1 shadow-2xl overflow-hidden">
+        <Card className="border-slate-800/80 bg-black p-1 shadow-2xl overflow-hidden">
           <TradingViewChart
             currentCandle={currentCandle}
             historicalCandles={historicalCandles}
             positions={positions}
             symbol={activeSymbol}
+            timeframe={timeframe}
             lastTickTimestamp={lastTickTimestamp}
-            onSymbolChange={(sym) => {
-              setActiveSymbol(sym);
-              if (typeof window !== "undefined") localStorage.setItem("active_symbol", sym);
-            }}
+            onSymbolChange={handleSymbolChange}
+            onTimeframeChange={handleTimeframeChange}
+            aiMapping={evaluation?.chartMapping || null}
+            aiSignal={
+              evaluation?.signal
+                ? {
+                    signal: evaluation.signal,
+                    entryPrice: evaluation.entryPrice,
+                    stopLoss: evaluation.stopLoss,
+                    takeProfit: evaluation.takeProfit,
+                  }
+                : null
+            }
           />
         </Card>
 
         {/* Bottom Split Grid: Metrics, AI Evaluator & Discipline Sidebar */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* Left/Main Column: Stream Info, AI Evaluation & Journal (7 cols) */}
+          {/* Left/Main Column: Stream Info & AI Mapping / Reasoning Panel (7 cols) */}
           <div className="space-y-4 lg:col-span-7">
             {/* Quick Metrics Cards */}
             <div className="grid grid-cols-3 gap-3">
-              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
-                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
+              <Card className="p-3 bg-[#050B16] border-slate-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
                   Data Stream Feed
                 </div>
-                <div className="mt-1 font-mono text-xs font-semibold text-neutral-200">
-                  Binance Spot 1m Kline
+                <div className="mt-1 font-mono text-xs font-semibold text-slate-200">
+                  Binance Spot {timeframe.toUpperCase()}
                 </div>
               </Card>
-              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
-                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
-                  Active Strategy
+              <Card className="p-3 bg-[#050B16] border-slate-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
+                  Strategi Aktif
                 </div>
-                <div className="mt-1 truncate text-xs font-medium text-neutral-200">
-                  {selectedSkill ? selectedSkill.title : "Select Strategy..."}
+                <div className="mt-1 truncate text-xs font-medium text-slate-200">
+                  {selectedSkill ? selectedSkill.title : "Pilih Strategi..."}
                 </div>
               </Card>
-              <Card className="p-3 bg-[#0A0A0A] border-neutral-800">
-                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-500">
-                  Min. Target Ratio
+              <Card className="p-3 bg-[#050B16] border-slate-800">
+                <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
+                  Risk / Reward Target
                 </div>
-                <div className="mt-1 font-mono text-xs font-semibold text-[#00FF66]">
+                <div className="mt-1 font-mono text-xs font-semibold text-[#00D2FF]">
                   1 : {selectedSkill?.risk_reward_min ?? 2.5}
                 </div>
               </Card>
             </div>
 
-            {/* AI Technical Evaluation & Quantitative Reasoner Card */}
-            <Card className="border-neutral-800 bg-[#0A0A0A] p-4 shadow-xl">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
-                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-200">
-                  <Activity className="h-4 w-4 text-[#00FF66]" />
-                  AI Quantitative Analysis &amp; Reasoning Panel
+            {/* AI Technical Evaluation, Mapping & Trade Signal Card */}
+            <Card className="border-slate-800 bg-[#050B16] p-4 shadow-xl">
+              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-slate-800">
+                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-200">
+                  <Compass className="h-4 w-4 text-[#00D2FF]" />
+                  Panel AI Mapping &amp; Saran Sinyal Entry
                 </CardTitle>
-                {evaluation && (
-                  <Badge variant="electric">
-                    {evaluation.rating} · Confidence {evaluation.confidence}%
+                {evaluation?.signal && (
+                  <Badge className={`font-mono text-xs font-bold ${
+                    evaluation.signal === "BUY"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      : evaluation.signal === "SELL"
+                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
+                      : "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                  }`}>
+                    SINYAL: {evaluation.signal} · Akurasi {evaluation.confidence}%
                   </Badge>
                 )}
               </CardHeader>
               <CardContent className="p-0 pt-3">
                 {evaluation ? (
                   <div className="space-y-3 text-xs leading-relaxed">
-                    <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
-                      <div className="font-semibold text-neutral-400 font-mono text-[10px] uppercase tracking-wider">Market Setup Thesis</div>
-                      <p className="mt-1 text-neutral-200">{evaluation.thesis}</p>
+                    {/* Kotak Saran Entry, SL, dan TP */}
+                    {evaluation.entryPrice && (
+                      <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black/80 border border-slate-800">
+                        <div className="text-center border-r border-slate-800/80 pr-2">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase">Saran Entry</span>
+                          <div className="text-sm font-mono font-bold text-white mt-0.5">
+                            ${evaluation.entryPrice.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="text-center border-r border-slate-800/80 pr-2">
+                          <span className="text-[10px] font-mono text-rose-400 uppercase">Stop Loss (SL)</span>
+                          <div className="text-sm font-mono font-bold text-rose-400 mt-0.5">
+                            ${evaluation.stopLoss?.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <span className="text-[10px] font-mono text-emerald-400 uppercase">Take Profit (TP)</span>
+                          <div className="text-sm font-mono font-bold text-emerald-400 mt-0.5">
+                            ${evaluation.takeProfit?.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tesis & Analisa Pasar */}
+                    <div className="rounded border border-slate-800/80 bg-black/60 p-3">
+                      <div className="font-semibold text-slate-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                        <Activity className="h-3 w-3 text-[#00D2FF]" />
+                        Tesis Analisis Struktur Pasar ({activeSymbol} · {timeframe.toUpperCase()})
+                      </div>
+                      <p className="mt-1 text-slate-200 leading-relaxed">{evaluation.thesis}</p>
                     </div>
 
+                    {/* Pembatalan Skenario & Rekomendasi Eksekusi */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
-                        <div className="font-semibold text-red-400 font-mono text-[10px] uppercase tracking-wider">Invalidation Level</div>
-                        <p className="mt-1 font-mono text-neutral-200">{evaluation.riskInvalidation}</p>
+                      <div className="rounded border border-slate-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-rose-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                          <Crosshair className="h-3 w-3" />
+                          Level Pembatalan (Invalidation)
+                        </div>
+                        <p className="mt-1 font-mono text-slate-300 text-[11px]">{evaluation.riskInvalidation}</p>
                       </div>
-                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
-                        <div className="font-semibold text-[#00FF66] font-mono text-[10px] uppercase tracking-wider">Execution Bias</div>
-                        <p className="mt-1 text-neutral-200">{evaluation.recommendation}</p>
+                      <div className="rounded border border-slate-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-[#00D2FF] font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                          <Target className="h-3 w-3" />
+                          Rekomendasi Tindakan
+                        </div>
+                        <p className="mt-1 text-slate-200 text-[11px]">{evaluation.recommendation}</p>
                       </div>
                     </div>
+
+                    {/* Info Mapping Chart MT5 yang sudah terpasang */}
+                    {evaluation.chartMapping && (
+                      <div className="rounded border border-[#00D2FF]/20 bg-[#00D2FF]/5 p-2.5 text-[11px] font-mono text-slate-300 flex items-center justify-between">
+                        <span className="text-[#00D2FF] font-semibold">📍 Garis Mapping Otomatis Terpasang di Chart:</span>
+                        <span>
+                          Support: <strong className="text-[#00D2FF]">${evaluation.chartMapping.supportLevel}</strong> · Resistance: <strong className="text-amber-400">${evaluation.chartMapping.resistanceLevel}</strong>
+                        </span>
+                      </div>
+                    )}
 
                     {evaluation.notes && (
-                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
-                        <div className="font-semibold text-neutral-400 font-mono text-[10px] uppercase tracking-wider">Quantitative Notes</div>
-                        <p className="mt-1 text-neutral-300 font-mono text-[11px]">{evaluation.notes}</p>
+                      <div className="rounded border border-slate-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-slate-400 font-mono text-[10px] uppercase tracking-wider">Catatan Risiko &amp; Psikologi</div>
+                        <p className="mt-1 text-slate-300 font-mono text-[11px]">{evaluation.notes}</p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="py-12 text-center">
-                    <Sparkles className="mx-auto h-8 w-8 text-[#00FF66]/40" />
-                    <p className="mt-2 text-xs text-neutral-400 font-medium">AI Quantitative Analysis Idle</p>
-                    <p className="mt-1 text-[11px] text-neutral-500 max-w-sm mx-auto">
-                      Select an institutional strategy and verify required checklist conditions on the right to trigger AI reasoning.
+                  <div className="py-10 text-center">
+                    <Sparkles className="mx-auto h-8 w-8 text-[#00D2FF]/40" />
+                    <p className="mt-2 text-xs text-slate-300 font-medium">AI Belum Melakukan Analisa</p>
+                    <p className="mt-1 text-[11px] text-slate-500 max-w-sm mx-auto">
+                      Klik tombol &quot;Analisa &amp; Pasang Mapping AI&quot; di bawah untuk meminta AI memetakan garis tren, level likuiditas, dan sinyal entry otomatis.
                     </p>
+                    <Button
+                      onClick={handleEvaluate}
+                      disabled={isEvaluating}
+                      className="mt-4 bg-[#00D2FF] text-black font-semibold text-xs hover:bg-[#00D2FF]/90 transition"
+                    >
+                      {isEvaluating ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          Sedang Memetakan &amp; Menganalisa...
+                        </>
+                      ) : (
+                        <>
+                          <Compass className="h-3.5 w-3.5 mr-1.5" />
+                          Mulai Analisa &amp; Mapping AI Sekarang
+                        </>
+                      )}
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -281,53 +397,53 @@ export default function DashboardPage() {
 
           {/* Right Column: Discipline Checklist & Strategy Framework (5 cols) */}
           <div className="space-y-4 lg:col-span-5">
-            <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
+            <Card className="border-slate-800 bg-[#050B16] p-4">
+              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-slate-800">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-[#00FF66]" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-200">
-                    Discipline Checklist
+                  <ShieldCheck className="h-4 w-4 text-[#00D2FF]" />
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-200">
+                    Disiplin Trading &amp; Strategi
                   </CardTitle>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsSkillModalOpen(true)}
-                  className="h-7 text-[11px] px-2.5 bg-black border-neutral-800 hover:border-neutral-700"
+                  className="h-7 text-[11px] px-2.5 bg-black border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white"
                 >
-                  Strategies
+                  Pilih Strategi
                 </Button>
               </CardHeader>
 
               {!selectedSkill ? (
                 <div className="py-8 text-center">
-                  <p className="text-xs text-neutral-500">No trading strategy loaded yet.</p>
+                  <p className="text-xs text-slate-500">Belum ada strategi trading yang dipilih.</p>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsSkillModalOpen(true)}
-                    className="mt-3 text-xs border-neutral-800 bg-black hover:border-neutral-700"
+                    className="mt-3 text-xs border-slate-800 bg-black hover:border-slate-700 text-slate-300"
                   >
-                    Select Quantitative Strategy
+                    Buka Library Strategi Kuantitatif
                   </Button>
                 </div>
               ) : (
                 <div className="mt-3 space-y-3">
-                  <div className="rounded border border-neutral-800 bg-black p-3">
+                  <div className="rounded border border-slate-800 bg-black p-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-neutral-200 text-xs">{selectedSkill.title}</span>
-                      <Badge variant="outline" className="text-[10px] font-mono border-neutral-800">
+                      <span className="font-semibold text-slate-200 text-xs">{selectedSkill.title}</span>
+                      <Badge variant="outline" className="text-[10px] font-mono border-slate-800 text-[#00D2FF]">
                         {selectedSkill.timeframes?.join(", ") || "M1 / M5"}
                       </Badge>
                     </div>
-                    <p className="mt-1.5 text-[11px] text-neutral-400 leading-normal">
+                    <p className="mt-1.5 text-[11px] text-slate-400 leading-normal">
                       {selectedSkill.description}
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="text-[10px] font-mono font-medium text-neutral-400 uppercase tracking-wider">
-                      Execution Rules ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
+                    <div className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+                      Aturan Konfirmasi ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
                     </div>
                     {rules.map((rule) => (
                       <div
@@ -335,15 +451,15 @@ export default function DashboardPage() {
                         onClick={() => toggleRule(rule.id)}
                         className={`flex cursor-pointer items-start gap-2.5 rounded border p-2.5 text-xs transition ${
                           checkedRules[rule.id]
-                            ? "border-[#00FF66]/40 bg-[#00FF66]/5 text-neutral-100"
-                            : "border-neutral-800/80 bg-black text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
+                            ? "border-[#00D2FF]/40 bg-[#00D2FF]/5 text-slate-100"
+                            : "border-slate-800/80 bg-black text-slate-400 hover:border-slate-700 hover:text-slate-200"
                         }`}
                       >
                         <div
                           className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                             checkedRules[rule.id]
-                              ? "border-[#00FF66] bg-[#00FF66] text-black"
-                              : "border-neutral-700 bg-neutral-900"
+                              ? "border-[#00D2FF] bg-[#00D2FF] text-black"
+                              : "border-slate-700 bg-slate-900"
                           }`}
                         >
                           {checkedRules[rule.id] && <CheckCircle2 className="h-3.5 w-3.5 stroke-[3]" />}
@@ -351,7 +467,7 @@ export default function DashboardPage() {
                         <div className="leading-tight">
                           <span>{rule.text}</span>
                           {rule.required && (
-                            <span className="ml-1 text-[10px] text-[#00FF66] font-mono font-semibold">[REQUIRED]</span>
+                            <span className="ml-1 text-[10px] text-[#00D2FF] font-mono font-semibold">[WAJIB]</span>
                           )}
                         </div>
                       </div>
@@ -362,27 +478,21 @@ export default function DashboardPage() {
                   <div className="pt-2">
                     <Button
                       onClick={handleEvaluate}
-                      disabled={!allRequiredMet || isEvaluating}
-                      variant="electric"
-                      className="w-full flex items-center justify-center gap-2"
+                      disabled={isEvaluating}
+                      className="w-full flex items-center justify-center gap-2 bg-[#00D2FF] hover:bg-[#00D2FF]/90 text-black font-semibold text-xs transition"
                     >
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Evaluating Setup with AI...</span>
+                          <span>AI Sedang Memetakan &amp; Menganalisa...</span>
                         </>
                       ) : (
                         <>
-                          <Sparkles className="h-3.5 w-3.5" />
-                          <span>Evaluate Setup with AI</span>
+                          <Compass className="h-3.5 w-3.5" />
+                          <span>Analisa &amp; Pasang Mapping AI</span>
                         </>
                       )}
                     </Button>
-                    {!allRequiredMet && (
-                      <p className="mt-1.5 text-center text-[10px] font-mono text-neutral-500">
-                        Complete all mandatory rules to unlock AI evaluation
-                      </p>
-                    )}
                   </div>
                 </div>
               )}
@@ -401,18 +511,18 @@ export default function DashboardPage() {
         isOpen={isSettingsModalOpen}
         onClose={() => {
           setIsSettingsModalOpen(false);
-          const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
+          const sym = localStorage.getItem("active_symbol");
           if (sym) setActiveSymbol(sym);
         }}
         onSaved={(msg) => {
           showToast(msg);
-          const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
+          const sym = localStorage.getItem("active_symbol");
           if (sym) setActiveSymbol(sym);
         }}
       />
 
       {toast && (
-        <div className="fixed bottom-5 right-5 z-50 rounded border border-neutral-800 bg-neutral-950 px-3.5 py-2 text-xs text-neutral-200 shadow-xl font-mono border-l-2 border-l-[#00FF66]">
+        <div className="fixed bottom-5 right-5 z-50 rounded border border-slate-800 bg-slate-950 px-3.5 py-2 text-xs text-slate-200 shadow-xl font-mono border-l-2 border-l-[#00D2FF]">
           {toast}
         </div>
       )}
