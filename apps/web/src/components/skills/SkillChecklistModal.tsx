@@ -128,27 +128,27 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl border-neutral-800 bg-[#0A0A0A] p-6 shadow-2xl">
-        <DialogHeader className="border-b border-neutral-800 pb-4">
+      <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto sm:overflow-hidden border-neutral-800 bg-[#0A0A0A] p-4 sm:p-6 shadow-2xl">
+        <DialogHeader className="border-b border-neutral-800 pb-3 sm:pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20 shrink-0">
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <DialogTitle className="text-sm font-semibold tracking-wide text-neutral-100 uppercase">
+              <DialogTitle className="text-xs sm:text-sm font-semibold tracking-wide text-neutral-100 uppercase">
                 Quantitative Trading Strategies &amp; Disciplines
               </DialogTitle>
-              <DialogDescription className="text-xs text-neutral-400">
+              <DialogDescription className="text-[11px] sm:text-xs text-neutral-400">
                 Select an institutional strategy framework to guide the AI evaluator
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-12 pt-2 h-[480px]">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-12 pt-2 h-auto md:h-[480px]">
           {/* List of Skills (5 cols) */}
-          <div className="md:col-span-5 flex flex-col h-full border-r border-neutral-800 pr-4 overflow-hidden">
-            <div className="flex items-center justify-between pb-3">
+          <div className="md:col-span-5 flex flex-col max-h-[220px] md:max-h-none md:h-full md:border-r border-neutral-800 pr-0 md:pr-4 overflow-hidden">
+            <div className="flex items-center justify-between pb-2 sm:pb-3">
               <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400">
                 Institutional Strategies ({skills.length})
               </span>

@@ -440,11 +440,11 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans antialiased selection:bg-zinc-800">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/90 px-6 py-2.5 backdrop-blur">
+      {/* Top Navigation Bar - Responsive */}
+      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/90 px-3 sm:px-6 py-2 sm:py-2.5 backdrop-blur">
         <div className="mx-auto flex w-full items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 font-mono font-semibold tracking-tight text-white text-sm">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2 font-mono font-semibold tracking-tight text-white text-xs sm:text-sm">
               <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 text-[10px] font-bold text-white border border-zinc-700">
                 P
               </span>
@@ -483,13 +483,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Badge
               variant="outline"
-              className="flex items-center gap-1.5 py-1 px-2.5 text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
+              className="flex items-center gap-1.5 py-0.5 sm:py-1 px-2 sm:px-2.5 text-[10px] sm:text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
             >
-              <Radio className={`h-3 w-3 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
-              <span>{isConnected ? "Live feed active" : "Connecting..."}</span>
+              <Radio className={`h-2.5 sm:h-3 w-2.5 sm:w-3 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
+              <span>{isConnected ? "Live feed" : "Connecting"}</span>
             </Badge>
 
             {/* Owner key menu hidden from navbar as requested, accessible directly via /owner/key */}
@@ -497,8 +497,8 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Full-Width Terminal Content */}
-      <div className="w-full px-5 py-4 space-y-4">
+      {/* Main Full-Width Terminal Content - Responsive padding */}
+      <div className="w-full px-2 sm:px-4 md:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
         {/* Full-Width TradingView Chart */}
         <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden">
           <TradingViewChart
@@ -534,25 +534,25 @@ export default function DashboardPage() {
         {/* Council strip: consensus verdict + collective emotional state */}
         {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5 mb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-800/80 pb-2.5 mb-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-200">
                   Multi-Agent Scalping Council
                 </span>
-                <span className="text-[11px] text-zinc-500">
-                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Aktif &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Tidak Berkontribusi)
+                <span className="text-[10px] sm:text-[11px] text-zinc-500">
+                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Aktif &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Offline)
                 </span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 {/* Interactive Target RR Selector */}
-                <div className="flex items-center gap-1.5 rounded-md bg-black border border-zinc-800 p-1">
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase px-1">Target RR:</span>
+                <div className="flex items-center gap-1 rounded-md bg-black border border-zinc-800 p-0.5 sm:p-1">
+                  <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase px-1">RR:</span>
                   {[1.5, 2.0, 2.5, 3.0].map((rrVal) => (
                     <button
                       key={rrVal}
                       type="button"
                       onClick={() => handleTargetRrChange(rrVal)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors ${
+                      className={`px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-medium transition-colors ${
                         targetRr === rrVal
                           ? "bg-zinc-800 text-emerald-400 border border-zinc-700 shadow-sm"
                           : "text-zinc-400 hover:text-zinc-200"
@@ -565,7 +565,7 @@ export default function DashboardPage() {
 
                 <Badge
                   variant="outline"
-                  className={`text-[11px] font-mono ${
+                  className={`text-[10px] sm:text-[11px] font-mono ${
                     evaluation.signal === "BUY"
                       ? "border-emerald-800 text-emerald-400"
                       : evaluation.signal === "SELL"
@@ -574,12 +574,12 @@ export default function DashboardPage() {
                   }`}
                 >
                   {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
-                  ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35} pips &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
+                  ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
                 </Badge>
                 <button
                   type="button"
                   onClick={() => setIsCouncilStripOpen(!isCouncilStripOpen)}
-                  className="text-zinc-500 hover:text-zinc-300 text-xs font-mono flex items-center gap-1"
+                  className="text-zinc-500 hover:text-zinc-300 text-xs font-mono flex items-center gap-1 ml-auto sm:ml-0"
                 >
                   {isCouncilStripOpen ? "Minimize" : "Expand All"}
                   <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCouncilStripOpen ? "rotate-180" : ""}`} />

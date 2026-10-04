@@ -829,14 +829,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
   return (
     <div className="relative w-full rounded-md bg-black overflow-hidden border border-zinc-800 font-sans">
-      {/* Top Chart Toolbar */}
-      <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 px-4 py-2 bg-zinc-950">
-        <div className="flex items-center gap-3">
+      {/* Top Chart Toolbar - Mobile Responsive & Overflow-Safe */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 sm:px-4 py-2 bg-zinc-950">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center rounded-md bg-black p-0.5 border border-zinc-800">
             <button
               type="button"
               onClick={() => onSymbolChange?.("BTCUSD")}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+              className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded transition-colors ${
                 symbol.toUpperCase().startsWith("BTC")
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-white"
@@ -847,13 +847,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <button
               type="button"
               onClick={() => onSymbolChange?.("XAUUSD")}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+              className={`px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-medium rounded transition-colors ${
                 symbol.toUpperCase().startsWith("XAU") || symbol.toUpperCase().startsWith("PAXG")
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-white"
               }`}
             >
-              XAU/USD (Gold)
+              XAU/USD
             </button>
           </div>
 
@@ -861,7 +861,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <select
               value={timeframe}
               onChange={(e) => onTimeframeChange?.(e.target.value)}
-              className="bg-black border border-zinc-800 text-zinc-300 text-xs font-medium rounded px-2.5 py-1 focus:outline-none focus:border-zinc-600 cursor-pointer hover:bg-zinc-900 transition-colors"
+              className="bg-black border border-zinc-800 text-zinc-300 text-[11px] sm:text-xs font-medium rounded px-2 sm:px-2.5 py-1 focus:outline-none focus:border-zinc-600 cursor-pointer hover:bg-zinc-900 transition-colors"
             >
               {TIMEFRAMES.map((tf) => (
                 <option key={tf.value} value={tf.value} className="bg-black text-zinc-200">
@@ -871,7 +871,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[10px] sm:text-[11px] text-zinc-400">
             <span
               className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-600"} transition-colors duration-150`}
             />
@@ -880,7 +880,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
           {aiSignal?.signal && (
             <span
-              className={`rounded px-2.5 py-0.5 text-[11px] font-medium border ${
+              className={`rounded px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-[11px] font-medium border ${
                 aiSignal.signal === "BUY"
                   ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
                   : aiSignal.signal === "SELL"
@@ -893,48 +893,42 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           )}
 
           {aiSignal?.slPips && (
-            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
-              SL: {aiSignal.slPips} pips &bull; TP: {aiSignal.tpPips} pips
+            <span className="hidden sm:inline-block rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
+              SL: {aiSignal.slPips}p &bull; TP: {aiSignal.tpPips}p
               {aiSignal.riskRewardRatio ? ` (${aiSignal.riskRewardRatio})` : ""}
             </span>
           )}
 
           {aiSignal?.signal === "WAIT" && (
-            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-900/50">
-              No Trade &middot; plan {resolveSide(aiSignal.signal, aiSignal.direction)}
-            </span>
-          )}
-
-          {aiMapping?.harmonicPattern?.name && (
-            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-900/50">
-              {aiMapping.harmonicPattern.name} (XABCD)
+            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-amber-400 border border-amber-900/50">
+              No Trade
             </span>
           )}
 
           {aiMapping?.fibonacciRetracement && (
-            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
+            <span className="hidden sm:inline-block rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
               Fib 0.618 Pocket
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 sm:gap-6 ml-auto">
           <div className="text-right">
-            <div className="text-[11px] text-zinc-500 flex items-center justify-end gap-1.5">
-              <span>Market Price</span>
+            <div className="text-[10px] sm:text-[11px] text-zinc-500 flex items-center justify-end gap-1 sm:gap-1.5">
+              <span>Price</span>
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-700"} transition-colors`}
               />
             </div>
-            <div className={`text-sm font-semibold transition-colors duration-150 ${pulse ? "text-white" : "text-zinc-200"}`}>
+            <div className={`text-xs sm:text-sm font-semibold transition-colors duration-150 ${pulse ? "text-white" : "text-zinc-200"}`}>
               {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "---.--"}
             </div>
           </div>
           {positions.length > 0 && (
             <div className="text-right">
-              <div className="text-[11px] text-zinc-500">PnL</div>
+              <div className="text-[10px] sm:text-[11px] text-zinc-500">PnL</div>
               <div
-                className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                className={`text-xs sm:text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}
               >
                 ${totalPnL.toFixed(2)}
               </div>
@@ -944,7 +938,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       </div>
 
       <div 
-        className="relative w-full h-[640px]"
+        className="relative w-full h-[460px] sm:h-[540px] md:h-[640px]"
         onMouseMove={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const mouseX = e.clientX - rect.left;
