@@ -1126,13 +1126,20 @@ export default function DashboardPage() {
                     )}
 
                     {/* Bounded Entry, SL, and TP Level Metrics with Exact Pips */}
-                    {evaluation.entryPrice && (
+                    {evaluation.entryPrice && evaluation.signal !== "WAIT" && (
                       <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black border border-zinc-800 font-mono">
                         <div className="text-center border-r border-zinc-800 pr-2">
-                          <span className="text-[10px] text-zinc-500 uppercase">Suggested Entry</span>
+                          <span className="text-[10px] text-zinc-500 uppercase flex items-center justify-center gap-1">
+                            {evaluation.orderType === "LIMIT" ? "⏳ Limit / Retest Entry" : "⚡ Suggested Entry"}
+                          </span>
                           <div className="text-sm font-semibold text-zinc-100 mt-0.5">
                             ${evaluation.entryPrice.toFixed(2)}
                           </div>
+                          {evaluation.entryTrigger && (
+                            <span className="text-[9px] block text-cyan-400/90 font-normal truncate mt-0.5" title={evaluation.entryTrigger}>
+                              {evaluation.orderType === "LIMIT" ? "Pending Pullback" : "Market Execution"}
+                            </span>
+                          )}
                         </div>
                         <div className="text-center border-r border-zinc-800 pr-2">
                           <span className="text-[10px] text-red-400 uppercase">Stop Loss (SL)</span>
@@ -1140,7 +1147,7 @@ export default function DashboardPage() {
                             ${evaluation.stopLoss?.toFixed(2)}
                             {evaluation.slPips && (
                               <span className="text-[10px] block text-red-400/80 font-normal">
-                                (-{evaluation.slPips} pips / ~$3.50)
+                                (-{evaluation.slPips} pips)
                               </span>
                             )}
                           </div>
@@ -1156,6 +1163,32 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* ALASAN MENAHAN DIRI / NO-TRADE REASONS (KETIKA STATUS WAIT) */}
+                    {evaluation.signal === "WAIT" && (
+                      <div className="rounded-lg border border-amber-800/80 bg-amber-950/20 p-3.5 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-400 font-mono text-xs font-semibold pb-1.5 border-b border-amber-900/40">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Status: MENAHAN DIRI (WAIT) — Jangan Masuk Pasar</span>
+                        </div>
+                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                          AI secara cerdas memilih <strong className="text-amber-300">TIDAK MEMAKSAKAN ENTRY</strong> karena kondisi saat ini belum memiliki edge probabilitas tinggi.
+                        </p>
+                        {evaluation.noTradeReasons && evaluation.noTradeReasons.length > 0 && (
+                          <div className="mt-2 space-y-1.5 pt-1">
+                            <div className="text-[11px] font-mono text-zinc-400">Penyebab Belum Ada Setup:</div>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              {evaluation.noTradeReasons.map((reason, idx) => (
+                                <div key={idx} className="flex items-start gap-2 text-[11px] font-mono text-amber-200/90 bg-black/50 border border-amber-900/30 rounded p-2">
+                                  <span className="text-amber-400 font-bold">•</span>
+                                  <span>{reason}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 

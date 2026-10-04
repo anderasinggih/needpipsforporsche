@@ -282,19 +282,21 @@ export const runConsensus = (opts: {
   if (active.length === 0) noTrade.push("Tidak ada agen aktif, tidak ada edge yang bisa dihitung.");
   if (agreement < gate) {
     noTrade.push(
-      `Kesesuaian antar-agen hanya ${Math.round(agreement * 100)}% (butuh ${Math.round(gate * 100)}%) untuk confluence ${ctx.mtfConfluence.verdict}.`,
+      `Kesesuaian antar-agen hanya ${Math.round(agreement * 100)}% (butuh minimal ${Math.round(gate * 100)}%) untuk kondisi confluence ${ctx.mtfConfluence.verdict}.`,
     );
   }
   if (participation < 0.5) {
-    noTrade.push(`Partisipasi suara rendah (${Math.round(participation * 100)}%), majority tipis.`);
+    noTrade.push(`Partisipasi suara rendah (${Math.round(participation * 100)}%), sinyal mayoritas belum solid.`);
   }
-  if (confidence < 55) noTrade.push(`Confidence gabungan ${confidence}% di bawah ambang 55%.`);
-  if (!checklistMet) noTrade.push("Checklist disiplin trading belum terpenuhi, eksekusi dibatalkan.");
-  if (ctx.regime === "CRISIS") noTrade.push("Regime volatilitas KRISIS, entry di harga sekarang tidak layak dikejar.");
-  if (ctx.mtfConfluence.verdict === "CONFLICT" && confidence < 62) {
-    noTrade.push("Multi-timeframe berkonflik dan confidence belum cukup untuk mengabaikannya.");
+  if (confidence < 58) {
+    noTrade.push(`Confidence gabungan ${confidence}% masih di bawah batas aman entry (minimal 58%). Momentum belum terbentuk.`);
   }
-  if (vetoes.length >= 3) noTrade.push(`${vetoes.length} suara dibatalkan oleh veto psikologis.`);
+  if (!checklistMet) noTrade.push("Checklist disiplin trading belum terpenuhi, eksekusi posisi dibatalkan demi keamanan modal.");
+  if (ctx.regime === "CRISIS") noTrade.push("Regime volatilitas KRISIS, spread & slippage ekstrem berbahaya untuk scalp.");
+  if (ctx.mtfConfluence.verdict === "CONFLICT" && confidence < 66) {
+    noTrade.push("Struktur multi-timeframe masih berkonflik/kontradiktif, belum ada konfirmasi tren yang selaras.");
+  }
+  if (vetoes.length >= 2) noTrade.push(`${vetoes.length} suara dibatalkan oleh veto psikologis dewan AI.`);
 
   const decision = noTrade.length === 0 ? (direction === "BULLISH" ? "BUY" : "SELL") : "WAIT";
 

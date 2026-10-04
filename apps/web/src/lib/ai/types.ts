@@ -299,6 +299,8 @@ export interface EvaluationResult {
   signal: Signal;
   direction: Direction;
   setupStatus: SetupStatus;
+  orderType?: "MARKET" | "LIMIT" | "PULLBACK";
+  entryTrigger?: string;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;

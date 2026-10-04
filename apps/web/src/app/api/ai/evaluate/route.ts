@@ -844,15 +844,54 @@ export async function POST(request: NextRequest) {
     });
 
     const direction: Direction = consensus.direction;
-    const decision: Signal = consensus.decision;
+    let decision: Signal = consensus.decision;
+
+    // Smart Entry Level Determination (Limit / Pullback vs Market):
+    // Rather than blindly executing at current candle close (which is aggressive & causes bad fills),
+    // calculate if market is stretched or if optimal entry requires a pullback to Golden Pocket / key pivot.
+    let targetEntryPrice = round(price);
+    let orderType: "MARKET" | "LIMIT" | "PULLBACK" = "MARKET";
+    let entryTrigger = `Market Execution @ $${round(price)}`;
+
+    if (decision !== "WAIT") {
+      const isLong = direction === "BULLISH";
+      const pocket = fib?.goldenPocket;
+
+      if (pocket) {
+        if (pocket.priceInside) {
+          // Price is currently inside Golden Pocket (0.5 - 0.618) -> Valid immediate entry!
+          targetEntryPrice = round(price);
+          orderType = "MARKET";
+          entryTrigger = `Market Entry: Harga sudah berada di dalam Golden Pocket 0.5 - 0.618 ($${pocket.zoneLow} - $${pocket.zoneHigh})`;
+        } else {
+          // Price is outside Golden Pocket. Check distance.
+          const distToPocket = isLong
+            ? price - pocket.zoneHigh
+            : pocket.zoneLow - price;
+          const distPips = toPips(Math.abs(distToPocket), spec);
+
+          // If price is extended > 8 pips away from golden pocket in trend direction,
+          // don't chase aggressively! Set LIMIT / PULLBACK order at the edge of Golden Pocket.
+          if (distToPocket > 0 && distPips >= 8 && distPips <= 60) {
+            targetEntryPrice = round(isLong ? pocket.zoneHigh : pocket.zoneLow);
+            orderType = "LIMIT";
+            entryTrigger = `Limit / Retest Order: Tunggu harga pullback ke Golden Pocket Fib ($${targetEntryPrice}) sebelum masuk`;
+          } else if (distPips > 60) {
+            // Price is overextended (> 60 pips away) without pullback -> Force WAIT!
+            decision = "WAIT";
+            entryTrigger = `Overextended: Harga sudah bergerak terlalu jauh (${Math.round(distPips)} pips) dari anchor Fibonacci`;
+          }
+        }
+      }
+    }
 
     const riskPlan = planRisk({
-      price,
+      price: targetEntryPrice,
       direction,
       atrValue,
       volatility,
       mtfVerdict: confluence.verdict,
-      structuralSlPips: structuralStopPips(pivots, price, direction, atrValue, spec.pipValue),
+      structuralSlPips: structuralStopPips(pivots, targetEntryPrice, direction, atrValue, spec.pipValue),
       spec,
       targetRr,
     });
@@ -882,23 +921,26 @@ export async function POST(request: NextRequest) {
     const noTradeReasons: string[] = [];
     if (decision === "WAIT") {
       if (consensus.agreement < 0.2) {
-        noTradeReasons.push(`Kesesuaian antar-agen hanya ${Math.round(consensus.agreement * 100)}%.`);
+        noTradeReasons.push(`Kesesuaian antar-agen dewan hanya ${Math.round(consensus.agreement * 100)}% (pasar terpecah tanpa konsensus jelas).`);
       }
-      if (consensus.confidence < 55) {
-        noTradeReasons.push(`Confidence gabungan ${consensus.confidence}% masih di bawah ambang 55%.`);
+      if (consensus.confidence < 58) {
+        noTradeReasons.push(`Confidence gabungan ${consensus.confidence}% masih di bawah ambang minimal (58%). Momentum belum valid.`);
       }
-      if (!checklistMet) noTradeReasons.push("Checklist disiplin trading belum terpenuhi.");
-      if (confluence.verdict === "CONFLICT") noTradeReasons.push("Timeframe tinggi masih bertentangan.");
-      if (volatility.regime === "CRISIS") noTradeReasons.push("Volatilitas kritis, harga tidak layak dikejar.");
-      if (expectancy.verdict === "NEGATIVE_EDGE") noTradeReasons.push("Expectancy negatif pada konfigurasi ini.");
+      if (!checklistMet) noTradeReasons.push("Checklist disiplin trading belum terpenuhi, menahan diri demi proteksi modal.");
+      if (confluence.verdict === "CONFLICT") noTradeReasons.push("Timeframe tinggi (M5/M15/H1) masih berlawanan arah dengan arah candle lokal.");
+      if (volatility.regime === "CRISIS") noTradeReasons.push("Volatilitas pasar sedang krisis (spread & slippage lebar), harga tidak layak dikejar.");
+      if (expectancy.verdict === "NEGATIVE_EDGE") noTradeReasons.push("Perhitungan ekspektansi matematika negatif pada setup ini.");
       if (riskPlan.structuralSlPips > spec.maxSlPips) {
-        noTradeReasons.push("Swing struktural terlalu jauh untuk risiko 30-50 pips.");
+        noTradeReasons.push(`Swing struktural pengaman (${riskPlan.structuralSlPips} pips) terlalu jauh dari budget risiko.`);
+      }
+      if (fib && !fib.goldenPocket.priceInside && Math.abs(toPips(price - fib.goldenPocket.zoneHigh, spec)) > 60) {
+        noTradeReasons.push("Harga sedang overextended (jauh dari zona diskon Golden Pocket), risiko buy di pucuk / sell di dasar sangat tinggi.");
       }
       if (consensus.vetoes.length) {
-        noTradeReasons.push(`${consensus.vetoes.length} suara dibatalkan oleh veto psikologis.`);
+        noTradeReasons.push(`${consensus.vetoes.length} suara dibatalkan oleh veto psikologis dewan AI.`);
       }
       if (!noTradeReasons.length) {
-        noTradeReasons.push("Gate keputusan tidak terpenuhi, default aman adalah tidak masuk pasar.");
+        noTradeReasons.push("Kondisi market saat ini tidak ideal untuk entry (belum ada momen / konfirmasi teruji). AI memutuskan menahan posisi (WAIT).");
       }
     }
 
@@ -1034,7 +1076,9 @@ export async function POST(request: NextRequest) {
       direction,
       setupStatus:
         decision === "WAIT" ? "WAITING_FOR_TRIGGER" : activeAgents.length === 0 ? "DEGRADED_QUANT_FALLBACK" : "ARMED",
-      entryPrice: round(price),
+      orderType,
+      entryTrigger,
+      entryPrice: targetEntryPrice,
       stopLoss: riskPlan.slPrice,
       takeProfit: riskPlan.tpPrice,
       slPips: riskPlan.slPips,
@@ -1090,7 +1134,7 @@ export async function POST(request: NextRequest) {
       positionBox: {
         startTime: currentUnix,
         endTime: currentUnix + tfSeconds * 12,
-        entryPrice: round(price),
+        entryPrice: targetEntryPrice,
         stopLoss: riskPlan.slPrice,
         takeProfit: riskPlan.tpPrice,
       },

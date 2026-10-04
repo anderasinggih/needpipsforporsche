@@ -523,7 +523,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       ctx.clearRect(0, 0, width, height);
 
-      if (!aiSignal?.entryPrice || !aiSignal?.stopLoss || !aiSignal?.takeProfit) {
+      if (
+        !aiSignal?.entryPrice ||
+        !aiSignal?.stopLoss ||
+        !aiSignal?.takeProfit ||
+        aiSignal?.signal === "WAIT"
+      ) {
         positionBoxBoundsRef.current = null;
         return;
       }
