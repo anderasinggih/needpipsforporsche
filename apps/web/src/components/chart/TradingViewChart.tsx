@@ -384,11 +384,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 4. Fibonacci Retracement Levels (Bounded short horizontal lines around recent candles)
+    // 4. Fibonacci Retracement Levels (Standard TradingView Fib Tool from genuine Swing Anchor)
     if (aiMapping?.fibonacciRetracement?.levels && aiMapping.fibonacciRetracement.levels.length > 0) {
       const fib = aiMapping.fibonacciRetracement;
+      // Start strictly from the genuine Swing High or Swing Low pivot time
       const fibStart = Math.min(fib.high.time, fib.low.time);
-      const fibEnd = lastHistoricalTime + 60 * 6;
+      // Extend across to the position box & recent candles
+      const fibEnd = Math.max(lastHistoricalTime + 60 * 8, Math.max(fib.high.time, fib.low.time) + 60 * 8);
 
       fib.levels.forEach((lvl) => {
         const fibId = `ai_fib_level_${lvl.ratio}`;
@@ -397,7 +399,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         if (!lineMap.has(fibId)) {
           const isGolden = lvl.ratio === 0.618 || lvl.ratio === 0.5;
           const fibLine = chartRef.current.addLineSeries({
-            color: isGolden ? "#F59E0B" : "#52525B",
+            color: isGolden ? "#F59E0B" : "#71717A",
             lineWidth: isGolden ? 2 : 1,
             lineStyle: isGolden ? LineStyle.Solid : LineStyle.Dashed,
             lastValueVisible: false,
@@ -408,6 +410,20 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             { time: fibStart as any, value: lvl.price },
             { time: fibEnd as any, value: lvl.price },
           ]);
+
+          // Label the key golden pocket level on chart
+          if (isGolden) {
+            fibLine.setMarkers([
+              {
+                time: fibStart as any,
+                position: (aiSignal?.signal || "BUY") === "BUY" ? "belowBar" : "aboveBar",
+                color: "#F59E0B",
+                shape: "circle",
+                text: lvl.ratio === 0.618 ? "Fib 0.618 Pocket" : "Fib 0.50 Eq",
+              },
+            ]);
+          }
+
           lineMap.set(fibId, fibLine);
         }
       });

@@ -567,36 +567,51 @@ Keluarkan JSON murni:
     // 3. Genuine Harmonic Pivot -> ONLY if at least 25 candles with distinct swing pivots exist
     // -------------------------------------------------------------
     const fibRange = Math.abs(highestHigh - lowestLow) || (atr * 4);
-    const fibBase = lowestLow;
-    const fibLevels: FibonacciLevel[] = [
-      { ratio: 0.236, label: "23.6%", price: Number((fibBase + fibRange * 0.236).toFixed(2)) },
-      { ratio: 0.382, label: "38.2%", price: Number((fibBase + fibRange * 0.382).toFixed(2)) },
-      { ratio: 0.500, label: "50.0%", price: Number((fibBase + fibRange * 0.500).toFixed(2)) },
-      { ratio: 0.618, label: "61.8%", price: Number((fibBase + fibRange * 0.618).toFixed(2)) },
-      { ratio: 0.786, label: "78.6%", price: Number((fibBase + fibRange * 0.786).toFixed(2)) },
-    ];
+    // Find genuine swing high and swing low candles for Fibonacci and Trendline
+    let swingHighCandle = candles.length > 0 ? candles[0] : { time: currentUnix - 600, high: highestHigh, low: lowestLow };
+    let swingLowCandle = candles.length > 0 ? candles[0] : { time: currentUnix - 600, high: highestHigh, low: lowestLow };
 
-    // Find actual swing highs and swing lows from historical candles for realistic trendline
-    let trendlineStart = {
-      time: candles.length > 10 ? candles[candles.length - 10].time : currentUnix - 600,
-      price: consensusIsBullish ? lowestLow : highestHigh,
-    };
-
-    if (candles.length >= 15) {
-      if (consensusIsBullish) {
-        let minC = candles[0];
-        for (let i = 0; i < candles.length - 2; i++) {
-          if (candles[i].low < minC.low) minC = candles[i];
-        }
-        trendlineStart = { time: minC.time, price: minC.low };
-      } else {
-        let maxC = candles[0];
-        for (let i = 0; i < candles.length - 2; i++) {
-          if (candles[i].high > maxC.high) maxC = candles[i];
-        }
-        trendlineStart = { time: maxC.time, price: maxC.high };
+    if (candles.length >= 5) {
+      for (const c of candles) {
+        if (c.high > swingHighCandle.high) swingHighCandle = c;
+        if (c.low < swingLowCandle.low) swingLowCandle = c;
       }
     }
+
+    // Standard Fibonacci Technical Analysis rules:
+    // Downtrend (SELL): Price pulled back down from Swing High to Swing Low.
+    // Retracement levels measure bounce from Low towards High:
+    // Price = SwingLow + (SwingHigh - SwingLow) * ratio
+    // Uptrend (BUY): Price rallied up from Swing Low to Swing High.
+    // Retracement levels measure dip from High towards Low:
+    // Price = SwingHigh - (SwingHigh - SwingLow) * ratio
+    const swingRange = Math.max(0.01, swingHighCandle.high - swingLowCandle.low);
+    const fibRatios = [
+      { ratio: 0.236, label: "0.236" },
+      { ratio: 0.382, label: "0.382" },
+      { ratio: 0.500, label: "0.500 (Eq)" },
+      { ratio: 0.618, label: "0.618 (Golden Pocket)" },
+      { ratio: 0.786, label: "0.786" },
+    ];
+
+    const fibLevels: FibonacciLevel[] = fibRatios.map((item) => {
+      let lvlPrice: number;
+      if (consensusIsBullish) {
+        lvlPrice = swingHighCandle.high - (swingRange * item.ratio);
+      } else {
+        lvlPrice = swingLowCandle.low + (swingRange * item.ratio);
+      }
+      return {
+        ratio: item.ratio,
+        label: item.label,
+        price: Number(lvlPrice.toFixed(2)),
+      };
+    });
+
+    let trendlineStart = {
+      time: consensusIsBullish ? swingLowCandle.time : swingHighCandle.time,
+      price: consensusIsBullish ? swingLowCandle.low : swingHighCandle.high,
+    };
 
     // Determine if condition warrants a real harmonic pattern or dynamic trendline
     // Harmonic patterns should only appear when there are sufficient genuine swing points
@@ -659,8 +674,8 @@ Keluarkan JSON murni:
         price: calcEntry,
       },
       fibonacciRetracement: {
-        high: { time: currentUnix - tfSeconds * 15, price: highestHigh },
-        low: { time: currentUnix - tfSeconds * 15, price: lowestLow },
+        high: { time: swingHighCandle.time, price: swingHighCandle.high },
+        low: { time: swingLowCandle.time, price: swingLowCandle.low },
         levels: fibLevels,
       },
     };
