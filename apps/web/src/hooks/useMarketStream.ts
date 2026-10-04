@@ -71,9 +71,14 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     let binanceInterval = timeframe;
     if (timeframe === "1s") binanceInterval = "1m";
 
-    // Use Binance direct combined stream endpoint:
     const klineStream = `${binanceStream}@kline_${binanceInterval}`;
-    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade`;
+
+    // Candidate WebSocket endpoints (data-stream.binance.vision is unblocked globally / in Indonesia)
+    const wsEndpoints = [
+      `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade`,
+      `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade`,
+    ];
+    let currentEndpointIndex = 0;
 
     const connect = () => {
       if (!isMounted) return;
@@ -82,7 +87,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
           return;
         }
 
-        const ws = new WebSocket(streamUrl);
+        const endpoint = wsEndpoints[currentEndpointIndex % wsEndpoints.length];
+        const ws = new WebSocket(endpoint);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -136,7 +142,9 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
           if (!isMounted) return;
           setIsConnected(false);
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connect, 2000);
+          // Cycle through fallback endpoints on failure
+          currentEndpointIndex++;
+          reconnectTimeout = setTimeout(connect, 1500);
         };
 
         ws.onerror = () => {
@@ -146,22 +154,43 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         };
       } catch (err) {
         if (!isMounted) return;
+        currentEndpointIndex++;
         clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(connect, 2000);
+        reconnectTimeout = setTimeout(connect, 1500);
       }
     };
 
     connect();
 
+    // 3. Fallback Heartbeat Poller: In case WebSocket is temporarily offline or filtered
+    const pollInterval = setInterval(async () => {
+      if (!isMounted) return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        try {
+          const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=2`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.candles && data.candles.length > 0) {
+              const latest = data.candles[data.candles.length - 1];
+              setCurrentCandle(latest);
+              setLastTickTimestamp(Date.now());
+              setIsConnected(true);
+            }
+          }
+        } catch (e) {}
+      }
+    }, 2500);
+
     return () => {
       isMounted = false;
+      clearInterval(pollInterval);
       clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [binanceStream, timeframe]);
+  }, [binanceStream, timeframe, activeSymbol]);
 
   return { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp };
 }

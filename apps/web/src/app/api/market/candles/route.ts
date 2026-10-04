@@ -23,18 +23,27 @@ export async function GET(request: NextRequest) {
   const binanceSymbol = normalizeBinanceSymbol(rawSymbol);
 
   try {
-    const res = await fetch(
+    let rawKlines: any = null;
+    const endpoints = [
+      `https://data-api.binance.vision/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
       `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
-      { cache: "no-store" }
-    );
+    ];
 
-    if (!res.ok) {
-      throw new Error(`Binance responded with ${res.status}`);
+    for (const url of endpoints) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          rawKlines = await res.json();
+          if (Array.isArray(rawKlines) && rawKlines.length > 0) break;
+        }
+      } catch (e) {}
     }
 
-    const rawKlines = await res.json();
     if (!Array.isArray(rawKlines) || rawKlines.length === 0) {
-      throw new Error("Invalid klines format");
+      throw new Error("Unable to fetch candle data from Binance endpoints");
     }
 
     // Format into lightweight-charts format: { time: number (seconds), open, high, low, close, volume }
