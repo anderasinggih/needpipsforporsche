@@ -46,6 +46,7 @@ import type {
   Bias,
   ConsensusResult,
   Direction,
+  DiscussionMessage,
   EmotionalState,
   EvaluationResult,
   Expectancy,
@@ -498,6 +499,139 @@ const buildExecutionPlan = (o: {
       { phase: "Exit", action: `TP ${o.risk.tpPips} pips dengan RR 1:${o.risk.rr}. SL tidak boleh dijauhkan.` },
     ],
   };
+};
+
+const buildCouncilDiscussion = (o: {
+  agentOpinions: AgentOpinion[];
+  consensus: ConsensusResult;
+  direction: Direction;
+  price: number;
+  synthRaw?: any;
+  currentUnix: number;
+}): DiscussionMessage[] => {
+  const msgs: DiscussionMessage[] = [];
+  const rawList = Array.isArray(o.synthRaw?.councilDiscussion) ? o.synthRaw.councilDiscussion : [];
+
+  if (rawList.length > 0) {
+    let t = o.currentUnix - 45;
+    for (let i = 0; i < rawList.length; i++) {
+      const item = rawList[i];
+      if (!item || typeof item.message !== "string" || !item.message.trim()) continue;
+      const matchedAgent = o.agentOpinions.find(
+        (a) => a.agentName.toLowerCase().includes((item.agentName || "").toLowerCase()) ||
+               a.role.toLowerCase().includes((item.agentName || "").toLowerCase())
+      ) || o.agentOpinions[i % o.agentOpinions.length];
+
+      msgs.push({
+        id: `disc_${i}_${Date.now()}`,
+        agentId: matchedAgent?.agentId || `slot_${i + 1}`,
+        agentName: item.agentName || matchedAgent?.agentName || `Agent ${i + 1}`,
+        role: matchedAgent?.role || "Specialist",
+        bias: matchedAgent?.bias || (o.direction === "BULLISH" ? "BULLISH" : "BEARISH"),
+        avatarIcon: matchedAgent?.emotionIcon || "💬",
+        round: item.round === "pitch" || item.round === "rebuttal" || item.round === "ruling" ? item.round : i === 0 ? "pitch" : i === rawList.length - 1 ? "ruling" : "rebuttal",
+        replyToAgentName: item.replyToAgentName,
+        message: item.message.trim(),
+        timestamp: t + i * 8,
+      });
+    }
+  }
+
+  // Fallback high-fidelity multi-agent debate synthesis if raw LLM response had no discussion
+  if (msgs.length === 0) {
+    const active = o.agentOpinions.filter((a) => a.status === "active");
+    const bullAgents = active.filter((a) => a.bias === "BULLISH");
+    const bearAgents = active.filter((a) => a.bias === "BEARISH");
+    const neutralAgents = active.filter((a) => a.bias === "NEUTRAL");
+
+    let t = o.currentUnix - 40;
+    let idx = 0;
+
+    // Round 1: Opening Pitches
+    if (bullAgents.length > 0) {
+      const b = bullAgents[0];
+      msgs.push({
+        id: `disc_${idx++}`,
+        agentId: b.agentId,
+        agentName: b.agentName,
+        role: b.role,
+        bias: "BULLISH",
+        avatarIcon: b.emotionIcon || "🟢",
+        round: "pitch",
+        message: `Melihat data harga di $${round(o.price)}, ${b.keyObservation}. Sinyal bullish terbentuk dan momentum condong ke atas.`,
+        timestamp: t += 6,
+      });
+    }
+
+    if (bearAgents.length > 0) {
+      const br = bearAgents[0];
+      msgs.push({
+        id: `disc_${idx++}`,
+        agentId: br.agentId,
+        agentName: br.agentName,
+        role: br.role,
+        bias: "BEARISH",
+        avatarIcon: br.emotionIcon || "🔴",
+        round: "pitch",
+        message: `Tunggu dulu, ${br.keyObservation}. Di level ini terdapat resistensi dan tekanan jual masih nyata.`,
+        timestamp: t += 7,
+      });
+    }
+
+    // Round 2: Rebuttal & Risk / Liquidity Cross-Challenge
+    if (neutralAgents.length > 0) {
+      const n = neutralAgents[0];
+      const targetName = bullAgents[0]?.agentName || bearAgents[0]?.agentName || "Dewan";
+      msgs.push({
+        id: `disc_${idx++}`,
+        agentId: n.agentId,
+        agentName: n.agentName,
+        role: n.role,
+        bias: "NEUTRAL",
+        avatarIcon: n.emotionIcon || "⚠️",
+        round: "rebuttal",
+        replyToAgentName: targetName,
+        message: `Saran saya waspada kepada @${targetName}: ${n.keyObservation}. Risk-reward belum optimal jika kita terburu-buru masuk sebelum validasi likuiditas bersih.`,
+        timestamp: t += 8,
+      });
+    }
+
+    if (active.length >= 3) {
+      const extra = active.find((a) => a.agentId !== msgs[0]?.agentId && a.agentId !== msgs[1]?.agentId && a.agentId !== msgs[2]?.agentId) || active[1];
+      if (extra) {
+        msgs.push({
+          id: `disc_${idx++}`,
+          agentId: extra.agentId,
+          agentName: extra.agentName,
+          role: extra.role,
+          bias: extra.bias,
+          avatarIcon: extra.emotionIcon || "⚡",
+          round: "rebuttal",
+          replyToAgentName: msgs[msgs.length - 1]?.agentName,
+          message: `Tambahan dari perspektif ${extra.role}: ${extra.detailedAnalysis.slice(0, 140)}... Kita harus disiplin pada invalidasi teknikal.`,
+          timestamp: t += 8,
+        });
+      }
+    }
+
+    // Round 3: Chief Final Ruling
+    const chief = o.agentOpinions.find((a) => a.agentId === "slot_1") || o.agentOpinions[0];
+    msgs.push({
+      id: `disc_${idx++}`,
+      agentId: chief.agentId,
+      agentName: chief.agentName,
+      role: chief.role,
+      bias: o.consensus.decision === "WAIT" ? "NEUTRAL" : o.direction === "BULLISH" ? "BULLISH" : "BEARISH",
+      avatarIcon: chief.emotionIcon || "⚖️",
+      round: "ruling",
+      message: o.consensus.decision === "WAIT"
+        ? `Menimbang seluruh sanggahan dan risiko: Putusan dewan bulat menahan posisi (WAIT). Jangan memaksakan entry sampai pemicu struktural teruji.`
+        : `Kesimpulan konsensus disepakati: Eksekusi ${o.consensus.decision} dengan kontrol risiko ketat. Patuhi batas SL yang telah ditetapkan.`,
+      timestamp: t += 9,
+    });
+  }
+
+  return msgs;
 };
 
 const buildTrajectory = (o: {
@@ -1086,6 +1220,14 @@ export async function POST(request: NextRequest) {
       riskRewardRatio: `1:${riskPlan.rr}`,
       confidence: consensus.confidence,
       agentOpinions,
+      councilDiscussion: buildCouncilDiscussion({
+        agentOpinions,
+        consensus,
+        direction,
+        price,
+        synthRaw,
+        currentUnix,
+      }),
       activeAgentCount: activeAgents.length + 1,
       offlineAgentCount: offlineAgents.length,
       mtfMatrix,

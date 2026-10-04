@@ -289,6 +289,19 @@ export interface ExecutionPlan {
   steps: ExecutionStep[];
 }
 
+export interface DiscussionMessage {
+  id: string;
+  agentId: string;
+  agentName: string;
+  role: string;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  avatarIcon?: string;
+  round: "pitch" | "rebuttal" | "ruling";
+  replyToAgentName?: string;
+  message: string;
+  timestamp: number;
+}
+
 export interface EvaluationResult {
   /** Client-side archive id, assigned by the dashboard after each run. */
   id?: string;
@@ -309,6 +322,7 @@ export interface EvaluationResult {
   riskRewardRatio: string;
   confidence: number;
   agentOpinions: AgentOpinion[];
+  councilDiscussion?: DiscussionMessage[];
   activeAgentCount: number;
   offlineAgentCount: number;
   mtfMatrix: Record<string, MtfSummary>;

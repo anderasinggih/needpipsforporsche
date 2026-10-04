@@ -11,6 +11,7 @@ import {
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
+import { CouncilWarRoomChat } from "@/components/council/CouncilWarRoomChat";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -182,6 +183,7 @@ export default function DashboardPage() {
   // Expanded collapse states for agents
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>("slot_1");
   const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
+  const [councilViewTab, setCouncilViewTab] = useState<"chat" | "cards">("chat");
 
   // Persistent AI Evaluation History Log
   const [evalLogs, setEvalLogs] = useState<StoredEvaluation[]>([]);
@@ -591,6 +593,34 @@ export default function DashboardPage() {
                   {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
                   ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
                 </Badge>
+                {/* View Switcher: War Room Chat vs Agent Cards */}
+                <div className="flex items-center gap-1 bg-black p-0.5 rounded-md border border-zinc-800 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setCouncilViewTab("chat")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+                      councilViewTab === "chat"
+                        ? "bg-zinc-800 text-emerald-400 font-medium shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    <span>War Room Chat</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouncilViewTab("cards")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+                      councilViewTab === "cards"
+                        ? "bg-zinc-800 text-zinc-100 font-medium shadow-sm"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Users className="h-3 w-3" />
+                    <span>Agent Cards</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setIsCouncilStripOpen(!isCouncilStripOpen)}
@@ -738,11 +768,24 @@ export default function DashboardPage() {
             )}
 
             {isCouncilStripOpen && (
-              <div className="space-y-2.5">
-                {/* Agent grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                  {evaluation.agentOpinions.map((agent) => {
-                    const isExpanded = expandedAgentId === agent.agentId;
+              <div className="space-y-3">
+                {/* Mode 1: War Room Interactive Chat */}
+                {councilViewTab === "chat" && (
+                  <CouncilWarRoomChat
+                    discussion={evaluation.councilDiscussion}
+                    isEvaluating={isEvaluating}
+                    symbol={activeSymbol}
+                    timeframe={timeframe}
+                  />
+                )}
+
+                {/* Mode 2: Multi-Agent Card Grid & Drawer */}
+                {councilViewTab === "cards" && (
+                  <div className="space-y-2.5">
+                    {/* Agent grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                      {evaluation.agentOpinions.map((agent) => {
+                        const isExpanded = expandedAgentId === agent.agentId;
                     const isChief = agent.agentId === "slot_1";
                     const isNotContributed = agent.status === "not_contributed";
 
@@ -993,6 +1036,8 @@ export default function DashboardPage() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
               </div>
             )}
           </Card>

@@ -328,5 +328,13 @@ BALAS JSON MURNI:
   "tpReason": "1 kalimat alasan TP ${ctx.tpPips} pips dan RR ${ctx.rr}",
   "recommendation": "Instruksi eksekusi atau tunggu yang tegas dan berdisiplin",
   "notes": "2 kalimat manajemen lot dan disiplin psikologis",
-  "psychologyWarning": "1 kalimat bahaya emosi terbesar di setup ini"
+  "psychologyWarning": "1 kalimat bahaya emosi terbesar di setup ini",
+  "councilDiscussion": [
+    {
+      "agentName": "Nama Agen (misal Agent 2 atau Agent 3)",
+      "round": "pitch | rebuttal | ruling",
+      "replyToAgentName": "Nama Agen yang disanggah (jika ada, terutama pada round rebuttal)",
+      "message": "Pernyataan atau sanggahan tajam, saling berbalas layaknya war room institusional dalam Bahasa Indonesia profesional"
+    }
+  ]
 }`;
