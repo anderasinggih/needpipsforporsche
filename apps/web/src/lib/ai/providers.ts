@@ -15,6 +15,7 @@ export interface KeySlotPayload {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  enabled?: boolean;
 }
 
 const DEFAULT_MODEL: Record<ProviderId, string> = {
@@ -35,7 +36,7 @@ export const sanitizeModel = (provider: ProviderId, model: string): string => {
 export const sanitizeSlots = (raw: unknown): KeySlotPayload[] => {
   if (!Array.isArray(raw)) return [];
   const slots: KeySlotPayload[] = [];
-  for (const item of raw.slice(0, 12)) {
+  for (const item of raw.slice(0, 20)) {
     if (!item || typeof item !== "object") continue;
     const rec = item as Record<string, unknown>;
     const provider = String(rec.provider || "").toLowerCase() as ProviderId;
@@ -46,6 +47,7 @@ export const sanitizeSlots = (raw: unknown): KeySlotPayload[] => {
       provider,
       model: sanitizeModel(provider, String(rec.model || "")),
       apiKey: String(rec.apiKey || "").trim().slice(0, 400),
+      enabled: rec.enabled !== undefined ? Boolean(rec.enabled) : true,
     });
   }
   return slots;

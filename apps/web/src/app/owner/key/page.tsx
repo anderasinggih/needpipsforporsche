@@ -12,9 +12,11 @@ import { Badge } from "@/components/ui/badge";
 export interface KeySlot {
   id: string;
   label: string;
+  roleTitle?: string;
   provider: "gemini" | "groq" | "openai" | "deepseek" | "openrouter";
   model: string;
   apiKey: string;
+  enabled: boolean;
 }
 
 interface ModelOption {
@@ -70,16 +72,26 @@ const PROVIDER_MODELS: Record<string, ModelOption[]> = {
 };
 
 const DEFAULT_SLOTS: KeySlot[] = [
-  { id: "slot_1", label: "Agent 1 (Chief Synthesizer)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
-  { id: "slot_2", label: "Agent 2 (Market Structure)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
-  { id: "slot_3", label: "Agent 3 (Liquidity Hunter)", provider: "openai", model: "gpt-4o-mini", apiKey: "" },
-  { id: "slot_4", label: "Agent 4 (Momentum & Trend)", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: "" },
-  { id: "slot_5", label: "Agent 5 (Volatility & Risk)", provider: "gemini", model: "gemini-2.5-pro", apiKey: "" },
-  { id: "slot_6", label: "Agent 6 (Order Flow Scout)", provider: "groq", model: "llama-3.1-8b-instant", apiKey: "" },
-  { id: "slot_7", label: "Agent 7 (Scalp Microstructure)", provider: "openai", model: "gpt-4o-mini", apiKey: "" },
-  { id: "slot_8", label: "Agent 8 (Multi-TF Confirmation)", provider: "deepseek", model: "deepseek-chat", apiKey: "" },
-  { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "deepseek/deepseek-chat", apiKey: "" },
-  { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
+  { id: "slot_1", label: "Agent 1", roleTitle: "Chief Synthesizer & Scalping Consensus Arbiter", provider: "gemini", model: "gemini-2.5-flash", apiKey: "", enabled: true },
+  { id: "slot_2", label: "Agent 2", roleTitle: "Market Structure & Smart Money Specialist", provider: "gemini", model: "gemini-2.5-flash", apiKey: "", enabled: true },
+  { id: "slot_3", label: "Agent 3", roleTitle: "Liquidity Hunter & Fair Value Gap Scout", provider: "openai", model: "gpt-4o-mini", apiKey: "", enabled: true },
+  { id: "slot_4", label: "Agent 4", roleTitle: "Multi-Timeframe Trend & Momentum Analyst", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: "", enabled: true },
+  { id: "slot_5", label: "Agent 5", roleTitle: "Dynamic ATR Volatility & Drawdown Architect", provider: "gemini", model: "gemini-2.5-pro", apiKey: "", enabled: true },
+  { id: "slot_6", label: "Agent 6", roleTitle: "Harmonic Pattern & XABCD Geometry Specialist", provider: "groq", model: "llama-3.1-8b-instant", apiKey: "", enabled: true },
+  { id: "slot_7", label: "Agent 7", roleTitle: "Fibonacci Retracement & Golden Pocket Analyst", provider: "openai", model: "gpt-4o-mini", apiKey: "", enabled: true },
+  { id: "slot_8", label: "Agent 8", roleTitle: "Multi-Timeframe Confirmation Matrix Auditor", provider: "deepseek", model: "deepseek-chat", apiKey: "", enabled: true },
+  { id: "slot_9", label: "Agent 9", roleTitle: "Volume Profile & Volume-Weighted Average Scout", provider: "openrouter", model: "deepseek/deepseek-chat", apiKey: "", enabled: true },
+  { id: "slot_10", label: "Agent 10", roleTitle: "Quantitative Invalidation Auditor", provider: "gemini", model: "gemini-2.5-flash", apiKey: "", enabled: true },
+  { id: "slot_11", label: "Agent 11", roleTitle: "Judas Swing & Session Liquidity Scout", provider: "gemini", model: "gemini-2.5-flash", apiKey: "", enabled: true },
+  { id: "slot_12", label: "Agent 12", roleTitle: "Mean-Reversion & Bollinger Z-Score Specialist", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: "", enabled: true },
+  { id: "slot_13", label: "Agent 13", roleTitle: "Momentum RSI Divergence & Oscillator Scout", provider: "openai", model: "gpt-4o-mini", apiKey: "", enabled: true },
+  { id: "slot_14", label: "Agent 14", roleTitle: "Support & Resistance Dynamic Pivot Master", provider: "deepseek", model: "deepseek-chat", apiKey: "", enabled: true },
+  { id: "slot_15", label: "Agent 15", roleTitle: "Session Timing & Macro Killzone Analyst", provider: "gemini", model: "gemini-2.5-flash-lite", apiKey: "", enabled: true },
+  { id: "slot_16", label: "Agent 16", roleTitle: "Take Risk Aggressive Momentum Front-Runner", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: "", enabled: true },
+  { id: "slot_17", label: "Agent 17", roleTitle: "Capital Preservation & Drawdown Sentinel", provider: "gemini", model: "gemini-2.5-pro", apiKey: "", enabled: true },
+  { id: "slot_18", label: "Agent 18", roleTitle: "Slippage & Spread Friction Defense", provider: "openai", model: "gpt-4o-mini", apiKey: "", enabled: true },
+  { id: "slot_19", label: "Agent 19", roleTitle: "Contrarian Devil's Advocate & Risk Challenger", provider: "deepseek", model: "deepseek-chat", apiKey: "", enabled: true },
+  { id: "slot_20", label: "Agent 20", roleTitle: "Sub-Second Micro-Scalp Execution Trigger", provider: "gemini", model: "gemini-2.5-flash", apiKey: "", enabled: true },
 ];
 
 export default function OwnerKeyPage() {
@@ -99,7 +111,19 @@ export default function OwnerKeyPage() {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setSlots(parsed);
+            // Merge with 20 DEFAULT_SLOTS so new slots 11-20 are available while preserving saved keys
+            const merged = DEFAULT_SLOTS.map((defSlot) => {
+              const found = parsed.find((p: any) => p.id === defSlot.id);
+              if (found) {
+                return {
+                  ...defSlot,
+                  ...found,
+                  enabled: found.enabled !== undefined ? Boolean(found.enabled) : true,
+                };
+              }
+              return defSlot;
+            });
+            setSlots(merged);
             return;
           }
         } catch (e) {
@@ -223,13 +247,13 @@ export default function OwnerKeyPage() {
             <div className="flex items-center gap-2">
               <Key className="h-4 w-4 text-zinc-400" />
               <span className="text-xs font-mono font-semibold tracking-wider uppercase text-zinc-200">
-                10-Agent Multi-Key Scalping Council
+                20-Agent Multi-Key Scalping Council
               </span>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-emerald-400">
-              {activeCount} / {slots.length} Keys Configured
+              {slots.filter((s) => s.enabled && s.apiKey.trim().length > 0).length} / {slots.length} Active Agents
             </Badge>
             <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
               Route: /owner/key
@@ -322,30 +346,58 @@ export default function OwnerKeyPage() {
                       <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono font-bold text-zinc-300">
                         {index + 1}
                       </span>
-                      <Input
-                        value={slot.label}
-                        onChange={(e) => updateSlot(slot.id, "label", e.target.value)}
-                        className="h-6 text-[11px] font-semibold bg-transparent border-0 p-0 text-zinc-200 focus-visible:ring-0 w-48"
-                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            value={slot.label}
+                            onChange={(e) => updateSlot(slot.id, "label", e.target.value)}
+                            className="h-6 text-[11px] font-semibold bg-transparent border-0 p-0 text-zinc-200 focus-visible:ring-0 w-36 sm:w-44"
+                          />
+                        </div>
+                        {slot.roleTitle && (
+                          <div className="text-[10px] font-mono text-emerald-400/90 truncate max-w-[200px] sm:max-w-xs">
+                            {slot.roleTitle}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* Interactive ON / OFF Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSlots((prev) =>
+                            prev.map((s) => (s.id === slot.id ? { ...s, enabled: !s.enabled } : s))
+                          );
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded transition-colors border ${
+                          slot.enabled
+                            ? "bg-emerald-950/80 text-emerald-400 border-emerald-800 hover:bg-emerald-900/60"
+                            : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:bg-zinc-800/80"
+                        }`}
+                      >
+                        {slot.enabled ? "ON" : "OFF"}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleTestKey(slot)}
-                        disabled={testState?.loading}
+                        disabled={testState?.loading || !slot.enabled}
                         className="px-2 py-0.5 text-[10px] font-mono font-medium rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
                       >
-                        {testState?.loading ? "Testing..." : "Test Key"}
+                        {testState?.loading ? "Testing..." : "Test"}
                       </button>
                       <Badge
                         variant="outline"
                         className={`text-[9px] font-mono ${
-                          isConfigured
+                          !slot.enabled
+                            ? "border-zinc-800 text-zinc-600 bg-zinc-950"
+                            : isConfigured
                             ? "border-emerald-900/60 text-emerald-400 bg-emerald-950/30"
                             : "border-zinc-800 text-zinc-500"
                         }`}
                       >
-                        {isConfigured ? "ACTIVE" : "EMPTY"}
+                        {!slot.enabled ? "MUTED" : isConfigured ? "ACTIVE" : "EMPTY"}
                       </Badge>
                     </div>
                   </div>

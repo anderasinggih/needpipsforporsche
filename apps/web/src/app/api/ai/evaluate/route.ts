@@ -878,6 +878,9 @@ export async function POST(request: NextRequest) {
       extra?: { rebuttalTarget?: { agentName: string; bias: string; keyObservation: string }; debateTranscript?: string },
     ): Promise<AgentOpinion> => {
       const profile = roleAt(index);
+      if (slot.enabled === false) {
+        return offlineAgent(slot, profile, "Agen dinonaktifkan oleh trader di /owner/key (Toggle OFF).");
+      }
       if (!slot.apiKey.trim()) {
         return offlineAgent(slot, profile, "API Key tidak terpasang di /owner/key.");
       }

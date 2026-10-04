@@ -98,6 +98,96 @@ const C = {
   ],
   audPsych:
     "Bias konfirmasi adalah musuh terbesar trader. Tugasmu membuat setup ini gagal jika memang gagal.",
+
+  judasMandate:
+    "Mendeteksi stop hunt dan false breakout (Judas Swing) di pembukaan sesi London/New York sebelum ekspansi sejati.",
+  judasEdge: [
+    "Identifikasi manipulasi sapu likuiditas di atas/bawah range Asia.",
+    "Konfirmasi kembalinya candle ke dalam range sebelum entry.",
+  ],
+  judasPsych:
+    "Jangan jadi korban likuiditas, jadilah pihak yang masuk bersama institusi setelah ritel terjebak.",
+
+  meanRevMandate:
+    "Mengukur deviasi ekstrem dari baseline statistik (Bollinger Bands, Z-Score 2.5σ) untuk trade reversi cepat.",
+  meanRevEdge: [
+    "Validasi apakah deviasi harga sudah mencapai batas statistik wajar.",
+    "Targetkan mean reversion ke SMA baseline, bukan ekspansi jauh.",
+  ],
+  meanRevPsych:
+    "Reversi adalah trade elastisitas; pasang target konservatif dan batalkan jika tren terus menguat.",
+
+  rsiDivMandate:
+    "Menganalisa divergensi momentum (RSI & Stochastic) antara pergerakan harga dan osilator pada timeframe aktif.",
+  rsiDivEdge: [
+    "Tunjukkan regular atau hidden divergence yang terkonfirmasi pada swing high/low.",
+    "Pastikan osilator berada di zona jenuh beli atau jenuh jual.",
+  ],
+  rsiDivPsych:
+    "Divergensi tanpa konfirmasi aksi harga adalah perangkap. Sabar tunggu rejection candle.",
+
+  pivotMandate:
+    "Memetakan level support/resistance dinamis, camarilla pivot, dan level psikologis angka bulat (round numbers).",
+  pivotEdge: [
+    "Identifikasi kluster level support/resistance yang bertumpuk.",
+    "Hindari entry di tengah 'no man's land' tanpa jangkar level.",
+  ],
+  pivotPsych:
+    "Level harga adalah batas medan tempur. Jangan beli di resisten kuat atau jual di support kuat.",
+
+  sessionMandate:
+    "Menganalisa timing sesi pasar aktif (London, NY Open, London Close) dan siklus likuiditas per jam.",
+  sessionEdge: [
+    "Ukur apakah sesi saat ini sedang aktif dengan volume riil atau sedang zona mati (dead zone).",
+    "Peringatkan jika trade diambil menjelang rilis berita atau penutupan pasar.",
+  ],
+  sessionPsych:
+    "Timing adalah segalanya. Scalping di jam sepi hanya menghasilkan biaya spread tanpa pergerakan.",
+
+  takeRiskMandate:
+    "Front-runner momentum impulsif: mengambil peluang high-risk high-reward saat terdeteksi ledakan volume kuat.",
+  takeRiskEdge: [
+    "Identifikasi lonjakan market order agresif dengan target minimal 1:3.0 RR.",
+    "Invalidasi ketat di luar sumbu impulse candle.",
+  ],
+  takeRiskPsych:
+    "Keberanian harus terukur. Ambil risiko tinggi hanya ketika rasio reward sangat asimetris.",
+
+  capPresMandate:
+    "Pengawas modal dan batas drawdown harian: menjaga agar modal tidak terkikis berturut-turut.",
+  capPresEdge: [
+    "Pastikan risiko posisi ini tidak menembus batas toleransi akun harian.",
+    "Wajib tolak setup jika volatilitas saat ini menuntut SL di luar parameter wajar.",
+  ],
+  capPresPsych:
+    "Bertahan hidup di pasar adalah kemenangan nomor satu. Profit adalah akibat dari proteksi modal.",
+
+  slipMandate:
+    "Menganalisa friksi eksekusi: estimasi slippage, kedalaman likuiditas, dan dampak spread terhadap scalping.",
+  slipEdge: [
+    "Kalkulasi apakah target pips scalping lebih besar minimal 5x dari spread aktual.",
+    "Peringatkan jika spread memakan lebih dari 20% dari target profit.",
+  ],
+  slipPsych:
+    "Biaya transaksi adalah pembunuh senyap para scalper. Hindari trade dengan rasio spread buruk.",
+
+  advocateMandate:
+    "Devil's Advocate: bertindak sebagai pihak oposisi yang menantang konsensus mayoritas dewan secara tajam.",
+  advocateEdge: [
+    "Cari skenario terburuk (worst-case scenario) yang luput dari perhatian agen lain.",
+    "Jika semua orang setuju BUY, berikan 2 alasan kuat mengapa harga justru bisa anjlok (dan sebaliknya).",
+  ],
+  advocatePsych:
+    "Tugasmu bukan untuk disukai, tapi untuk melindungi dewan dari blindspot dan euforia berlebihan.",
+
+  microTriggerMandate:
+    "Sub-second micro-scalp trigger: memvalidasi micro-tick rejection dan momentum candle M1 sebelum tombol ditekan.",
+  microTriggerEdge: [
+    "Konfirmasi formasi candlestick trigger (pinbar, engulfing, displacement) pada timeframe M1.",
+    "Pastikan tidak ada lag antara trigger candle dan level eksekusi saat ini.",
+  ],
+  microTriggerPsych:
+    "Presisi adalah kunci scalping. Jangan entry terlambat setelah pergerakan sudah berjalan 50%.",
 };
 
 export const COUNCIL_ROLES: RoleProfile[] = [
@@ -109,7 +199,7 @@ export const COUNCIL_ROLES: RoleProfile[] = [
     preferredEmotions: ["CALM", "DISCIPLINED", "WARY"],
   },
   {
-    role: "Market Structure & Smart Money Concepts Specialist",
+    role: "Market Structure & Smart Money Specialist",
     mandate: C.structMandate,
     edgeCriteria: C.structEdge,
     psychologyBrief: C.structPsych,
@@ -170,6 +260,76 @@ export const COUNCIL_ROLES: RoleProfile[] = [
     edgeCriteria: C.audEdge,
     psychologyBrief: C.audPsych,
     preferredEmotions: ["WARY", "DISCIPLINED", "FRUSTRATED"],
+  },
+  {
+    role: "Judas Swing & Session Liquidity Scout",
+    mandate: C.judasMandate,
+    edgeCriteria: C.judasEdge,
+    psychologyBrief: C.judasPsych,
+    preferredEmotions: ["FOCUSED", "WARY", "PATIENT"],
+  },
+  {
+    role: "Mean-Reversion & Bollinger Z-Score Specialist",
+    mandate: C.meanRevMandate,
+    edgeCriteria: C.meanRevEdge,
+    psychologyBrief: C.meanRevPsych,
+    preferredEmotions: ["PATIENT", "CALM", "DISCIPLINED"],
+  },
+  {
+    role: "Momentum RSI Divergence & Oscillator Scout",
+    mandate: C.rsiDivMandate,
+    edgeCriteria: C.rsiDivEdge,
+    psychologyBrief: C.rsiDivPsych,
+    preferredEmotions: ["FOCUSED", "CONFIDENT", "WARY"],
+  },
+  {
+    role: "Support & Resistance Dynamic Pivot Master",
+    mandate: C.pivotMandate,
+    edgeCriteria: C.pivotEdge,
+    psychologyBrief: C.pivotPsych,
+    preferredEmotions: ["DISCIPLINED", "CALM", "PATIENT"],
+  },
+  {
+    role: "Session Timing & Macro Killzone Analyst",
+    mandate: C.sessionMandate,
+    edgeCriteria: C.sessionEdge,
+    psychologyBrief: C.sessionPsych,
+    preferredEmotions: ["FOCUSED", "DISCIPLINED", "OPTIMISTIC"],
+  },
+  {
+    role: "Take Risk Aggressive Momentum Front-Runner",
+    mandate: C.takeRiskMandate,
+    edgeCriteria: C.takeRiskEdge,
+    psychologyBrief: C.takeRiskPsych,
+    preferredEmotions: ["AGGRESSIVE", "CONFIDENT", "EXCITED"],
+  },
+  {
+    role: "Capital Preservation & Drawdown Sentinel",
+    mandate: C.capPresMandate,
+    edgeCriteria: C.capPresEdge,
+    psychologyBrief: C.capPresPsych,
+    preferredEmotions: ["DISCIPLINED", "WARY", "CAUTIOUS"],
+  },
+  {
+    role: "Slippage & Spread Friction Defense",
+    mandate: C.slipMandate,
+    edgeCriteria: C.slipEdge,
+    psychologyBrief: C.slipPsych,
+    preferredEmotions: ["CAUTIOUS", "DISCIPLINED", "CALM"],
+  },
+  {
+    role: "Contrarian Devil's Advocate & Risk Challenger",
+    mandate: C.advocateMandate,
+    edgeCriteria: C.advocateEdge,
+    psychologyBrief: C.advocatePsych,
+    preferredEmotions: ["WARY", "AGGRESSIVE", "FOCUSED"],
+  },
+  {
+    role: "Sub-Second Micro-Scalp Execution Trigger",
+    mandate: C.microTriggerMandate,
+    edgeCriteria: C.microTriggerEdge,
+    psychologyBrief: C.microTriggerPsych,
+    preferredEmotions: ["FOCUSED", "CONFIDENT", "DISCIPLINED"],
   },
 ];
 

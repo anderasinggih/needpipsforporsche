@@ -271,7 +271,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
                 Live Deliberation In Progress...
               </span>
               <span className="text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                10 AI Minds Engaged
+                Up to 20 AI Minds Engaged
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px]">

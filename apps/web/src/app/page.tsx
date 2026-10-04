@@ -1485,10 +1485,10 @@ export default function DashboardPage() {
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Deliberating 10 Minds...</span>
+                          <span>Deliberating Active AI Minds...</span>
                         </>
                       ) : (
-                        <span>Run 10-Agent Deliberation &amp; Mapping</span>
+                        <span>Run Multi-Agent Deliberation (Up to 20 Minds)</span>
                       )}
                     </Button>
                   </div>
