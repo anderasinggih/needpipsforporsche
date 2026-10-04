@@ -251,8 +251,6 @@ export interface ConsensusResult {
   bullishWeight: number;
   bearishWeight: number;
   neutralWeight: number;
-  weightedBull: number;
-  weightedBear: number;
   agreement: number;
   participation: number;
   quorum: number;

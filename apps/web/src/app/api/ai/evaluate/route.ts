@@ -315,7 +315,7 @@ const buildAgentOpinion = (opts: {
 
   const emotion = modelProvidedEmotion ? parsed.emotion : derived.emotion;
   const intensity = modelProvidedEmotion ? parsed.emotionIntensity : derived.intensity;
-  const meta = EMOTION_META[emotion];
+  const meta = EMOTION_META[emotion] || EMOTION_META.NEUTRAL;
 
   const fallbackPsych = derivePsychology({
     bias: parsed.bias,
@@ -691,7 +691,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const impulseLeg: ImpulseLeg | undefined = findImpulseLeg(pivots, atrValue, spec);
+    // Fibonacci must be anchored on STRUCTURAL swings, not lower-timeframe noise.
+    // Aggregate the active candles into a structural timeframe (minimum M3) and
+    // detect the impulse leg there. Levels are still drawn on the active chart.
+    const structuralSeconds = Math.max(180, tfSeconds);
+    const structuralCandles: Candle[] = (() => {
+      if (structuralSeconds <= tfSeconds) return candles;
+      const buckets = new Map<number, Candle>();
+      for (const c of candles) {
+        const key = Math.floor(c.time / structuralSeconds) * structuralSeconds;
+        const b = buckets.get(key);
+        if (!b) {
+          buckets.set(key, { ...c, time: key });
+        } else {
+          b.high = Math.max(b.high, c.high);
+          b.low = Math.min(b.low, c.low);
+          b.close = c.close;
+        }
+      }
+      return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
+    })();
+    const useStructural = structuralCandles.length >= 15;
+    const fibCandles = useStructural ? structuralCandles : candles;
+    const fibAtr = fibCandles.length >= 5 ? calcAtr(fibCandles) : atrValue;
+    const fibPivots = useStructural
+      ? detectPivots(fibCandles, { lookback: 3, minAtrMultiple: 1.2 })
+      : pivots;
+
+    const impulseLeg: ImpulseLeg | undefined =
+      findImpulseLeg(fibPivots, fibAtr, spec) ?? findImpulseLeg(pivots, atrValue, spec);
     const fib = impulseLeg ? buildFibonacci({ leg: impulseLeg, price, spec }) : undefined;
     const harmonic = candles.length >= 30 ? detectHarmonic(candles, pivots, price) : undefined;
 

@@ -92,7 +92,7 @@ export const derivePsychology = (opts: {
   regime?: string;
 }): AgentOpinion["psychology"] => {
   const { bias, confidence, emotion, mtfVerdict, regime } = opts;
-  const meta = EMOTION_META[emotion];
+  const meta = EMOTION_META[emotion] || EMOTION_META.NEUTRAL;
   const conflicted = mtfVerdict === "CONFLICT";
   const chaos = regime === "CRISIS" || regime === "EXPANSION";
 
@@ -170,7 +170,10 @@ export const buildEmotionalState = (agents: AgentOpinion[]): EmotionalState => {
   for (const agent of active) {
     const meta = EMOTION_META[agent.emotion] || EMOTION_META.NEUTRAL;
     const intensity = clamp(agent.emotionIntensity, 0, 100);
-    const weight = Math.max(0.05, agent.voteWeight || 1) * (0.6 + intensity / 160);
+    // Emotional weight is deliberately independent of the consensus vote: a vetoed
+    // mind still contributes its (destructive) state to the room's mood, otherwise
+    // a zeroed vote would erase the very emotion the veto was raised for.
+    const weight = (0.4 + clamp(agent.confidence, 0, 100) / 250) * (0.6 + intensity / 160);
 
     const entry = buckets.get(agent.emotion) || { weighted: 0, count: 0, intensity: 0 };
     entry.weighted += weight;

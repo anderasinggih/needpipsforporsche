@@ -62,15 +62,17 @@ export const scoreReasoningQuality = (input: {
   const evidenceCount = Math.min(input.evidence.length, 4);
   const length = text.trim().length;
 
-  let score = 18;
-  score += hintHits * 14;
-  score += evidenceCount * 8;
-  score += Math.min(18, digits * 1.4);
-  if (length > 180) score += 10;
-  if (length < 60) score -= 18;
-  if (VAGUE_HINTS.test(text)) score -= 14;
+  let score = 14;
+  score += hintHits * 11;
+  score += evidenceCount * 7;
+  score += Math.min(14, digits * 1.1);
+  if (length > 180) score += 8;
+  if (length > 420) score -= 6; // rambling is not evidence
+  if (length < 60) score -= 20;
+  if (VAGUE_HINTS.test(text)) score -= 18;
   if (input.bias === "NEUTRAL" && input.confidence > 70) score -= 12; // confident but directionless
-  if (input.evidence.length === 0) score -= 10;
+  if (input.evidence.length === 0) score -= 12;
+  if (hintHits === 0 && input.evidence.length === 0) score -= 15; // pure narrative
 
   return Math.round(clamp(score));
 };
@@ -90,6 +92,7 @@ export const computeVoteWeight = (opts: {
 
   // Psychology discounts: the closer a mind is to a destructive state, the less
   // its opinion counts.
+  if (agent.reasoningQuality < 25) weight *= 0.4; // narrative without evidence
   if (DESTRUCTIVE_STATES.includes(agent.emotion)) weight *= 0.75;
   if (agent.psychology.fomoResistance < 45) weight *= 0.85;
   if (agent.psychology.executionReadiness < 25) weight *= 0.9;
@@ -182,6 +185,37 @@ export const roleWeightFor = (role: string, roleWeights: Record<string, number>)
 };
 
 /**
+ * Blended confidence. Agreement and participation are necessary but not
+ * sufficient: a two-voice council that fully agrees is still less evidence than
+ * nine, vetoed voices are not evidence at all, and a council that failed its own
+ * agreement gate can never report high confidence.
+ */
+export const scoreConfidence = (o: {
+  agreement: number;
+  participation: number;
+  quorum: number;
+  vetoedShare: number;
+  mtfScore: number;
+  gate: number;
+  regime: VolatilityRegime;
+}): number => {
+  const breadth = Math.min(1, o.quorum / 7); // seven live opinions is "full room"
+  const agreementTerm = 38 * Math.min(1, o.agreement / 0.75); // 75% agreement is the practical ceiling
+  const participationTerm = 20 * o.participation * breadth;
+  const mtfTerm = (o.mtfScore - 50) * 0.14;
+
+  let score = 24 + agreementTerm + participationTerm + mtfTerm;
+  score *= 1 - Math.min(0.55, o.vetoedShare * 0.9); // vetoed minds subtract from the room's credibility
+  if (o.agreement < o.gate) score -= 16; // the council did not even pass its own gate
+  if (o.quorum < 4) score -= 12; // too few live opinions to price anything
+  if (o.regime === "CRISIS") score -= 10;
+  else if (o.regime === "EXPANSION") score -= 5;
+  else if (o.regime === "COMPRESSION") score -= 2;
+
+  return Math.round(clamp(score, 5, 92)); // no council of fallible models ever deserves 100
+};
+
+/**
  * Weighted council vote + no-trade logic.
  * Returns BUY / SELL / WAIT — WAIT is a first class, money-preserving outcome.
  */
@@ -214,13 +248,9 @@ export const runConsensus = (opts: {
     else if (agent.bias === "BEARISH") bear += weight;
     else {
       neutral += weight;
-      // A neutral mind still leans slightly to the side it did not reject.
-      const leaned = ctx.mtfConfluence.bias === "BEARISH" ? bull : bear;
-      if (leaned >= 0) {
-        const contribution = weight * 0.25;
-        if (ctx.mtfConfluence.bias === "BEARISH") bear += contribution;
-        else bull += contribution;
-      }
+      // A neutral mind still leans to the side the multi-timeframe data favours.
+      if (ctx.mtfConfluence.bias === "BEARISH") bear += weight * 0.25;
+      else bull += weight * 0.25;
     }
   }
 
@@ -237,11 +267,17 @@ export const runConsensus = (opts: {
     if (!aligns) dissenters.push(agent.agentName);
   }
 
-  const confidence = Math.round(
-    clamp(38 + agreement * 42 + participation * 18 + (ctx.mtfConfluence.score - 50) * 0.12),
-  );
-
   const gate = agreementGate(ctx.mtfConfluence.verdict);
+  const confidence = scoreConfidence({
+    agreement,
+    participation,
+    quorum: active.length,
+    vetoedShare: active.length ? vetoes.length / active.length : 0,
+    mtfScore: ctx.mtfConfluence.score,
+    gate,
+    regime: ctx.regime,
+  });
+
   const noTrade: string[] = [];
   if (active.length === 0) noTrade.push("Tidak ada agen aktif, tidak ada edge yang bisa dihitung.");
   if (agreement < gate) {
@@ -267,8 +303,6 @@ export const runConsensus = (opts: {
     bullishWeight: Number(bull.toFixed(2)),
     bearishWeight: Number(bear.toFixed(2)),
     neutralWeight: Number(neutral.toFixed(2)),
-    weightedBull: Number(bull.toFixed(2)),
-    weightedBear: Number(bear.toFixed(2)),
     agreement: Number(agreement.toFixed(3)),
     participation: Number(participation.toFixed(3)),
     quorum: active.length,
@@ -336,17 +370,31 @@ export const computeExpectancy = (opts: {
 }): Expectancy => {
   const { confidence, slPips, tpPips, mtfConfluence, regime, agreement } = opts;
 
-  const confluenceAdj = (mtfConfluence.score - 50) / 320;
-  const agreementAdj = (agreement - 0.2) * 0.25;
+  // Confidence is a direction score, not a win rate. Mapping it straight onto
+  // win probability produced 85% win rates — fiction that turns every setup into
+  // "positive edge". Blend it with confluence and agreement instead, and keep a
+  // realistic scalping ceiling.
+  const directionScore = clamp(confidence, 0, 100) / 100;
+  const confluenceAdj = (clamp(mtfConfluence.score, 0, 100) - 50) / 500;
+  const agreementAdj = (agreement - 0.25) * 0.12;
   const regimePenalty = regime === "CRISIS" ? -0.08 : regime === "EXPANSION" ? -0.04 : regime === "COMPRESSION" ? -0.02 : 0;
 
-  const winProbability = clamp(confidence / 100 + confluenceAdj + agreementAdj + regimePenalty, 0.15, 0.85);
+  const winProbability = clamp(
+    0.3 + directionScore * 0.45 + confluenceAdj + agreementAdj + regimePenalty,
+    0.28,
+    0.72,
+  );
   const expectedValuePips = Number((winProbability * tpPips - (1 - winProbability) * slPips).toFixed(2));
   const breakEvenWinRate = Number((slPips / (slPips + tpPips)).toFixed(3));
   const expectancyPct = Number((expectedValuePips / slPips).toFixed(3));
 
+  const edgeOverBreakEven = winProbability - breakEvenWinRate;
   const verdict: Expectancy["verdict"] =
-    expectedValuePips >= 0.25 * slPips ? "POSITIVE_EDGE" : expectedValuePips > 0 ? "THIN_EDGE" : "NEGATIVE_EDGE";
+    expectedValuePips <= 0
+      ? "NEGATIVE_EDGE"
+      : expectedValuePips >= 0.35 * slPips && edgeOverBreakEven >= 0.05
+      ? "POSITIVE_EDGE"
+      : "THIN_EDGE";
 
   const note =
     verdict === "POSITIVE_EDGE"
@@ -365,6 +413,22 @@ export const baselineDirection = (m: MtfConfluence, structureBias: Bias): Direct
   return "BULLISH";
 };
 
+// Models rarely answer with our exact enum, so bias is read generously.
+const BIAS_ALIASES: Array<[RegExp, Bias]> = [
+  [/^(bull|bullish|long|buy|naik|hijau|up|uptrend|buy_setup)$/i, "BULLISH"],
+  [/^(bear|bearish|short|sell|turun|merah|down|downtrend|sell_setup)$/i, "BEARISH"],
+  [/^(neutral|flat|range|chop|netral|wait|hold|sideways|tunggu)$/i, "NEUTRAL"],
+];
+
+export const normalizeBias = (raw: unknown): Bias => {
+  if (typeof raw !== "string") return "NEUTRAL";
+  const value = raw.trim();
+  const upper = value.toUpperCase() as Bias;
+  if (upper === "BULLISH" || upper === "BEARISH" || upper === "NEUTRAL") return upper;
+  for (const [pattern, bias] of BIAS_ALIASES) if (pattern.test(value)) return bias;
+  return "NEUTRAL";
+};
+
 export const normalizeModelOutput = (raw: any): {
   bias: Bias;
   confidence: number;
@@ -380,9 +444,9 @@ export const normalizeModelOutput = (raw: any): {
   }>;
   emotionReason: string;
 } => {
-  const bias: Bias =
-    raw?.bias === "BULLISH" || raw?.bias === "BEARISH" || raw?.bias === "NEUTRAL" ? raw.bias : "NEUTRAL";
-  const confidence = clamp(Number(raw?.confidence ?? 55), 0, 100);
+  const bias: Bias = normalizeBias(raw?.bias);
+  // Self-reported model confidence is capped: no LLM verdict deserves 100.
+  const confidence = clamp(Number(raw?.confidence ?? 55), 0, 95);
   return {
     bias,
     confidence,
