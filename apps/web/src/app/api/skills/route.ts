@@ -82,29 +82,98 @@ const PRESET_SKILLS: DefaultSkill[] = [
       { id: "es_4", text: "Trailing stop active along trailing swing highs/lows", required: false },
     ],
   },
+  {
+    title: "Smart Money Concepts & Order Block Retest",
+    description: "Institutional market structure: identification of Break of Structure (BOS), Change of Character (CHoCH), and unmitigated Order Blocks (OB) with Fair Value Gaps (FVG).",
+    timeframes: ["M1", "M5", "M15"],
+    risk_reward_min: 3.0,
+    rules_checklist: [
+      { id: "smc_1", text: "Clear Break of Structure (BOS) or Change of Character (CHoCH) confirmed", required: true },
+      { id: "smc_2", text: "Price is retesting an unmitigated Order Block (OB) with liquidity sweep", required: true },
+      { id: "smc_3", text: "Fair Value Gap (FVG) or imbalance exists between trigger leg candles", required: true },
+      { id: "smc_4", text: "Stop loss tucked safely behind the invalidation wick of the Order Block", required: true },
+    ],
+  },
+  {
+    title: "Fibonacci Golden Pocket & Impulse Confluence",
+    description: "High-probability retracement trading: anchoring to genuine impulse swings (> 1.5x ATR), waiting for 0.500 - 0.618 Golden Pocket retracement with reversal rejection.",
+    timeframes: ["M1", "M5", "M15"],
+    risk_reward_min: 2.5,
+    rules_checklist: [
+      { id: "fib_1", text: "Impulse leg is significant (> 1.5x ATR) with clean Swing High and Swing Low anchors", required: true },
+      { id: "fib_2", text: "Price has pulled back directly into the 0.500 - 0.618 Golden Pocket zone", required: true },
+      { id: "fib_3", text: "Rejection wick or confirmation candle closes in favor of trend direction", required: true },
+      { id: "fib_4", text: "No entry if price blows through the 0.786 deep retracement invalidation", required: true },
+    ],
+  },
+  {
+    title: "Harmonic Geometry & XABCD Pattern Reversal",
+    description: "Geometric ratio precision: valid Gartley, Bat, Butterfly, or Crab formations with strictly measured B retrace, C projection, and Potential Reversal Zone (PRZ) at point D.",
+    timeframes: ["M1", "M5", "M15"],
+    risk_reward_min: 2.5,
+    rules_checklist: [
+      { id: "harm_1", text: "X-A-B-C-D point geometry meets harmonic ratio tolerance (quality score > 50)", required: true },
+      { id: "harm_2", text: "Point D has formed inside the Potential Reversal Zone (PRZ)", required: true },
+      { id: "harm_3", text: "RSI shows divergence or overbought/oversold exhaustion at Point D", required: true },
+      { id: "harm_4", text: "Target TP1 mapped to 0.382 CD and TP2 mapped to 0.618 CD extension", required: false },
+    ],
+  },
+  {
+    title: "Liquidity Sweep & Judas Swing Reversal",
+    description: "Stop-hunt exploitation: detects liquidity raids above session highs or below session lows, followed by immediate displacement back inside value area.",
+    timeframes: ["M1", "M5"],
+    risk_reward_min: 3.0,
+    rules_checklist: [
+      { id: "liq_1", text: "Price spiked and swept resting buy-side/sell-side liquidity (Asian/London High/Low)", required: true },
+      { id: "liq_2", text: "Sharp displacement candle closes back inside the pre-sweep range (fakeout trap)", required: true },
+      { id: "liq_3", text: "Volume spike on sweep candle followed by low-volume rejection", required: true },
+      { id: "liq_4", text: "Take profit targeted at opposing pool of untapped resting liquidity", required: false },
+    ],
+  },
+  {
+    title: "Fractional Kelly Criterion & Edge Compounding",
+    description: "Mathematical trade allocation: position sizing scaled to statistical edge (Win Rate & Win/Loss Ratio) using conservative Half-Kelly (0.5f) to maximize long-term growth.",
+    timeframes: ["M1", "M5", "M15", "H1"],
+    risk_reward_min: 2.0,
+    rules_checklist: [
+      { id: "kelly_1", text: "Historical win rate and expectancy confirm positive mathematical edge (> 52%)", required: true },
+      { id: "kelly_2", text: "Position size scaled to conservative Half-Kelly (max 1.5% account risk)", required: true },
+      { id: "kelly_3", text: "Risk per trade strictly reduced during negative drawdown phases", required: true },
+      { id: "kelly_4", text: "Zero emotional deviation from formulaic lot-sizing calculation", required: true },
+    ],
+  },
+  {
+    title: "Multi-Timeframe Trend Alignment (M1 to H1)",
+    description: "Full multi-timeframe synchronization: requires confluence across M1 execution, M5 momentum, M15 structure, and H1 trend filter before pulling the trigger.",
+    timeframes: ["M1", "M5", "M15", "H1"],
+    risk_reward_min: 3.0,
+    rules_checklist: [
+      { id: "mtf_1", text: "Higher timeframe (H1 & M15) trend direction is aligned with setup", required: true },
+      { id: "mtf_2", text: "Intermediate timeframe (M5) shows directional momentum (EMA slope / RSI > 50)", required: true },
+      { id: "mtf_3", text: "Execution timeframe (M1) provides precision entry trigger without counter-trend drift", required: true },
+      { id: "mtf_4", text: "No trading when Multi-Timeframe Matrix indicates CONFLICT status", required: true },
+    ],
+  },
 ];
 
 export async function GET(request: NextRequest) {
   try {
     const client = await pool.connect();
     try {
-      const countRes = await client.query('SELECT COUNT(*) as count FROM trading_skills');
-      const count = parseInt(countRes.rows[0]?.count || '0', 10);
-
-      if (count === 0) {
-        for (const skill of PRESET_SKILLS) {
-          await client.query(
-            `INSERT INTO trading_skills (title, description, timeframes, rules_checklist, risk_reward_min)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [skill.title, skill.description, skill.timeframes, JSON.stringify(skill.rules_checklist), skill.risk_reward_min]
-          );
-        }
+      // Sync preset skills into database if missing
+      for (const skill of PRESET_SKILLS) {
+        await client.query(
+          `INSERT INTO trading_skills (title, description, timeframes, rules_checklist, risk_reward_min)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [skill.title, skill.description, skill.timeframes, JSON.stringify(skill.rules_checklist), skill.risk_reward_min]
+        );
       }
 
       const result = await client.query(
         `SELECT id, title, description, timeframes, rules_checklist, risk_reward_min, created_at, updated_at
          FROM trading_skills
-         ORDER BY created_at ASC`
+         ORDER BY id ASC`
       );
 
       const skills = result.rows.map((row) => ({

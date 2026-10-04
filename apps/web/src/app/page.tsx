@@ -492,16 +492,7 @@ export default function DashboardPage() {
               <span>{isConnected ? "Live feed active" : "Connecting..."}</span>
             </Badge>
 
-            <Link href="/owner/key">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-1.5 border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 hover:text-white text-xs h-8"
-              >
-                <Key className="h-3.5 w-3.5 text-zinc-400" />
-                <span>10-Key Manager (/owner/key)</span>
-              </Button>
-            </Link>
+            {/* Owner key menu hidden from navbar as requested, accessible directly via /owner/key */}
           </div>
         </div>
       </header>
