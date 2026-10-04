@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
 
     const currentUnix = candles.length > 0 ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000);
 
-    const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 7000) => {
+    const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 15000) => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -204,20 +204,56 @@ export async function POST(request: NextRequest) {
       if (!slot.apiKey || !slot.apiKey.trim()) return null;
 
       if (slot.provider === "gemini") {
-        const m = slot.model || "gemini-2.5-flash";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${slot.apiKey.trim()}`;
-        const res = await fetchWithTimeout(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nHANYA kembalikan JSON valid tanpa markdown:` }] }],
-            generationConfig: { temperature: 0.25, responseMimeType: "application/json" }
-          })
-        });
-        if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(text);
+        const key = slot.apiKey.trim();
+        // Fallback models if a specific experimental/frontier model 404s or 503s under burst
+        const primaryModel = slot.model || "gemini-2.5-flash";
+        const candidateModels = Array.from(new Set([
+          primaryModel,
+          "gemini-2.5-flash",
+          "gemini-2.0-flash",
+          "gemini-1.5-flash"
+        ]));
+
+        let lastErr: any = null;
+        for (const m of candidateModels) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
+            const res = await fetchWithTimeout(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nKEMBALIKAN HANYA JSON VALID MURNI (RAW JSON TANPA KATA PENGANTAR):` }] }],
+                generationConfig: {
+                  temperature: 0.2,
+                  maxOutputTokens: 1000,
+                  responseMimeType: "application/json"
+                }
+              })
+            }, 12000);
+
+            if (!res.ok) {
+              const errBody = await res.text();
+              throw new Error(`Gemini ${m} HTTP ${res.status}: ${errBody.slice(0, 100)}`);
+            }
+
+            const data = await res.json();
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+            const cleaned = rawText
+              .replace(/```json/gi, "")
+              .replace(/```/g, "")
+              .trim();
+            const parsed = JSON.parse(cleaned);
+            return parsed;
+          } catch (err: any) {
+            lastErr = err;
+            // If it's a 404 (model not found) or 503 (service overload), try next candidate model
+            const isRecoverable = err?.message?.includes("404") || err?.message?.includes("503") || err?.message?.includes("429");
+            if (!isRecoverable && candidateModels.indexOf(m) === 0) {
+              break;
+            }
+          }
+        }
+        throw lastErr || new Error("Semua model Gemini gagal terhubung");
       }
 
       if (slot.provider === "openai") {
@@ -414,9 +450,21 @@ Kembalikan JSON murni:
       }
     };
 
-    const councilResults = await Promise.all(
-      effectiveSlots.slice(1).map((s, idx) => runSlotTask(s, idx + 1))
-    );
+    // Execute slots in batches to prevent hitting Gemini burst concurrency / 503 rate-limits
+    const councilResults: AgentOpinion[] = [];
+    const slotsToRun = effectiveSlots.slice(1);
+    const batchSize = 3;
+
+    for (let i = 0; i < slotsToRun.length; i += batchSize) {
+      const batch = slotsToRun.slice(i, i + batchSize);
+      const batchRes = await Promise.all(
+        batch.map((s, bIdx) => runSlotTask(s, i + bIdx + 1))
+      );
+      councilResults.push(...batchRes);
+      if (i + batchSize < slotsToRun.length) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }
 
     const activeAgents = councilResults.filter((a) => a.status === "active");
 
