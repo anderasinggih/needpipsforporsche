@@ -67,6 +67,15 @@ export async function POST(request: NextRequest) {
       `[T:${c.time} O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)}]`
     ).join(' | ');
 
+    // Hitung step interval waktu berdasarkan timeframe
+    let tfSeconds = 60;
+    if (timeframe.endsWith("s")) tfSeconds = parseInt(timeframe) || 1;
+    else if (timeframe.endsWith("m")) tfSeconds = (parseInt(timeframe) || 1) * 60;
+    else if (timeframe.endsWith("h")) tfSeconds = (parseInt(timeframe) || 1) * 3600;
+    else if (timeframe.endsWith("d")) tfSeconds = (parseInt(timeframe) || 1) * 86400;
+
+    const currentUnix = candles.length > 0 ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000);
+
     // Prompt Kuantitatif Canggih Khusus Bahasa Indonesia
     const prompt = `Anda adalah Hedge Fund Senior Quant Trader & Analis Smart Money Concepts (SMC) untuk instrumen ${symbol} pada timeframe ${timeframe}.
 Tugas Anda adalah membedah market structure, order block, liquidity pool, dan memberikan kalkulasi setup eksekusi presisi.
@@ -79,6 +88,7 @@ Data Pasar Real-Time Terkini:
 - High Tertinggi 20 Bar: ${highestHigh.toFixed(2)}
 - Low Terendah 20 Bar: ${lowestLow.toFixed(2)}
 - Indikator Tren: SMA Fast (${smaFast.toFixed(2)}) vs SMA Slow (${smaSlow.toFixed(2)}), RSI ~${currentRsi.toFixed(1)}
+- Timestamp Bar Terakhir: ${currentUnix} (Unix seconds, interval: ${tfSeconds}s)
 - Riwayat Candlestick Terakhir: ${recentCandlesText || 'Tersedia'}
 
 Panduan Analisis Kuantitatif:
@@ -88,12 +98,14 @@ Panduan Analisis Kuantitatif:
    - entryPrice: disekitar ${price}
    - stopLoss: di luar swing high/low terdekat yang logis
    - takeProfit: rasio minimum 1:2.0 hingga 1:3.5
-4. Berikan Titik Mapping Garis MT5:
-   - supportLevel: batas demand/support terkuat di bawah harga
-   - resistanceLevel: batas supply/resistance terkuat di atas harga
-   - trendDirection: "UPTREND" | "DOWNTREND" | "SIDEWAYS"
-   - trendlineStart & trendlineEnd: koordinat waktu (Unix seconds) & harga garis tren
-5. Seluruh penjelasan, tesis, invalidation, dan rekomendasi WAJIB dalam BAHASA INDONESIA yang lugas, cerdas, berwibawa, dan kaya terminologi trading profesional (Supply/Demand, Liquidity, Imbalance/FVG, Risk-to-Reward).
+4. Berikan Alasan Matematis dan Kalkulasi SL & TP (slReason, tpReason, calculations):
+   - Jelaskan perhitungannya (contoh: ATR multiple, liquidity pool sweep, risk-to-reward ratio).
+5. Berikan Titik Mapping Kotak Posisi (Position Box Proyeksi TradingView dari bar entry hingga target window):
+   - projectionStartTime: ${currentUnix}
+   - projectionEndTime: ${currentUnix + tfSeconds * 12}
+6. Berikan Prediksi Lintasan Garis Harga (predictiveTrajectory):
+   - Array berurutan yang berisi 5 hingga 8 titik objek { time, price } yang memproyeksikan pergerakan harga dari entryPrice menuju takeProfit (atau koreksi sebelum ekspansi).
+7. Seluruh teks analisis (thesis, riskInvalidation, recommendation, slReason, tpReason, calculations, notes) WAJIB dalam BAHASA INDONESIA yang lugas, profesional, tanpa basa-basi berlebihan.
 
 Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
 {
@@ -105,6 +117,9 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
   "confidence": 88,
   "thesis": "Analisa terperinci struktur pasar dan alasan konfirmasi teknikal (Bahasa Indonesia)",
   "riskInvalidation": "Syarat pasti batalnya setup jika market berbalik arah (Bahasa Indonesia)",
+  "slReason": "Alasan penentuan level Stop Loss (Bahasa Indonesia)",
+  "tpReason": "Alasan penentuan target Take Profit (Bahasa Indonesia)",
+  "calculations": "Formula & perhitungan matematis (misal ATR 1.5x = sekian pips/poin, RR 1:2.5)",
   "chartMapping": {
     "supportLevel": number,
     "resistanceLevel": number,
@@ -112,6 +127,16 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
     "trendlineStart": { "time": number, "price": number },
     "trendlineEnd": { "time": number, "price": number }
   },
+  "positionBox": {
+    "startTime": ${currentUnix},
+    "endTime": ${currentUnix + tfSeconds * 12},
+    "entryPrice": number,
+    "stopLoss": number,
+    "takeProfit": number
+  },
+  "predictiveTrajectory": [
+    { "time": number, "price": number }
+  ],
   "recommendation": "Instruksi eksekusi taktis lengkap (Bahasa Indonesia)",
   "notes": "Rekomendasi manajemen lot, psikologi market, dan mitigasi risiko (Bahasa Indonesia)"
 }`;
@@ -173,7 +198,7 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
               { role: 'user', content: prompt }
             ],
             temperature: 0.3,
-            max_tokens: 1200,
+            max_tokens: 1400,
           }),
         });
         if (groqRes.ok) {
@@ -202,6 +227,20 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
 
       const startTime = candles.length > 0 ? candles[0].time : Math.floor(Date.now() / 1000) - 3600;
       const endTime = candles.length > 0 ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000);
+      const projEnd = currentUnix + tfSeconds * 12;
+
+      // Trajectory steps
+      const steps = 6;
+      const traj = [];
+      const priceDelta = calcTP - calcEntry;
+      for (let i = 0; i <= steps; i++) {
+        const stepTime = currentUnix + Math.floor((tfSeconds * 12 * i) / steps);
+        // Add subtle natural curve
+        const progress = i / steps;
+        const wiggle = i === 1 ? (isBullish ? -baseSL * 0.2 : baseSL * 0.2) : 0;
+        const stepPrice = Number((calcEntry + priceDelta * progress + wiggle).toFixed(2));
+        traj.push({ time: stepTime, price: stepPrice });
+      }
 
       responseData = {
         signal: calcSignal,
@@ -211,11 +250,18 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
         riskRewardRatio: "1:2.6",
         confidence: isBullish ? 86 : 84,
         thesis: isBullish
-          ? `Struktur pasar ${symbol} timeframe ${timeframe} menunjukkan dominasi buyer dengan pembentukan Higher Low di area demand. Indikator momentum mengonfirmasi adanya akumulasi likuiditas sebelum ekspansi menuju swing high.`
-          : `Struktur pasar ${symbol} timeframe ${timeframe} tertekan seller setelah liquidity sweep di resistance. Terjadi Change of Character (CHoCH) mikro yang membuka peluang distribusi harga menuju swing low berikutnya.`,
+          ? `Struktur pasar ${symbol} timeframe ${timeframe} menunjukkan dominasi buyer dengan akumulasi Higher Low di atas dynamic demand zone. Indikator momentum mengonfirmasi kesiapan ekspansi menuju swing high.`
+          : `Struktur pasar ${symbol} timeframe ${timeframe} tertekan seller pasca liquidity sweep di area supply. Terjadi Change of Character (CHoCH) mikro yang membuka distribusi menuju liquidity pool berikutnya.`,
         riskInvalidation: isBullish
-          ? `Skenario bullish batal jika harga menembus level support kunci di $${calcSL} dengan volume tinggi (Break of Structure ke bawah).`
-          : `Skenario bearish batal jika harga mampu reclaim dan ditutup di atas resistance $${calcSL}.`,
+          ? `Skenario bullish batal jika candle ditutup di bawah level support kunci $${calcSL}.`
+          : `Skenario bearish batal jika harga mampu menembus dan reclaim di atas level resistance $${calcSL}.`,
+        slReason: isBullish
+          ? `SL diposisikan di bawah swing low dan demand zone aman ($${calcSL}) untuk mengantisipasi false breakout sebelum pergerakan naik berlanjut.`
+          : `SL diposisikan di atas swing high dan supply zone aman ($${calcSL}) guna membatasi risiko terhadap lonjakan likuiditas ke atas.`,
+        tpReason: isBullish
+          ? `TP ditargetkan pada liquidity pool di $${calcTP} dengan target minimum risk-to-reward 1:2.6.`
+          : `TP ditargetkan pada imbalance area di $${calcTP} mengejar fair value gap terdekat.`,
+        calculations: `ATR: ${atr.toFixed(2)} | SL Buffer: 1.5x ATR (${baseSL.toFixed(2)} poin) | TP Target: 2.6x Risk (${baseTP.toFixed(2)} poin) | Risk-to-Reward: 1:2.6`,
         chartMapping: {
           supportLevel: sup,
           resistanceLevel: res,
@@ -229,9 +275,41 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
             price: calcEntry,
           }
         },
-        recommendation: `Buka posisi ${calcSignal} di area $${calcEntry}. Pasang Stop Loss disiplin di $${calcSL} dan Take Profit objektif di $${calcTP} (R:R 1:2.6).`,
-        notes: "Gunakan ukuran lot proporsional dengan risiko maksimal 1% - 2% per transaksi. Hindari geser SL saat floating minus."
+        positionBox: {
+          startTime: currentUnix,
+          endTime: projEnd,
+          entryPrice: calcEntry,
+          stopLoss: calcSL,
+          takeProfit: calcTP,
+        },
+        predictiveTrajectory: traj,
+        recommendation: `Buka posisi ${calcSignal} di area $${calcEntry}. Pasang Stop Loss disiplin di $${calcSL} dan Take Profit di $${calcTP}.`,
+        notes: "Gunakan lot terukur dengan batasan risiko 1% - 2% modal per setup. Hindari overleverage saat volatilitas tinggi."
       };
+    } else {
+      // Ensure positionBox and trajectory exist even if model omitted them
+      if (!responseData.positionBox && responseData.entryPrice && responseData.stopLoss && responseData.takeProfit) {
+        const projEnd = currentUnix + tfSeconds * 12;
+        responseData.positionBox = {
+          startTime: currentUnix,
+          endTime: projEnd,
+          entryPrice: responseData.entryPrice,
+          stopLoss: responseData.stopLoss,
+          takeProfit: responseData.takeProfit,
+        };
+      }
+      if (!responseData.predictiveTrajectory && responseData.entryPrice && responseData.takeProfit) {
+        const steps = 6;
+        const traj = [];
+        const priceDelta = responseData.takeProfit - responseData.entryPrice;
+        for (let i = 0; i <= steps; i++) {
+          const stepTime = currentUnix + Math.floor((tfSeconds * 12 * i) / steps);
+          const progress = i / steps;
+          const stepPrice = Number((responseData.entryPrice + priceDelta * progress).toFixed(2));
+          traj.push({ time: stepTime, price: stepPrice });
+        }
+        responseData.predictiveTrajectory = traj;
+      }
     }
 
     return NextResponse.json({ evaluation: responseData });
