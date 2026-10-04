@@ -62,8 +62,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    // Use combined streams: <symbol>@kline_1m and <symbol>@aggTrade for instant sub-second ticks
-    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceStream}@kline_1m/${binanceStream}@aggTrade`;
+    // Use Binance multiplex stream endpoint: /stream?streams=<stream1>/<stream2>
+    const streamUrl = `wss://stream.binance.com:9443/stream?streams=${binanceStream}@kline_1m/${binanceStream}@aggTrade`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -83,11 +83,13 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
         ws.onmessage = (event) => {
           if (!isMounted) return;
           try {
-            const data = JSON.parse(event.data);
+            const raw = JSON.parse(event.data);
+            // Binance multiplex stream wraps message in .data
+            const payload = raw.data || raw;
             
             // 1. Handle kline stream event
-            if (data.e === "kline" && data.k) {
-              const k = data.k;
+            if (payload.e === "kline" && payload.k) {
+              const k = payload.k;
               const candle: CandleData = {
                 time: Math.floor(Number(k.t) / 1000), // bar open time in seconds
                 open: parseFloat(k.o),
@@ -100,9 +102,9 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
               setCurrentCandle(candle);
             } 
             // 2. Handle aggTrade for instant sub-second price animation
-            else if (data.e === "aggTrade" && data.p) {
-              const tradePrice = parseFloat(data.p);
-              const tradeTimeMs = Number(data.T);
+            else if (payload.e === "aggTrade" && payload.p) {
+              const tradePrice = parseFloat(payload.p);
+              const tradeTimeMs = Number(payload.T);
               const barStartTime = Math.floor(tradeTimeMs / 60000) * 60; // 1-minute bucket in seconds
 
               setCurrentCandle((prev) => {
@@ -113,7 +115,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
                     high: tradePrice,
                     low: tradePrice,
                     close: tradePrice,
-                    volume: parseFloat(data.q || "0"),
+                    volume: parseFloat(payload.q || "0"),
                   };
                 }
 
@@ -132,7 +134,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
                     high: tradePrice,
                     low: tradePrice,
                     close: tradePrice,
-                    volume: parseFloat(data.q || "0"),
+                    volume: parseFloat(payload.q || "0"),
                   };
                 }
                 return prev;

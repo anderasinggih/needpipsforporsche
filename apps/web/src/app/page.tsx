@@ -178,9 +178,35 @@ export default function DashboardPage() {
               NEEDPIPS<span className="text-neutral-600 font-normal">/</span>FORPORSCHE
             </div>
             <div className="hidden sm:flex items-center gap-2 border-l border-neutral-800 pl-4 text-xs font-mono">
-              <Badge variant="outline" className="border-neutral-800 bg-neutral-950 font-mono text-neutral-200">
-                {activeSymbol}
-              </Badge>
+              {/* Pair Switcher in Top Bar */}
+              <div className="flex items-center rounded-md bg-neutral-900/90 p-0.5 border border-neutral-800">
+                <button
+                  onClick={() => {
+                    setActiveSymbol("BTCUSD");
+                    if (typeof window !== "undefined") localStorage.setItem("active_symbol", "BTCUSD");
+                  }}
+                  className={`px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-all ${
+                    activeSymbol === "BTCUSD"
+                      ? "bg-[#00FF66] text-black shadow-[0_0_8px_rgba(0,255,102,0.4)]"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  BTCUSD
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveSymbol("XAUUSD");
+                    if (typeof window !== "undefined") localStorage.setItem("active_symbol", "XAUUSD");
+                  }}
+                  className={`px-2.5 py-0.5 text-[11px] font-mono font-bold rounded transition-all ${
+                    activeSymbol === "XAUUSD"
+                      ? "bg-[#00FF66] text-black shadow-[0_0_8px_rgba(0,255,102,0.4)]"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  XAUUSD
+                </button>
+              </div>
               <span className="text-neutral-700">·</span>
               <span className="font-semibold text-[#00FF66] font-mono tracking-wide text-xs">
                 ${currentPriceFormatted}
@@ -219,6 +245,10 @@ export default function DashboardPage() {
             historicalCandles={historicalCandles}
             positions={positions}
             symbol={activeSymbol}
+            onSymbolChange={(sym) => {
+              setActiveSymbol(sym);
+              if (typeof window !== "undefined") localStorage.setItem("active_symbol", sym);
+            }}
           />
         </Card>
 

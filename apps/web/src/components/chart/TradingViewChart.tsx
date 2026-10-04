@@ -31,13 +31,15 @@ interface TradingViewChartProps {
   positions?: Position[];
   historicalCandles?: CandleData[];
   symbol?: string;
+  onSymbolChange?: (symbol: string) => void;
 }
 
 export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   currentCandle,
   positions = [],
   historicalCandles = [],
-  symbol = "BTCUSDT",
+  symbol = "BTCUSD",
+  onSymbolChange,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -107,7 +109,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
   const isDataSetRef = useRef(false);
 
-  // Update whole series when historicalCandles arrive (only fitContent once)
+  // Reset viewport state when symbol changes
+  useEffect(() => {
+    isDataSetRef.current = false;
+  }, [symbol]);
+
+  // Update whole series when historicalCandles arrive (only fitContent once per symbol)
   useEffect(() => {
     if (candleSeriesRef.current && historicalCandles.length > 0) {
       // Ensure sorted ascending and deduplicated by time
@@ -122,7 +129,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         isDataSetRef.current = true;
       }
     }
-  }, [historicalCandles]);
+  }, [historicalCandles, symbol]);
 
   // Real-time tick update
   useEffect(() => {
@@ -208,7 +215,30 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     <div className="relative w-full rounded-lg bg-black border border-neutral-800 p-2 shadow-2xl">
       <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-white tracking-wide font-mono uppercase">{symbol}</span>
+          {/* Pair Switcher: XAUUSD & BTCUSD */}
+          <div className="flex items-center rounded-md bg-neutral-900/90 p-0.5 border border-neutral-800">
+            <button
+              onClick={() => onSymbolChange?.("BTCUSD")}
+              className={`px-3 py-1 text-xs font-mono font-bold rounded transition-all ${
+                symbol.toUpperCase().startsWith("BTC")
+                  ? "bg-[#00FF66] text-black shadow-[0_0_10px_rgba(0,255,102,0.4)]"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              BTC/USD
+            </button>
+            <button
+              onClick={() => onSymbolChange?.("XAUUSD")}
+              className={`px-3 py-1 text-xs font-mono font-bold rounded transition-all ${
+                symbol.toUpperCase().startsWith("XAU") || symbol.toUpperCase().startsWith("PAXG")
+                  ? "bg-[#00FF66] text-black shadow-[0_0_10px_rgba(0,255,102,0.4)]"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+            >
+              XAU/USD (GOLD)
+            </button>
+          </div>
+
           <span className="rounded bg-[#00FF66]/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-[#00FF66] border border-[#00FF66]/20">
             1M TIMEFRAME
           </span>
