@@ -136,10 +136,10 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
             </div>
             <div>
               <DialogTitle className="text-sm font-semibold tracking-wide text-neutral-100 uppercase">
-                Quantitative Trading Strategies &amp; Rules
+                Quantitative Trading Strategies &amp; Disciplines
               </DialogTitle>
               <DialogDescription className="text-xs text-neutral-400">
-                Enforce institutional execution rules from the strategy library
+                Select an institutional strategy framework to guide the AI evaluator
               </DialogDescription>
             </div>
           </div>
@@ -150,17 +150,8 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
           <div className="md:col-span-5 flex flex-col h-full border-r border-neutral-800 pr-4 overflow-hidden">
             <div className="flex items-center justify-between pb-3">
               <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-neutral-400">
-                Active Library ({skills.length})
+                Institutional Strategies ({skills.length})
               </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsCreating(!isCreating)}
-                className="h-7 text-[11px] px-2.5 border-neutral-800 bg-black hover:border-neutral-700"
-              >
-                <Plus className="mr-1 h-3 w-3 text-[#00FF66]" />
-                {isCreating ? "Back" : "New Strategy"}
-              </Button>
             </div>
 
             <div className="space-y-2 overflow-y-auto flex-1 pr-1">
@@ -171,7 +162,6 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                     key={skill.id}
                     onClick={() => {
                       setSelectedPreview(skill);
-                      setIsCreating(false);
                     }}
                     className={`cursor-pointer rounded-lg border p-3 transition text-left ${
                       isSelected

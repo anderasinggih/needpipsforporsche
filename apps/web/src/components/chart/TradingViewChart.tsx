@@ -212,8 +212,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
   return (
-    <div className="relative w-full rounded-lg bg-black border border-neutral-800 p-2 shadow-2xl">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
+    <div className="relative w-full rounded-md bg-black overflow-hidden">
+      <div className="flex items-center justify-between border-b border-neutral-800/80 px-4 py-2 bg-[#050505]">
         <div className="flex items-center gap-3">
           {/* Pair Switcher: XAUUSD & BTCUSD */}
           <div className="flex items-center rounded-md bg-neutral-900/90 p-0.5 border border-neutral-800">

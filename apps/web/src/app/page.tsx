@@ -1,42 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { TradingViewChart } from "@/components/chart/TradingViewChart";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
-import { TradeJournalForm, JournalEntry } from "@/components/journal/TradeJournalForm";
-import { JournalHistoryTable } from "@/components/journal/JournalHistoryTable";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   ShieldCheck,
-  BookOpen,
-  Plus,
   Loader2,
   Activity,
   CheckCircle2,
   Settings,
   Radio,
   Sparkles,
-  Maximize2,
 } from "lucide-react";
-
-interface JournalRow {
-  id: string;
-  symbol: string;
-  direction: string;
-  entry_price: number;
-  exit_price?: number;
-  stop_loss: number;
-  take_profit: number;
-  lot_size: number;
-  pnl?: number;
-  status: string;
-  created_at: string;
-  notes?: string;
-}
 
 interface EvaluationResult {
   rating: string;
@@ -48,7 +28,7 @@ interface EvaluationResult {
 }
 
 export default function DashboardPage() {
-  const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSDT");
+  const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
   const { currentCandle, historicalCandles, positions, isConnected } = useMarketStream(activeSymbol);
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
@@ -56,7 +36,6 @@ export default function DashboardPage() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [journalEntries, setJournalEntries] = useState<JournalRow[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   const rules = selectedSkill?.rules_checklist ?? [];
@@ -65,20 +44,11 @@ export default function DashboardPage() {
     .every((r) => checkedRules[r.id]);
 
   useEffect(() => {
-    fetchJournal();
     if (typeof window !== "undefined") {
-      const sym = localStorage.getItem("hfm_symbol") || localStorage.getItem("active_symbol");
-      if (sym) setActiveSymbol(sym);
-    }
-  }, []);
-
-  const fetchJournal = useCallback(async () => {
-    try {
-      const res = await fetch("/api/journal");
-      const data = await res.json();
-      setJournalEntries(data.entries || []);
-    } catch (err) {
-      console.error("Failed to fetch journal entries:", err);
+      const sym = localStorage.getItem("active_symbol");
+      if (sym === "XAUUSD" || sym === "BTCUSD") {
+        setActiveSymbol(sym);
+      }
     }
   }, []);
 
@@ -133,34 +103,6 @@ export default function DashboardPage() {
     } finally {
       setIsEvaluating(false);
     }
-  };
-
-  const handleJournalSubmit = async (entry: JournalEntry) => {
-    const res = await fetch("/api/journal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        symbol: entry.symbol,
-        direction: entry.direction,
-        entryPrice: entry.entryPrice,
-        stopLoss: entry.stopLoss,
-        takeProfit: entry.takeProfit,
-        lotSize: entry.lotSize,
-        notes: entry.notes,
-        skillId: selectedSkill?.id,
-        rulesCompliance: rules.map((r) => ({
-          id: r.id,
-          text: r.text,
-          checked: !!checkedRules[r.id],
-        })),
-        aiValidationSummary: evaluation ? JSON.stringify(evaluation) : null,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error("Failed to record trade entry");
-    }
-    await fetchJournal();
-    showToast("Trade successfully logged to journal");
   };
 
   const currentPriceFormatted = currentCandle ? currentCandle.close.toFixed(2) : "---.--";
@@ -284,50 +226,59 @@ export default function DashboardPage() {
               </Card>
             </div>
 
-            {/* AI Technical Evaluation Card */}
-            {evaluation && (
-              <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
-                <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
-                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                    <Activity className="h-4 w-4 text-[#00FF66]" />
-                    AI Quantitative Setup Evaluation
-                  </CardTitle>
+            {/* AI Technical Evaluation & Quantitative Reasoner Card */}
+            <Card className="border-neutral-800 bg-[#0A0A0A] p-4 shadow-xl">
+              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
+                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-200">
+                  <Activity className="h-4 w-4 text-[#00FF66]" />
+                  AI Quantitative Analysis &amp; Reasoning Panel
+                </CardTitle>
+                {evaluation && (
                   <Badge variant="electric">
                     {evaluation.rating} · Confidence {evaluation.confidence}%
                   </Badge>
-                </CardHeader>
-                <CardContent className="p-0 pt-3 space-y-2 text-xs leading-relaxed">
-                  <div>
-                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Thesis:</span>{" "}
-                    <span className="text-neutral-200">{evaluation.thesis}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Invalidation:</span>{" "}
-                    <span className="font-mono text-neutral-300">{evaluation.riskInvalidation}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-neutral-400 font-mono text-[11px] uppercase">Recommendation:</span>{" "}
-                    <span className="text-neutral-200">{evaluation.recommendation}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Trade Journal Table Card */}
-            <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2">
-                <BookOpen className="h-4 w-4 text-neutral-400" />
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                  Trade Performance Journal
-                </CardTitle>
+                )}
               </CardHeader>
-              <CardContent className="p-0">
-                <JournalHistoryTable entries={journalEntries} />
+              <CardContent className="p-0 pt-3">
+                {evaluation ? (
+                  <div className="space-y-3 text-xs leading-relaxed">
+                    <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
+                      <div className="font-semibold text-neutral-400 font-mono text-[10px] uppercase tracking-wider">Market Setup Thesis</div>
+                      <p className="mt-1 text-neutral-200">{evaluation.thesis}</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-red-400 font-mono text-[10px] uppercase tracking-wider">Invalidation Level</div>
+                        <p className="mt-1 font-mono text-neutral-200">{evaluation.riskInvalidation}</p>
+                      </div>
+                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-[#00FF66] font-mono text-[10px] uppercase tracking-wider">Execution Bias</div>
+                        <p className="mt-1 text-neutral-200">{evaluation.recommendation}</p>
+                      </div>
+                    </div>
+
+                    {evaluation.notes && (
+                      <div className="rounded border border-neutral-800/80 bg-black/60 p-3">
+                        <div className="font-semibold text-neutral-400 font-mono text-[10px] uppercase tracking-wider">Quantitative Notes</div>
+                        <p className="mt-1 text-neutral-300 font-mono text-[11px]">{evaluation.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center">
+                    <Sparkles className="mx-auto h-8 w-8 text-[#00FF66]/40" />
+                    <p className="mt-2 text-xs text-neutral-400 font-medium">AI Quantitative Analysis Idle</p>
+                    <p className="mt-1 text-[11px] text-neutral-500 max-w-sm mx-auto">
+                      Select an institutional strategy and verify required checklist conditions on the right to trigger AI reasoning.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column: Discipline Checklist & Manual Journal Entry (5 cols) */}
+          {/* Right Column: Discipline Checklist & Strategy Framework (5 cols) */}
           <div className="space-y-4 lg:col-span-5">
             <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-neutral-800">
@@ -356,7 +307,7 @@ export default function DashboardPage() {
                     onClick={() => setIsSkillModalOpen(true)}
                     className="mt-3 text-xs border-neutral-800 bg-black hover:border-neutral-700"
                   >
-                    Load Quantitative Skill
+                    Select Quantitative Strategy
                   </Button>
                 </div>
               ) : (
@@ -422,7 +373,7 @@ export default function DashboardPage() {
                       ) : (
                         <>
                           <Sparkles className="h-3.5 w-3.5" />
-                          <span>Evaluate Setup Rationality</span>
+                          <span>Evaluate Setup with AI</span>
                         </>
                       )}
                     </Button>
@@ -435,29 +386,6 @@ export default function DashboardPage() {
                 </div>
               )}
             </Card>
-
-            {/* Manual Journal Entry Card */}
-            {selectedSkill && (
-              <Card className="border-neutral-800 bg-[#0A0A0A] p-4">
-                <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2 border-b border-neutral-800">
-                  <Plus className="h-4 w-4 text-neutral-400" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                    Record Trade to Journal
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 pt-3">
-                  <TradeJournalForm
-                    skillId={selectedSkill.id}
-                    rulesCompliance={rules.map((r) => ({
-                      id: r.id,
-                      text: r.text,
-                      checked: !!checkedRules[r.id],
-                    }))}
-                    onSubmit={handleJournalSubmit}
-                  />
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>

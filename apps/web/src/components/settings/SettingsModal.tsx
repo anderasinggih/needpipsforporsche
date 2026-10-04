@@ -100,31 +100,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <DialogTitle className="text-sm font-semibold tracking-wide text-neutral-100 uppercase">
-                AI Evaluator &amp; Feed Engine
+                AI Quantitative Brain Settings
               </DialogTitle>
               <DialogDescription className="text-xs text-neutral-400">
-                Configure real-time AI reasoning model &amp; market symbol
+                Configure AI reasoning models &amp; API keys for market analysis
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="active-symbol">Trading Instrument / Symbol</Label>
-            <Input
-              id="active-symbol"
-              type="text"
-              value={activeSymbol}
-              onChange={(e) => setActiveSymbol(e.target.value.toUpperCase())}
-              placeholder="XAUUSD"
-              className="font-mono text-neutral-100 uppercase bg-black border-neutral-800"
-              required
-            />
-            <p className="text-[10px] text-neutral-500 font-mono">
-              e.g. XAUUSD (Gold 24/7), BTCUSDT, ETHUSDT
-            </p>
-          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="ai-model">AI Evaluation Model</Label>
