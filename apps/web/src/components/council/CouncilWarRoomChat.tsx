@@ -40,10 +40,13 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   const [userMessages, setUserMessages] = useState<Array<{ sender: string; text: string; time: number; targetAgent?: string }>>([]);
   const [activeTab, setActiveTab] = useState<"all" | "pitch" | "rebuttal" | "ruling">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef<boolean>(false);
 
   // Stream discussion messages sequentially so the trader can read the AI debate unfold step by step
   useEffect(() => {
     setUserMessages([]);
+    isUserScrolledUpRef.current = false;
 
     if (isEvaluating) {
       setMessages([]);
@@ -79,9 +82,23 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
     };
   }, [discussion, evaluationId, isEvaluating]);
 
-  // Auto scroll
+  // Handle user scroll detection: don't force scroll down if user is reading previous messages
+  const handleScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // If user is more than 80px away from the bottom, mark as scrolled up
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isUserScrolledUpRef.current = distanceFromBottom > 80;
+  };
+
+  // Smart auto-scroll only if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!isUserScrolledUpRef.current && chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   }, [messages, typingIndex, userMessages, isAskingAi]);
 
   const handleSendUserMessage = async (e: React.FormEvent) => {
@@ -228,7 +245,11 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
       </div>
 
       {/* Chat Messages Body */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-3 font-sans">
+      <div
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-3.5 space-y-3 font-sans"
+      >
         {messages.length === 0 && !isEvaluating ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-10 px-4">
             <div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-2.5">
