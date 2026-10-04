@@ -41,9 +41,8 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   const [activeTab, setActiveTab] = useState<"all" | "pitch" | "rebuttal" | "ruling">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Genuine debate delivery: messages render directly as evaluated
+  // Stream discussion messages sequentially so the trader can read the AI debate unfold step by step
   useEffect(() => {
-    // Reset previous user Q&A messages when a new evaluation arrives
     setUserMessages([]);
 
     if (!discussion || discussion.length === 0) {
@@ -52,8 +51,26 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
       return;
     }
 
-    setMessages(discussion);
-    setTypingIndex(-1);
+    // Progressive live stream: push messages one by one with realistic deliberation timing
+    let currentIndex = 0;
+    setMessages([]);
+    setTypingIndex(0);
+
+    const interval = setInterval(() => {
+      if (currentIndex < discussion.length) {
+        const nextMsg = discussion[currentIndex];
+        setMessages((prev) => [...prev, nextMsg]);
+        currentIndex++;
+        setTypingIndex(currentIndex < discussion.length ? currentIndex : -1);
+      } else {
+        setTypingIndex(-1);
+        clearInterval(interval);
+      }
+    }, 750);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, [discussion, evaluationId]);
 
   // Auto scroll
@@ -217,6 +234,38 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
             </p>
           </div>
         ) : null}
+
+        {/* Live Multi-Stage Deliberation Status while AI Council is deliberating */}
+        {isEvaluating && (
+          <div className="p-3.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 space-y-3 font-mono">
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-2 text-emerald-400 font-semibold">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                Live Deliberation In Progress...
+              </span>
+              <span className="text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                10 AI Minds Engaged
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px]">
+              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
+                <span className="text-emerald-400 font-bold">R1:</span>
+                <span>Pitches & Technical Scans</span>
+              </div>
+              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
+                <span className="text-amber-400 font-bold">R2:</span>
+                <span>Cross-Debate & Rebuttal</span>
+              </div>
+              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
+                <span className="text-cyan-400 font-bold">R3:</span>
+                <span>Chief Risk Synthesis</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-zinc-400 font-sans italic">
+              Sedang mengambil pembacaan live dari seluruh slot AI... argumen dan perdebatan akan segera masuk ke stream di bawah ini.
+            </p>
+          </div>
+        )}
 
         {filteredMessages.map((msg, idx) => {
           const isChief = msg.agentId === "slot_1" || msg.round === "ruling";

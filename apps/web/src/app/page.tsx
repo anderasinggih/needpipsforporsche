@@ -357,6 +357,8 @@ export default function DashboardPage() {
     }
     try {
       setIsEvaluating(true);
+      setCouncilViewTab("chat");
+      setIsCouncilStripOpen(true);
 
       // Load 10-key slots from localStorage if available
       let keySlots = [];
@@ -554,7 +556,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Council strip: consensus verdict + collective emotional state */}
-        {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
+        {(isEvaluating || (evaluation?.agentOpinions && evaluation.agentOpinions.length > 0)) && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -562,7 +564,9 @@ export default function DashboardPage() {
                   Multi-Agent Scalping Council
                 </span>
                 <span className="text-[10px] sm:text-[11px] text-zinc-500">
-                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Aktif &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Offline)
+                  {isEvaluating
+                    ? "(Sedang Bermusyawarah...)"
+                    : `(${evaluation?.activeAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "active").length ?? 0} Aktif • ${evaluation?.offlineAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "not_contributed").length ?? 0} Offline)`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -585,19 +589,28 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] sm:text-[11px] font-mono ${
-                    evaluation.signal === "BUY"
-                      ? "border-emerald-800 text-emerald-400"
-                      : evaluation.signal === "SELL"
-                      ? "border-red-800 text-red-400"
-                      : "border-amber-800 text-amber-400"
-                  }`}
-                >
-                  {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
-                  ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
-                </Badge>
+                {evaluation ? (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] sm:text-[11px] font-mono ${
+                      evaluation.signal === "BUY"
+                        ? "border-emerald-800 text-emerald-400"
+                        : evaluation.signal === "SELL"
+                        ? "border-red-800 text-red-400"
+                        : "border-amber-800 text-amber-400"
+                    }`}
+                  >
+                    {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
+                    ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] sm:text-[11px] font-mono border-amber-800/80 text-amber-400 animate-pulse"
+                  >
+                    Menganalisis Pasar...
+                  </Badge>
+                )}
                 {/* View Switcher: War Room Chat vs Agent Cards */}
                 <div className="flex items-center gap-1 bg-black p-0.5 rounded-md border border-zinc-800 text-[10px]">
                   <button
@@ -777,14 +790,14 @@ export default function DashboardPage() {
                 {/* Mode 1: War Room Interactive Chat */}
                 {councilViewTab === "chat" && (
                   <CouncilWarRoomChat
-                    evaluationId={evaluation.id}
-                    discussion={evaluation.councilDiscussion}
+                    evaluationId={evaluation?.id}
+                    discussion={evaluation?.councilDiscussion}
                     isEvaluating={isEvaluating}
                     symbol={activeSymbol}
                     timeframe={timeframe}
-                    price={currentCandle?.close || evaluation.entryPrice}
-                    agentOpinions={evaluation.agentOpinions}
-                    signal={evaluation.signal}
+                    price={currentCandle?.close || evaluation?.entryPrice || 0}
+                    agentOpinions={evaluation?.agentOpinions || []}
+                    signal={evaluation?.signal || "WAIT"}
                   />
                 )}
 
@@ -793,7 +806,7 @@ export default function DashboardPage() {
                   <div className="space-y-2.5">
                     {/* Agent grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                      {evaluation.agentOpinions.map((agent) => {
+                      {(evaluation?.agentOpinions || []).map((agent) => {
                         const isExpanded = expandedAgentId === agent.agentId;
                     const isChief = agent.agentId === "slot_1";
                     const isNotContributed = agent.status === "not_contributed";
