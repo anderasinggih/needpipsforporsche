@@ -422,6 +422,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     });
   }, [aiMapping, aiSignal, historicalCandles]);
 
+  const [isBoxSelected, setIsBoxSelected] = useState(true);
+  const positionBoxBoundsRef = useRef<{ left: number; right: number; top: number; bottom: number } | null>(null);
+
   // Synchronize TradingView Long/Short Position Box canvas overlay with chart coordinate space
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
@@ -445,6 +448,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       ctx.clearRect(0, 0, width, height);
 
       if (!aiSignal?.entryPrice || !aiSignal?.stopLoss || !aiSignal?.takeProfit) {
+        positionBoxBoundsRef.current = null;
         return;
       }
 
@@ -477,63 +481,175 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const ySL = candleSeries.priceToCoordinate(aiSignal.stopLoss);
 
       if (x1 === null || x2 === null || yEntry === null || yTP === null || ySL === null) {
+        positionBoxBoundsRef.current = null;
         return;
       }
 
       const boxLeft = Math.min(x1, x2);
-      const boxWidth = Math.max(Math.abs(x2 - x1), 110);
+      const boxWidth = Math.max(Math.abs(x2 - x1), 120);
       const isLong = (aiSignal.signal || "BUY") === "BUY";
 
       // 1. Draw Target (Green) Profit Box
       const tpTop = Math.min(yEntry, yTP);
       const tpHeight = Math.abs(yTP - yEntry);
-      ctx.fillStyle = "rgba(8, 153, 129, 0.22)"; // Pure TradingView green fill
+      ctx.fillStyle = isBoxSelected ? "rgba(8, 153, 129, 0.28)" : "rgba(8, 153, 129, 0.18)";
       ctx.fillRect(boxLeft, tpTop, boxWidth, tpHeight);
 
       // Target area border
-      ctx.strokeStyle = "rgba(8, 153, 129, 0.85)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = isBoxSelected ? "rgba(8, 153, 129, 1)" : "rgba(8, 153, 129, 0.7)";
+      ctx.lineWidth = isBoxSelected ? 1.5 : 1;
       ctx.strokeRect(boxLeft, tpTop, boxWidth, tpHeight);
 
       // 2. Draw Stop Loss (Red) Risk Box
       const slTop = Math.min(yEntry, ySL);
       const slHeight = Math.abs(ySL - yEntry);
-      ctx.fillStyle = "rgba(242, 54, 69, 0.25)"; // Pure TradingView red fill
+      ctx.fillStyle = isBoxSelected ? "rgba(242, 54, 69, 0.3)" : "rgba(242, 54, 69, 0.18)";
       ctx.fillRect(boxLeft, slTop, boxWidth, slHeight);
 
       // Stop area border
-      ctx.strokeStyle = "rgba(242, 54, 69, 0.85)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = isBoxSelected ? "rgba(242, 54, 69, 1)" : "rgba(242, 54, 69, 0.7)";
+      ctx.lineWidth = isBoxSelected ? 1.5 : 1;
       ctx.strokeRect(boxLeft, slTop, boxWidth, slHeight);
 
       // 3. Middle Entry Separator Line
       ctx.beginPath();
       ctx.moveTo(boxLeft, yEntry);
       ctx.lineTo(boxLeft + boxWidth, yEntry);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.strokeStyle = isBoxSelected ? "#FFFFFF" : "rgba(255, 255, 255, 0.75)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // 4. Corner Drag / Grip Handles (Blue square grips like TradingView)
-      const handleSize = 6;
-      const drawGrip = (x: number, y: number) => {
-        ctx.fillStyle = "#2962FF";
-        ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
-        ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+      // Store bounds for click selection detection
+      positionBoxBoundsRef.current = {
+        left: boxLeft - 10,
+        right: boxLeft + boxWidth + 160,
+        top: Math.min(yTP, ySL) - 20,
+        bottom: Math.max(yTP, ySL) + 20,
       };
 
-      // Grips on corners: top left, top right, entry left, entry right, bottom left, bottom right
-      drawGrip(boxLeft, yTP);
-      drawGrip(boxLeft + boxWidth, yTP);
-      drawGrip(boxLeft, yEntry);
-      drawGrip(boxLeft + boxWidth, yEntry);
-      drawGrip(boxLeft, ySL);
-      drawGrip(boxLeft + boxWidth, ySL);
+      // 4. Corner Drag / Grip Handles (Blue square grips like TradingView when selected)
+      if (isBoxSelected) {
+        const handleSize = 7;
+        const drawGrip = (x: number, y: number) => {
+          ctx.fillStyle = "#2962FF";
+          ctx.strokeStyle = "#FFFFFF";
+          ctx.lineWidth = 1.5;
+          ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+          ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+        };
 
-      // 5. Floating TradingView PnL & Risk/Reward Badge
-      // Positioned to the RIGHT or offset so it NEVER covers active candlesticks!
+        drawGrip(boxLeft, yTP);
+        drawGrip(boxLeft + boxWidth, yTP);
+        drawGrip(boxLeft, yEntry);
+        drawGrip(boxLeft + boxWidth, yEntry);
+        drawGrip(boxLeft, ySL);
+        drawGrip(boxLeft + boxWidth, ySL);
+      }
+
+      // Format Price Values (with 2 decimal places and formatted thousands)
+      const formatPrice = (p: number) => p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const tpPriceStr = formatPrice(aiSignal.takeProfit);
+      const entryPriceStr = formatPrice(aiSignal.entryPrice);
+      const slPriceStr = formatPrice(aiSignal.stopLoss);
+
+      // 5. In-Chart Price Badges with Labels on the Top, Middle & Bottom edges of the Box
+      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+      const drawBoxPriceLabel = (
+        text: string,
+        priceVal: string,
+        x: number,
+        y: number,
+        bgColor: string,
+        borderColor: string
+      ) => {
+        const fullText = `${text}: ${priceVal}`;
+        const textWidth = ctx.measureText(fullText).width;
+        const padX = 6;
+        const padY = 3;
+        const badgeW = textWidth + padX * 2;
+        const badgeH = 18;
+        const badgeX = x + 8;
+        const badgeY = y - badgeH / 2;
+
+        ctx.fillStyle = bgColor;
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 3);
+        } else {
+          ctx.rect(badgeX, badgeY, badgeW, badgeH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(fullText, badgeX + padX, badgeY + badgeH / 2);
+      };
+
+      // Draw inside/edge badges for TP, Entry, SL
+      drawBoxPriceLabel(
+        "TP",
+        tpPriceStr,
+        boxLeft,
+        yTP,
+        "rgba(8, 153, 129, 0.9)",
+        "#089981"
+      );
+      drawBoxPriceLabel(
+        "Entry",
+        entryPriceStr,
+        boxLeft,
+        yEntry,
+        "rgba(39, 39, 42, 0.9)",
+        "#71717A"
+      );
+      drawBoxPriceLabel(
+        "SL",
+        slPriceStr,
+        boxLeft,
+        ySL,
+        "rgba(242, 54, 69, 0.9)",
+        "#f23645"
+      );
+
+      // 6. Right Price Scale Floating Badges (Persis TradingView: Gambar 2)
+      // When the component is active/selected, render vivid price tags on the far right price scale
+      // Width of right price axis is ~55-70px in TradingView
+      const priceScaleWidth = 65;
+      const scaleX = width - priceScaleWidth;
+
+      const drawScaleBadge = (priceStr: string, yCoord: number, bg: string, textColor: string = "#FFFFFF") => {
+        const badgeH = 19;
+        const badgeY = Math.max(2, Math.min(height - badgeH - 2, yCoord - badgeH / 2));
+        
+        ctx.fillStyle = bg;
+        ctx.fillRect(scaleX, badgeY, priceScaleWidth, badgeH);
+
+        // Small left pointer accent bar
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(scaleX, badgeY, 2, badgeH);
+
+        ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        ctx.fillStyle = textColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(priceStr, scaleX + priceScaleWidth / 2 + 1, badgeY + badgeH / 2);
+      };
+
+      // Target Price Scale Badge (Pure TV Green: #089981)
+      drawScaleBadge(tpPriceStr, yTP, "#089981");
+
+      // Entry Price Scale Badge (TV Charcoal/Slate: #3F3F46 with white text)
+      drawScaleBadge(entryPriceStr, yEntry, "#3F3F46");
+
+      // Stop Loss Price Scale Badge (Pure TV Red: #f23645)
+      drawScaleBadge(slPriceStr, ySL, "#f23645");
+
+      // 7. Floating TradingView PnL & Risk/Reward Badge
       const rewardDist = Math.abs(aiSignal.takeProfit - aiSignal.entryPrice);
       const riskDist = Math.max(0.01, Math.abs(aiSignal.entryPrice - aiSignal.stopLoss));
       const rrRatio = (rewardDist / riskDist).toFixed(2);
@@ -549,10 +665,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const badgeW = Math.max(w1, w2) + 16;
       const badgeH = 34;
 
-      // Place badge at right edge of the position box so the actual candle columns remain completely clear
-      // If position box touches right screen boundary, nudge leftwards inside box boundary
       let badgeX = boxLeft + boxWidth + 8;
-      if (badgeX + badgeW > width - 10) {
+      if (badgeX + badgeW > width - priceScaleWidth - 10) {
         badgeX = Math.max(10, boxLeft + boxWidth - badgeW - 6);
       }
       const badgeY = yEntry - badgeH / 2;
@@ -562,7 +676,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5) : ctx.rect(badgeX, badgeY, badgeW, badgeH);
+      if (ctx.roundRect) {
+        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5);
+      } else {
+        ctx.rect(badgeX, badgeY, badgeW, badgeH);
+      }
       ctx.fill();
       ctx.stroke();
 
@@ -586,7 +704,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       cancelAnimationFrame(animId);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(renderPositionBox);
     };
-  }, [aiSignal, historicalCandles]);
+  }, [aiSignal, historicalCandles, isBoxSelected]);
 
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
@@ -699,7 +817,27 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         </div>
       </div>
 
-      <div className="relative w-full h-[640px]">
+      <div 
+        className="relative w-full h-[640px]"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const clickY = e.clientY - rect.top;
+          const bounds = positionBoxBoundsRef.current;
+          if (bounds) {
+            if (
+              clickX >= bounds.left &&
+              clickX <= bounds.right &&
+              clickY >= bounds.top &&
+              clickY <= bounds.bottom
+            ) {
+              setIsBoxSelected(true);
+              return;
+            }
+          }
+          // If clicked outside, keep selected or toggle
+        }}
+      >
         <div ref={chartContainerRef} className="w-full h-full" />
         <canvas
           ref={overlayCanvasRef}
