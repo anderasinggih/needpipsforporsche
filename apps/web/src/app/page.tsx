@@ -357,6 +357,8 @@ export default function DashboardPage() {
     }
     try {
       setIsEvaluating(true);
+      // Immediately clear previous evaluation session so War Room Chat switches to live pending mode
+      setEvaluation(null);
       setCouncilViewTab("chat");
       setIsCouncilStripOpen(true);
 

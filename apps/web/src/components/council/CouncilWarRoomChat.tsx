@@ -45,6 +45,12 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   useEffect(() => {
     setUserMessages([]);
 
+    if (isEvaluating) {
+      setMessages([]);
+      setTypingIndex(-1);
+      return;
+    }
+
     if (!discussion || discussion.length === 0) {
       setMessages([]);
       setTypingIndex(-1);
@@ -71,7 +77,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
     return () => {
       clearInterval(interval);
     };
-  }, [discussion, evaluationId]);
+  }, [discussion, evaluationId, isEvaluating]);
 
   // Auto scroll
   useEffect(() => {
