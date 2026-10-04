@@ -420,16 +420,37 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       // Extend across to the position box & recent candles
       const fibEnd = Math.max(lastHistoricalTime + 60 * 8, Math.max(fib.high.time, fib.low.time) + 60 * 8);
 
+      // Trendline anchor connecting Swing Low and Swing High (persis garis diagonal TradingView Fib)
+      const trendlineId = "ai_fib_trendline_anchor";
+      activeOverlayIds.add(trendlineId);
+      if (!lineMap.has(trendlineId)) {
+        const anchorLine = chartRef.current.addLineSeries({
+          color: "rgba(113, 113, 122, 0.6)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        const sortedAnchor = [
+          { time: fib.low.time as any, value: fib.low.price },
+          { time: fib.high.time as any, value: fib.high.price },
+        ].sort((a, b) => (a.time as number) - (b.time as number));
+        anchorLine.setData(sortedAnchor as any);
+        lineMap.set(trendlineId, anchorLine);
+      }
+
       fib.levels.forEach((lvl) => {
         const fibId = `ai_fib_level_${lvl.ratio}`;
         activeOverlayIds.add(fibId);
 
         if (!lineMap.has(fibId)) {
           const isGolden = lvl.ratio === 0.618 || lvl.ratio === 0.5;
+          const isExtreme = lvl.ratio === 0.0 || lvl.ratio === 1.0;
           const fibLine = chartRef.current.addLineSeries({
-            color: isGolden ? "#F59E0B" : "#71717A",
+            color: isGolden ? "#F59E0B" : isExtreme ? "#A1A1AA" : "#52525B",
             lineWidth: isGolden ? 2 : 1,
-            lineStyle: isGolden ? LineStyle.Solid : LineStyle.Dashed,
+            lineStyle: isGolden ? LineStyle.Solid : isExtreme ? LineStyle.Solid : LineStyle.Dashed,
             lastValueVisible: false,
             priceLineVisible: false,
             crosshairMarkerVisible: false,
@@ -439,15 +460,15 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             { time: fibEnd as any, value: lvl.price },
           ]);
 
-          // Label the key golden pocket level on chart
-          if (isGolden) {
+          // Label level marker on chart
+          if (isGolden || isExtreme) {
             fibLine.setMarkers([
               {
                 time: fibStart as any,
-                position: resolveSide(aiSignal?.signal, aiSignal?.direction) === "BUY" ? "belowBar" : "aboveBar",
-                color: "#F59E0B",
+                position: lvl.ratio === 1.0 ? "belowBar" : "aboveBar",
+                color: isGolden ? "#F59E0B" : "#A1A1AA",
                 shape: "circle",
-                text: lvl.ratio === 0.618 ? "Fib 0.618 Pocket" : "Fib 0.50 Eq",
+                text: lvl.label || `Fib ${lvl.ratio}`,
               },
             ]);
           }

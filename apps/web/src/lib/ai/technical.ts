@@ -511,11 +511,13 @@ export const buildFibonacci = (opts: {
   const range = Math.max(spec.pipValue, Math.abs(high.price - low.price));
 
   const ratios = [
+    { ratio: 0.0, label: leg.direction === "BULLISH" ? "0.0 (Swing High)" : "0.0 (Swing Low)" },
     { ratio: 0.236, label: "0.236" },
     { ratio: 0.382, label: "0.382" },
     { ratio: 0.5, label: "0.500 (Eq)" },
     { ratio: 0.618, label: "0.618 (Golden Pocket)" },
     { ratio: 0.786, label: "0.786" },
+    { ratio: 1.0, label: leg.direction === "BULLISH" ? "1.0 (Swing Low)" : "1.0 (Swing High)" },
   ];
 
   const levels: FibonacciLevel[] = ratios.map((r) => {
