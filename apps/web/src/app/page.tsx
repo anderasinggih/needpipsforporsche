@@ -29,7 +29,23 @@ import {
   Calculator,
   ChevronRight,
   Clock,
+  Users,
+  Bot,
+  BrainCircuit,
+  MessageSquare,
 } from "lucide-react";
+
+export interface AgentOpinion {
+  agentId: string;
+  agentName: string;
+  role: string;
+  modelUsed: string;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  confidence: number;
+  keyObservation: string;
+  suggestedLevel?: { entry: number; sl: number; tp: number };
+  status: "active" | "offline";
+}
 
 export interface EvaluationResult {
   id?: string;
@@ -52,6 +68,7 @@ export interface EvaluationResult {
   predictiveTrajectory?: Array<{ time: number; price: number }>;
   recommendation: string;
   notes: string;
+  agentOpinions?: AgentOpinion[];
 }
 
 export default function DashboardPage() {
@@ -88,7 +105,6 @@ export default function DashboardPage() {
       const tf = localStorage.getItem("active_timeframe");
       if (tf) setTimeframe(tf);
 
-      // Load saved evaluation logs from localStorage
       try {
         const savedLogs = localStorage.getItem("ai_evaluation_logs");
         if (savedLogs) {
@@ -140,16 +156,22 @@ export default function DashboardPage() {
     try {
       setIsEvaluating(true);
       const geminiKey = localStorage.getItem("gemini_api_key") || "";
-      const aiModel = localStorage.getItem("ai_model") || "gemini-2.5-flash";
       const groqKey = localStorage.getItem("groq_api_key") || "";
+      const openaiKey = localStorage.getItem("openai_api_key") || "";
+      const deepseekKey = localStorage.getItem("deepseek_api_key") || "";
+      const openrouterKey = localStorage.getItem("openrouter_api_key") || "";
+      const aiModel = localStorage.getItem("ai_model") || "gemini-2.5-flash";
 
       const res = await fetch("/api/ai/evaluate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-gemini-key": geminiKey,
-          "x-ai-model": aiModel,
           "x-groq-key": groqKey,
+          "x-openai-key": openaiKey,
+          "x-deepseek-key": deepseekKey,
+          "x-openrouter-key": openrouterKey,
+          "x-ai-model": aiModel,
         },
         body: JSON.stringify({
           symbol: activeSymbol,
@@ -172,18 +194,17 @@ export default function DashboardPage() {
         };
         setEvaluation(newRecord);
 
-        // Append to logs without overwriting historical evaluations
         const updatedLogs = [newRecord, ...evalLogs.slice(0, 49)];
         setEvalLogs(updatedLogs);
         if (typeof window !== "undefined") {
           localStorage.setItem("ai_evaluation_logs", JSON.stringify(updatedLogs));
         }
 
-        showToast(`AI Analysis & Mapping successfully completed!`);
+        showToast(`5-Agent Council consensus successfully reached!`);
       }
     } catch (err) {
       console.error("Evaluation failed:", err);
-      showToast("Failed to perform AI analysis");
+      showToast("Council deliberation error");
     } finally {
       setIsEvaluating(false);
     }
@@ -212,7 +233,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans antialiased selection:bg-zinc-800">
-      {/* Top Navigation Bar: Pure Shadcn / Black & Zinc Aesthetic */}
+      {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/90 px-6 py-2.5 backdrop-blur">
         <div className="mx-auto flex w-full items-center justify-between">
           <div className="flex items-center gap-4">
@@ -264,7 +285,6 @@ export default function DashboardPage() {
               <span>{isConnected ? "LIVE FEED ACTIVE" : "CONNECTING..."}</span>
             </Badge>
 
-            {/* Direct Admin API Key Route */}
             <Link href="/owner/key">
               <Button
                 variant="outline"
@@ -272,7 +292,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-1.5 border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 hover:text-white text-xs h-8"
               >
                 <Key className="h-3.5 w-3.5 text-zinc-400" />
-                <span>API Keys</span>
+                <span>5-Agent Keys (/owner/key)</span>
               </Button>
             </Link>
           </div>
@@ -308,6 +328,62 @@ export default function DashboardPage() {
             }
           />
         </Card>
+
+        {/* 5-Agent Council Discussion Strip (Live Mind Outputs) */}
+        {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
+          <Card className="border-zinc-800 bg-zinc-950 p-3 shadow-none">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs font-semibold font-mono tracking-wider uppercase text-zinc-200">
+                  5-Agent Quantitative Council Debating &amp; Deliberation
+                </span>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
+                5 Independent Minds &bull; Consensus {evaluation.signal} ({evaluation.confidence}%)
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+              {evaluation.agentOpinions.map((agent) => (
+                <div
+                  key={agent.agentId}
+                  className={`rounded border p-2.5 text-xs transition-colors ${
+                    agent.agentId === "agent_arbiter"
+                      ? "border-emerald-900/50 bg-emerald-950/15"
+                      : "border-zinc-800/80 bg-black"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-semibold text-zinc-300 truncate">
+                      {agent.agentName}
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded ${
+                        agent.bias === "BULLISH"
+                          ? "bg-emerald-950/40 text-emerald-400"
+                          : agent.bias === "BEARISH"
+                          ? "bg-red-950/40 text-red-400"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {agent.bias}
+                    </span>
+                  </div>
+
+                  <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center justify-between">
+                    <span>{agent.role.split(" ")[0]}</span>
+                    <span>{agent.modelUsed}</span>
+                  </div>
+
+                  <p className="mt-1.5 text-[11px] text-zinc-300 leading-snug line-clamp-3">
+                    {agent.keyObservation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* Analytical Workspace Layout */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -346,7 +422,7 @@ export default function DashboardPage() {
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
                 <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-200">
                   <Compass className="h-4 w-4 text-zinc-400" />
-                  AI Quantitative Reasoning &amp; Execution Plan
+                  Synthesized Council Decision &amp; Execution Plan
                 </CardTitle>
                 {evaluation?.signal && (
                   <Badge
@@ -391,7 +467,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Mathematical Calculations & Formulas */}
+                    {/* Mathematical Calculations & Volatility Metrics */}
                     {evaluation.calculations && (
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
@@ -404,11 +480,11 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Detailed Indonesian Market Thesis */}
+                    {/* Detailed Indonesian Market Thesis Synthesized by Council */}
                     <div className="rounded border border-zinc-800 bg-black p-3">
                       <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                         <Activity className="h-3 w-3 text-zinc-400" />
-                        Tesis Analisis Struktur Pasar ({activeSymbol} · {timeframe.toUpperCase()})
+                        Tesis Konsensus Dewan AI ({activeSymbol} · {timeframe.toUpperCase()})
                       </div>
                       <p className="mt-1 text-zinc-200 leading-relaxed">{evaluation.thesis}</p>
                     </div>
@@ -453,7 +529,7 @@ export default function DashboardPage() {
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                           <Target className="h-3 w-3 text-zinc-400" />
-                          Instruksi Eksekusi Taktis
+                          Instruksi Eksekusi Dewan
                         </div>
                         <p className="mt-1 text-zinc-200 text-[11px]">
                           {evaluation.recommendation}
@@ -482,10 +558,10 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <Sparkles className="mx-auto h-8 w-8 text-zinc-600" />
-                    <p className="mt-2 text-xs text-zinc-300 font-medium">Ready for AI Quantitative Analysis</p>
+                    <BrainCircuit className="mx-auto h-8 w-8 text-zinc-600" />
+                    <p className="mt-2 text-xs text-zinc-300 font-medium">Ready for 5-Agent Council Deliberation</p>
                     <p className="mt-1 text-[11px] text-zinc-500 max-w-sm mx-auto">
-                      Generate high-probability trade setups, bounded TradingView position boxes, predictive trajectory lines, and risk evaluations.
+                      5 distinct AI minds debate market structure, order flows, indicators, and volatility in parallel, then synthesize a single execution setup.
                     </p>
                     <Button
                       onClick={handleEvaluate}
@@ -495,12 +571,12 @@ export default function DashboardPage() {
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          Computing Market Structure...
+                          5 Minds Deliberating &amp; Synthesizing...
                         </>
                       ) : (
                         <>
                           <Compass className="h-3.5 w-3.5 mr-1.5" />
-                          Run AI Evaluation &amp; Mapping
+                          Start 5-Agent Deliberation &amp; Mapping
                         </>
                       )}
                     </Button>
@@ -599,12 +675,12 @@ export default function DashboardPage() {
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Computing Market Structure...</span>
+                          <span>Deliberating 5 Minds...</span>
                         </>
                       ) : (
                         <>
                           <Compass className="h-3.5 w-3.5" />
-                          <span>Run AI Evaluation &amp; Mapping</span>
+                          <span>Run 5-Agent Deliberation &amp; Mapping</span>
                         </>
                       )}
                     </Button>
