@@ -370,6 +370,7 @@ const buildAgentOpinion = (opts: {
     keyObservation,
     detailedAnalysis,
     evidence,
+    debateRebuttal: typeof (parsed as any).debateRebuttal === "string" ? (parsed as any).debateRebuttal.trim() : undefined,
     status: "active",
     emotion,
     emotionIcon: meta.icon,
@@ -510,92 +511,87 @@ const buildCouncilDiscussion = (o: {
   currentUnix: number;
 }): DiscussionMessage[] => {
   const msgs: DiscussionMessage[] = [];
-  const rawList = Array.isArray(o.synthRaw?.councilDiscussion) ? o.synthRaw.councilDiscussion : [];
+  const active = o.agentOpinions.filter((a) => a.status === "active");
+  let t = o.currentUnix - 45;
 
-  if (rawList.length > 0) {
-    let t = o.currentUnix - 45;
-    for (let i = 0; i < rawList.length; i++) {
-      const item = rawList[i];
-      if (!item || typeof item.message !== "string" || !item.message.trim()) continue;
-      const matchedAgent = o.agentOpinions.find(
-        (a) => a.agentName.toLowerCase().includes((item.agentName || "").toLowerCase()) ||
-               a.role.toLowerCase().includes((item.agentName || "").toLowerCase())
-      ) || o.agentOpinions[i % o.agentOpinions.length];
-
-      msgs.push({
-        id: `disc_${i}_${Date.now()}`,
-        agentId: matchedAgent?.agentId || `slot_${i + 1}`,
-        agentName: item.agentName || matchedAgent?.agentName || `Agent ${i + 1}`,
-        role: matchedAgent?.role || "Specialist",
-        bias: matchedAgent?.bias || (o.direction === "BULLISH" ? "BULLISH" : "BEARISH"),
-        avatarIcon: matchedAgent?.emotionIcon || "💬",
-        round: item.round === "pitch" || item.round === "rebuttal" || item.round === "ruling" ? item.round : i === 0 ? "pitch" : i === rawList.length - 1 ? "ruling" : "rebuttal",
-        replyToAgentName: item.replyToAgentName,
-        message: item.message.trim(),
-        timestamp: t + i * 8,
-      });
-    }
+  // Round 1: Opening Pitches from Active Specialist Agents (slots 2..N)
+  for (const agent of active) {
+    if (agent.agentId === "slot_1") continue;
+    msgs.push({
+      id: `disc_pitch_${agent.agentId}_${Date.now()}`,
+      agentId: agent.agentId,
+      agentName: agent.agentName,
+      role: agent.role,
+      bias: agent.bias,
+      avatarIcon: agent.emotionIcon || (agent.bias === "BULLISH" ? "🟢" : agent.bias === "BEARISH" ? "🔴" : "⚖️"),
+      round: "pitch",
+      message: `${agent.keyObservation} ${agent.detailedAnalysis ? agent.detailedAnalysis.slice(0, 240) : ""}`.trim(),
+      timestamp: (t += 4),
+    });
   }
 
-  // If synthesizer did not return explicit discussion, build directly from live agents
-  if (msgs.length === 0) {
-    const active = o.agentOpinions.filter((a) => a.status === "active");
-    let t = o.currentUnix - 40;
+  // Round 2: Real AI Rebuttals (from actual model debateRebuttal generated during Round 2)
+  const agentsWithRebuttal = active.filter((a) => a.debateRebuttal && a.agentId !== "slot_1");
+  for (const agent of agentsWithRebuttal) {
+    msgs.push({
+      id: `disc_rebuttal_${agent.agentId}_${Date.now()}`,
+      agentId: agent.agentId,
+      agentName: agent.agentName,
+      role: agent.role,
+      bias: agent.bias,
+      avatarIcon: agent.emotionIcon || "⚡",
+      round: "rebuttal",
+      replyToAgentName: agent.replyToAgentName,
+      message: agent.debateRebuttal!.trim(),
+      timestamp: (t += 5),
+    });
+  }
 
-    // Build genuine discussion messages from actual live agent opinions
-    for (const agent of active) {
-      if (agent.agentId === "slot_1") continue; // Chief synthesizes in the final ruling
-      msgs.push({
-        id: `disc_${agent.agentId}_${Date.now()}`,
-        agentId: agent.agentId,
-        agentName: agent.agentName,
-        role: agent.role,
-        bias: agent.bias,
-        avatarIcon: agent.emotionIcon || (agent.bias === "BULLISH" ? "🟢" : agent.bias === "BEARISH" ? "🔴" : "⚖️"),
-        round: "pitch",
-        message: `${agent.keyObservation} ${agent.detailedAnalysis ? agent.detailedAnalysis.slice(0, 220) : ""}`.trim(),
-        timestamp: t += 4,
-      });
+  // If models returned structured discussion in synthRaw, incorporate any extra debate rounds
+  const rawSynthList = Array.isArray(o.synthRaw?.councilDiscussion) ? o.synthRaw.councilDiscussion : [];
+  for (let i = 0; i < rawSynthList.length; i++) {
+    const item = rawSynthList[i];
+    if (!item || typeof item.message !== "string" || !item.message.trim()) continue;
+    if (item.round === "pitch" && msgs.some((m) => m.round === "pitch" && m.agentName === item.agentName)) {
+      continue; // Skip duplicate pitches
     }
+    const matchedAgent = o.agentOpinions.find(
+      (a) =>
+        a.agentName.toLowerCase().includes((item.agentName || "").toLowerCase()) ||
+        a.role.toLowerCase().includes((item.agentName || "").toLowerCase()),
+    ) || o.agentOpinions[i % o.agentOpinions.length];
 
-    // Round 2: Active Rebuttal / Cross-Discussion if there are conflicting biases
-    const opposing = active.filter((a) => a.bias !== "NEUTRAL" && a.agentId !== "slot_1");
-    if (opposing.length >= 2) {
-      const bulls = opposing.filter((a) => a.bias === "BULLISH");
-      const bears = opposing.filter((a) => a.bias === "BEARISH");
-      if (bulls.length > 0 && bears.length > 0) {
-        const b = bulls[0];
-        const br = bears[0];
-        msgs.push({
-          id: `disc_reb_${br.agentId}`,
-          agentId: br.agentId,
-          agentName: br.agentName,
-          role: br.role,
-          bias: "BEARISH",
-          avatarIcon: br.emotionIcon || "⚠️",
-          round: "rebuttal",
-          replyToAgentName: b.agentName,
-          message: `Sanggahan untuk @${b.agentName}: Meskipun ada indikasi bullish, level risiko ${br.keyObservation}. Kita tidak bisa mengabaikan potensi rejection.`,
-          timestamp: t += 5,
-        });
-      }
-    }
+    msgs.push({
+      id: `disc_synth_${i}_${Date.now()}`,
+      agentId: matchedAgent?.agentId || `slot_${i + 1}`,
+      agentName: item.agentName || matchedAgent?.agentName || `Agent ${i + 1}`,
+      role: matchedAgent?.role || "Specialist",
+      bias: matchedAgent?.bias || (o.direction === "BULLISH" ? "BULLISH" : "BEARISH"),
+      avatarIcon: matchedAgent?.emotionIcon || "💬",
+      round: item.round === "rebuttal" || item.round === "ruling" ? item.round : "rebuttal",
+      replyToAgentName: item.replyToAgentName,
+      message: item.message.trim(),
+      timestamp: (t += 5),
+    });
+  }
 
-    // Round 3: Chief Final Ruling from actual Chief agent analysis
-    const chief = o.agentOpinions.find((a) => a.agentId === "slot_1") || o.agentOpinions[0];
-    if (chief) {
-      msgs.push({
-        id: `disc_ruling_${Date.now()}`,
-        agentId: chief.agentId,
-        agentName: chief.agentName,
-        role: chief.role,
-        bias: o.consensus.decision === "WAIT" ? "NEUTRAL" : o.direction === "BULLISH" ? "BULLISH" : "BEARISH",
-        avatarIcon: chief.emotionIcon || "⚖️",
-        round: "ruling",
-        message: chief.detailedAnalysis || chief.keyObservation,
-        timestamp: t += 5,
-      });
-    }
+  // Round 3: Chief Synthesizer Final Ruling (from actual Chief agent analysis / synth verdict)
+  const chief = o.agentOpinions.find((a) => a.agentId === "slot_1") || o.agentOpinions[0];
+  if (chief) {
+    msgs.push({
+      id: `disc_ruling_${Date.now()}`,
+      agentId: chief.agentId,
+      agentName: chief.agentName,
+      role: chief.role,
+      bias: o.consensus.decision === "WAIT" ? "NEUTRAL" : o.direction === "BULLISH" ? "BULLISH" : "BEARISH",
+      avatarIcon: chief.emotionIcon || "⚖️",
+      round: "ruling",
+      message:
+        (typeof o.synthRaw?.detailedVerdict === "string" && o.synthRaw.detailedVerdict.trim()) ||
+        chief.detailedAnalysis ||
+        chief.keyObservation,
+      timestamp: (t += 6),
+    });
   }
 
   return msgs;
@@ -856,7 +852,11 @@ export async function POST(request: NextRequest) {
 
     const slots = keySlots.length ? keySlots : defaultSlots(request);
 
-    const runSlot = async (slot: KeySlotPayload, index: number): Promise<AgentOpinion> => {
+    const runSlot = async (
+      slot: KeySlotPayload,
+      index: number,
+      extra?: { rebuttalTarget?: { agentName: string; bias: string; keyObservation: string }; debateTranscript?: string },
+    ): Promise<AgentOpinion> => {
       const profile = roleAt(index);
       if (!slot.apiKey.trim()) {
         return offlineAgent(slot, profile, "API Key tidak terpasang di /owner/key.");
@@ -881,11 +881,13 @@ export async function POST(request: NextRequest) {
         fibText,
         harmonicText,
         checklistMet,
+        rebuttalTarget: extra?.rebuttalTarget,
+        debateTranscript: extra?.debateTranscript,
       });
 
       try {
         const raw = await callProviderWithRetry(slot, prompt, { timeoutMs: AGENT_TIMEOUT_MS });
-        return buildAgentOpinion({
+        const op = buildAgentOpinion({
           slot,
           profile,
           raw,
@@ -898,6 +900,10 @@ export async function POST(request: NextRequest) {
             atrPips,
           },
         });
+        if (extra?.rebuttalTarget) {
+          op.replyToAgentName = extra.rebuttalTarget.agentName;
+        }
+        return op;
       } catch (err) {
         const message = String((err as Error)?.message || "Offline").slice(0, 160);
         const opinion = offlineAgent(slot, profile, `Request gagal: ${message}`);
@@ -906,7 +912,7 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // Staggered batches keep free-tier rate limits happy without killing latency.
+    // ROUND 1: Opening Pitches from specialists (slots 2..N)
     const councilResults: AgentOpinion[] = [];
     const slotsToRun = slots.slice(1);
     for (let i = 0; i < slotsToRun.length; i += BATCH_SIZE) {
@@ -915,6 +921,46 @@ export async function POST(request: NextRequest) {
       councilResults.push(...settled);
       if (i + BATCH_SIZE < slotsToRun.length) {
         await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
+      }
+    }
+
+    // ROUND 2: Genuine Cross-Rebuttal
+    // Look for active specialists with opposing views or critical risk officers (e.g. slot 4 ATR Risk / slot 7 Gate / slot 9 Invalidation)
+    const activeRound1 = councilResults.filter((a) => a.status === "active");
+    if (activeRound1.length >= 2) {
+      // Find contrasting biases or primary proponents to challenge
+      const bull = activeRound1.find((a) => a.bias === "BULLISH");
+      const bear = activeRound1.find((a) => a.bias === "BEARISH");
+      const challenger = bear && bull ? bear : activeRound1[activeRound1.length - 1];
+      const targetOpponent = challenger === bear ? bull! : activeRound1[0];
+
+      if (challenger && targetOpponent && challenger.agentId !== targetOpponent.agentId) {
+        const challengerSlotIndex = slots.findIndex((s) => s.id === challenger.agentId);
+        if (challengerSlotIndex > 0) {
+          const challengerSlot = slots[challengerSlotIndex];
+          try {
+            const rebuttalOpinion = await runSlot(challengerSlot, challengerSlotIndex, {
+              rebuttalTarget: {
+                agentName: targetOpponent.agentName,
+                bias: targetOpponent.bias,
+                keyObservation: targetOpponent.keyObservation,
+              },
+            });
+            if (rebuttalOpinion.status === "active") {
+              // Update challenger's opinion with the live cross-examination rebuttal
+              const existingIdx = councilResults.findIndex((a) => a.agentId === challenger.agentId);
+              if (existingIdx !== -1) {
+                councilResults[existingIdx] = {
+                  ...rebuttalOpinion,
+                  replyToAgentName: targetOpponent.agentName,
+                  debateRebuttal: rebuttalOpinion.debateRebuttal || rebuttalOpinion.keyObservation,
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("Round 2 rebuttal execution non-fatal error:", e);
+          }
+        }
       }
     }
 

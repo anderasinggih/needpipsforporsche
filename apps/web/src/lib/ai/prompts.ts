@@ -215,6 +215,12 @@ export interface AgentPromptContext {
   fibText: string;
   harmonicText: string;
   checklistMet: boolean;
+  debateTranscript?: string;
+  rebuttalTarget?: {
+    agentName: string;
+    bias: string;
+    keyObservation: string;
+  };
 }
 
 export const buildAgentPrompt = (ctx: AgentPromptContext): string => `KAMU ADALAH: ${ctx.agentName} - ${ctx.role.role}
@@ -239,6 +245,17 @@ KONDISI PASAR SAAT INI:
 - Rencana risiko council: SL ${ctx.slPips} pips | TP ${ctx.tpPips} pips | RR ${ctx.rr}
 - Arah baseline dari data: ${ctx.directionHint}
 - Checklist trader: ${ctx.checklistMet ? "TERPENUHI" : "BELUM TERPENUHI, jawaban wajib NEUTRAL"}
+${
+  ctx.rebuttalTarget
+    ? `\nDEBAT AKTIF / SANGGAHAN REBUTTAL (ROUND 2):
+Kamu sedang berhadapan langsung dengan ${ctx.rebuttalTarget.agentName} yang menyatakan bias [${ctx.rebuttalTarget.bias}] dengan argumen:
+"${ctx.rebuttalTarget.keyObservation}"
+Tugasmu: Tinjau argumen mereka secara kritis terhadap peran dan data pasarmu. Apakah kamu setuju, menolak, atau memperingatkan bahayanya? Tuliskan tanggapan tajam dan realistis di field 'debateRebuttal'.`
+    : ctx.debateTranscript
+    ? `\nTRANSKRIP DISKUSI DEWAN SEBELUMNYA:
+${ctx.debateTranscript}`
+    : ""
+}
 
 PSIKOLOGI (bagian terpenting dari jawaban):
 ${ctx.role.psychologyBrief}
@@ -253,6 +270,7 @@ BALAS JSON MURNI TANPA TEKS TAMBAHAN, format persis:
   "keyObservation": "1-2 kalimat inti sesuai mandatmu, sertakan minimal satu angka konkret",
   "detailedAnalysis": "3-4 kalimat tentang bagaimana data di atas mengubah probabilitasmu, dan apa yang membuatmu salah kalau ini gagal",
   "evidence": ["bukti1 dengan angka", "bukti2 dengan angka", "bukti3 dengan angka"],
+  "debateRebuttal": "Tanggapan atau sanggahan tajam langsung kepada agen lain jika ada perdebatan (1-2 kalimat)",
   "emotion": "${EMOTION_MENU.join('" | "')}",
   "emotionIntensity": 0-100,
   "emotionReason": "1 kalimat jujur kenapa kamu merasa begitu sekarang",

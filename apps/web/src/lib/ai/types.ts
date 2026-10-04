@@ -114,6 +114,8 @@ export interface AgentOpinion {
   suggestedLevel?: { entry: number; sl: number; tp: number; slPips?: number; tpPips?: number };
   status: AgentStatus;
   errorMessage?: string;
+  debateRebuttal?: string;
+  replyToAgentName?: string;
 
   // ---- psychology / emotion layer (new, additive) ----
   emotion: Emotion;

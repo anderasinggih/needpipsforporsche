@@ -41,9 +41,9 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   const [activeTab, setActiveTab] = useState<"all" | "pitch" | "rebuttal" | "ruling">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Progressive streaming / typing simulation when new evaluation arrives
+  // Genuine debate delivery: messages render directly as evaluated
   useEffect(() => {
-    // Reset any previous evaluation's user Q&A messages so they don't leak into new signals
+    // Reset previous user Q&A messages when a new evaluation arrives
     setUserMessages([]);
 
     if (!discussion || discussion.length === 0) {
@@ -52,23 +52,8 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
       return;
     }
 
-    setMessages([]);
-    setTypingIndex(0);
-
-    let current = 0;
-    const interval = setInterval(() => {
-      if (current < discussion.length) {
-        const nextMsg = discussion[current];
-        setMessages((prev) => [...prev, nextMsg]);
-        current++;
-        setTypingIndex(current < discussion.length ? current : -1);
-      } else {
-        clearInterval(interval);
-        setTypingIndex(-1);
-      }
-    }, 550);
-
-    return () => clearInterval(interval);
+    setMessages(discussion);
+    setTypingIndex(-1);
   }, [discussion, evaluationId]);
 
   // Auto scroll
