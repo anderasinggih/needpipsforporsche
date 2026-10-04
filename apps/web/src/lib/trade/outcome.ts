@@ -96,9 +96,14 @@ export const resolveTradeOutcome = (
     }
   };
 
+  // 1. Historical completed bars:
+  // ONLY bars STRICTLY AFTER anchorTime (time > anchorTime) represent market action
+  // that took place after the trade was generated!
+  // Any bar where time === anchorTime occurred BEFORE or during setup creation;
+  // evaluating its historical high/low leaks pre-setup wicks into the trade lifecycle.
   const ordered = bars
     .filter(isUsableBar)
-    .filter((b) => b.time >= anchorTime)
+    .filter((b) => b.time > anchorTime)
     .sort((a, b) => a.time - b.time);
 
   for (const bar of ordered) {
@@ -106,13 +111,15 @@ export const resolveTradeOutcome = (
     track(bar.high, bar.low, bar.time);
   }
 
-  // The bar that is forming right now. When it opened AFTER the anchor its full
-  // range is post-setup, otherwise only its close is trustworthy — the rest of
-  // its range happened before the trade existed.
+  // 2. The live forming bar / current tick:
+  // If the live candle opened strictly after anchorTime, its entire high/low range is post-setup.
+  // If the live candle is the anchor candle itself (time === anchorTime), ONLY its live close/current price
+  // matters — its low/high from earlier minutes before the user clicked evaluate is pre-trade history!
   if (!resolvedAt && isUsableBar(liveBar)) {
     if (liveBar!.time > anchorTime) {
       track(liveBar!.high, liveBar!.low, liveBar!.time);
-    } else {
+    } else if (liveBar!.time === anchorTime) {
+      // Only track current price (close) of the anchor bar, NEVER its prior wick
       track(liveBar!.close, liveBar!.close, liveBar!.time);
     }
   }

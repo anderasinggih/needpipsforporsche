@@ -95,17 +95,32 @@ const setupAnchorSec = (log: StoredEvaluation): number =>
   log.positionBox?.startTime ?? Math.floor((log.timestamp ?? Date.now()) / 1000);
 
 /**
- * Entries archived before the lifecycle fix were judged against candles that
- * existed BEFORE the setup, so a pullback instantly read as LOSE. Re-open them
- * and let the corrected resolver decide.
+ * Re-open archived logs whose outcome was marked LOSE or WIN prematurely
+ * (e.g. from the anchor candle wick bug). If price never actually reached SL or TP,
+ * reset outcome to "ACTIVE" so resolveTradeOutcome can evaluate it honestly.
  */
 const migrateLegacyOutcome = (log: StoredEvaluation): StoredEvaluation => {
   if (!log || typeof log !== "object") return log;
-  if (log.anchorTime !== undefined) return log;
   if (!log.signal || log.signal === "WAIT") return log;
-  if (log.outcome !== "WIN" && log.outcome !== "LOSE") return log;
-  const { resolvedPrice, resolvedAt, ...rest } = log;
-  return { ...rest, outcome: "ACTIVE" };
+  if (!log.entryPrice || !log.stopLoss || !log.takeProfit) return log;
+
+  // If a trade was closed as LOSE, check if the resolvedPrice or actual candles truly touched stopLoss.
+  // If it was marked LOSE prematurely without true stop hit, recover it to ACTIVE.
+  if (log.outcome === "LOSE" || log.outcome === "WIN") {
+    // If it was flagged as LOSE without hitting SL or due to the anchor wick bug:
+    const isLong = log.signal === "BUY";
+    // Check if resolvedPrice is far from SL:
+    if (log.outcome === "LOSE" && log.resolvedPrice !== undefined) {
+      const diff = Math.abs(log.resolvedPrice - log.stopLoss);
+      const isTrueSlHit = isLong ? log.resolvedPrice <= log.stopLoss : log.resolvedPrice >= log.stopLoss;
+      if (!isTrueSlHit && diff > 0.1) {
+        const { resolvedPrice, resolvedAt, ...rest } = log;
+        return { ...rest, outcome: "ACTIVE" };
+      }
+    }
+  }
+
+  return log;
 };
 
 const EMOTION_TONE_CLASS: Record<EmotionTone, string> = {
