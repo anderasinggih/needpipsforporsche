@@ -495,11 +495,57 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       // Detect candle spacing interval dynamically from historical data for seamless multi-timeframe scaling
       const candleIntervalSec = (prevCandle && lastCandle) ? Math.max(1, lastCandle.time - prevCandle.time) : 60;
       
-      // Bounded Position Box: ALWAYS starts at the current live candle (lastTime)
-      // and projects forward into future time (future forecast), NEVER in the past!
+      // Setup Anchor Time:
+      // Match the exact entry anchor candle where the AI made the evaluation!
+      // If predictiveTrajectory exists, its first point is the exact setup entry time.
+      // Otherwise fall back to positionBox.startTime.
       const currentCandleTime = currentCandle?.time || lastTime;
-      const startTime = currentCandleTime;
-      const endTime = currentCandleTime + candleIntervalSec * 16;
+      const trajStartTime = aiSignal.predictiveTrajectory && aiSignal.predictiveTrajectory.length > 0
+        ? Math.min(...aiSignal.predictiveTrajectory.map((p) => p.time))
+        : null;
+      const startTime = trajStartTime || aiSignal.positionBox?.startTime || currentCandleTime;
+
+      // Check if price already touched TP or SL in subsequent candles after setup startTime
+      const isLong = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
+      let resolutionTime: number | null = null;
+
+      // Scan historical candles from setup startTime onwards to see if TP/SL was hit
+      for (const c of historicalCandles) {
+        if (c.time >= startTime) {
+          if (isLong) {
+            if (c.high >= aiSignal.takeProfit || c.low <= aiSignal.stopLoss) {
+              resolutionTime = c.time;
+              break;
+            }
+          } else {
+            if (c.low <= aiSignal.takeProfit || c.high >= aiSignal.stopLoss) {
+              resolutionTime = c.time;
+              break;
+            }
+          }
+        }
+      }
+
+      // Check current live candle as well
+      if (!resolutionTime && currentCandle && currentCandle.time >= startTime) {
+        if (isLong) {
+          if (currentCandle.high >= aiSignal.takeProfit || currentCandle.low <= aiSignal.stopLoss) {
+            resolutionTime = currentCandle.time;
+          }
+        } else {
+          if (currentCandle.low <= aiSignal.takeProfit || currentCandle.high >= aiSignal.stopLoss) {
+            resolutionTime = currentCandle.time;
+          }
+        }
+      }
+
+      // Dynamic End Time:
+      // If position is still ACTIVE (hasn't touched TP/SL):
+      // Expand box forward to currentCandleTime + buffer (e.g. 10 forward candles) so it tracks live price continuously.
+      // If TP/SL was touched: fix the box width at the exact candle where TP/SL was hit!
+      const endTime = resolutionTime
+        ? resolutionTime + candleIntervalSec
+        : Math.max(startTime + candleIntervalSec * 16, currentCandleTime + candleIntervalSec * 10);
 
       let x1 = timeScale.timeToCoordinate(startTime as any) as number | null;
       let x2 = timeScale.timeToCoordinate(endTime as any) as number | null;
@@ -526,7 +572,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       const boxLeft = Math.min(x1, x2);
       const boxWidth = Math.max(Math.abs(x2 - x1), 120);
-      const isLong = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
 
       // 1. Draw Target (Green) Profit Box
       const tpTop = Math.min(yEntry, yTP);
