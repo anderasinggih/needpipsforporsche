@@ -948,44 +948,63 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ROUND 2: Genuine Cross-Rebuttal
-    // Look for active specialists with opposing views or critical risk officers (e.g. slot 4 ATR Risk / slot 7 Gate / slot 9 Invalidation)
+    // ROUND 2: Genuine Multi-Agent Cross-Rebuttal (Up to 3 pairs of debating agents)
     const activeRound1 = councilResults.filter((a) => a.status === "active");
     if (activeRound1.length >= 2) {
-      // Find contrasting biases or primary proponents to challenge
-      const bull = activeRound1.find((a) => a.bias === "BULLISH");
-      const bear = activeRound1.find((a) => a.bias === "BEARISH");
-      const challenger = bear && bull ? bear : activeRound1[activeRound1.length - 1];
-      const targetOpponent = challenger === bear ? bull! : activeRound1[0];
+      const bulls = activeRound1.filter((a) => a.bias === "BULLISH");
+      const bears = activeRound1.filter((a) => a.bias === "BEARISH");
+      const neutrals = activeRound1.filter((a) => a.bias === "NEUTRAL");
 
-      if (challenger && targetOpponent && challenger.agentId !== targetOpponent.agentId) {
-        const challengerSlotIndex = slots.findIndex((s) => s.id === challenger.agentId);
-        if (challengerSlotIndex > 0) {
-          const challengerSlot = slots[challengerSlotIndex];
-          try {
-            const rebuttalOpinion = await runSlot(challengerSlot, challengerSlotIndex, {
-              rebuttalTarget: {
-                agentName: targetOpponent.agentName,
-                bias: targetOpponent.bias,
-                keyObservation: targetOpponent.keyObservation,
-              },
-            });
-            if (rebuttalOpinion.status === "active") {
-              // Update challenger's opinion with the live cross-examination rebuttal
-              const existingIdx = councilResults.findIndex((a) => a.agentId === challenger.agentId);
-              if (existingIdx !== -1) {
-                councilResults[existingIdx] = {
-                  ...rebuttalOpinion,
-                  replyToAgentName: targetOpponent.agentName,
-                  debateRebuttal: rebuttalOpinion.debateRebuttal || rebuttalOpinion.keyObservation,
-                };
-              }
-            }
-          } catch (e) {
-            console.warn("Round 2 rebuttal execution non-fatal error:", e);
-          }
+      // Build debate pairs: Bulls vs Bears, or Contrarian/Auditor challenging strong bias
+      const pairs: Array<{ challenger: AgentOpinion; target: AgentOpinion }> = [];
+
+      if (bulls.length > 0 && bears.length > 0) {
+        pairs.push({ challenger: bears[0], target: bulls[0] });
+        if (bulls.length > 1 && bears.length > 1) {
+          pairs.push({ challenger: bulls[1], target: bears[1] });
+        }
+      } else {
+        // If all agree, have a risk officer or auditor challenge the consensus
+        const primary = activeRound1[0];
+        const riskChallenger = activeRound1.find(
+          (a) => a.agentId !== primary.agentId && (a.role.includes("Auditor") || a.role.includes("Risk") || a.role.includes("Advocate") || a.bias === "NEUTRAL")
+        ) || activeRound1[activeRound1.length - 1];
+
+        if (riskChallenger && riskChallenger.agentId !== primary.agentId) {
+          pairs.push({ challenger: riskChallenger, target: primary });
         }
       }
+
+      // Execute up to 2-3 genuine cross-rebuttals concurrently
+      await Promise.all(
+        pairs.slice(0, 3).map(async ({ challenger, target }) => {
+          const challengerSlotIndex = slots.findIndex((s) => s.id === challenger.agentId);
+          if (challengerSlotIndex > 0) {
+            const challengerSlot = slots[challengerSlotIndex];
+            try {
+              const rebuttalOpinion = await runSlot(challengerSlot, challengerSlotIndex, {
+                rebuttalTarget: {
+                  agentName: target.agentName,
+                  bias: target.bias,
+                  keyObservation: target.keyObservation,
+                },
+              });
+              if (rebuttalOpinion.status === "active") {
+                const existingIdx = councilResults.findIndex((a) => a.agentId === challenger.agentId);
+                if (existingIdx !== -1) {
+                  councilResults[existingIdx] = {
+                    ...rebuttalOpinion,
+                    replyToAgentName: target.agentName,
+                    debateRebuttal: rebuttalOpinion.debateRebuttal || rebuttalOpinion.keyObservation,
+                  };
+                }
+              }
+            } catch (e) {
+              console.warn("Cross-rebuttal error:", e);
+            }
+          }
+        })
+      );
     }
 
     const activeAgents = councilResults.filter((a) => a.status === "active");
