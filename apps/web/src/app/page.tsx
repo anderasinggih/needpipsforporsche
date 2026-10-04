@@ -563,7 +563,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Council strip: consensus verdict + collective emotional state */}
-        {(isEvaluating || (evaluation?.agentOpinions && evaluation.agentOpinions.length > 0)) && (
+        {(isEvaluating || Boolean(evaluation?.agentOpinions?.length)) && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -902,7 +902,7 @@ export default function DashboardPage() {
 
                 {/* Expanded Detail Drawer for Selected Agent */}
                 {expandedAgentId && (() => {
-                  const selectedAgent = evaluation.agentOpinions?.find((a) => a.agentId === expandedAgentId);
+                  const selectedAgent = evaluation?.agentOpinions?.find((a) => a.agentId === expandedAgentId);
                   if (!selectedAgent) return null;
                   const isChief = selectedAgent.agentId === "slot_1";
                   const isOffline = selectedAgent.status === "not_contributed";
