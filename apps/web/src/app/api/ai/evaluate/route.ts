@@ -450,10 +450,10 @@ Kembalikan JSON murni:
       }
     };
 
-    // Execute slots in batches to prevent hitting Gemini burst concurrency / 503 rate-limits
+    // Execute slots in pairs (batch of 2) with 500ms delay so AI runs 2-by-2 smoothly without rate-limit burst
     const councilResults: AgentOpinion[] = [];
     const slotsToRun = effectiveSlots.slice(1);
-    const batchSize = 3;
+    const batchSize = 2;
 
     for (let i = 0; i < slotsToRun.length; i += batchSize) {
       const batch = slotsToRun.slice(i, i + batchSize);
@@ -462,7 +462,7 @@ Kembalikan JSON murni:
       );
       councilResults.push(...batchRes);
       if (i + batchSize < slotsToRun.length) {
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
 
