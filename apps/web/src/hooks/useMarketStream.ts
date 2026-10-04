@@ -73,12 +73,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
 
     const klineStream = `${binanceStream}@kline_${binanceInterval}`;
 
-    // Candidate WebSocket endpoints (data-stream.binance.vision is unblocked globally / in Indonesia)
-    const wsEndpoints = [
-      `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade`,
-      `wss://stream.binance.com:9443/stream?streams=${klineStream}/${binanceStream}@trade`,
-    ];
-    let currentEndpointIndex = 0;
+    // Direct combined stream endpoint:
+    const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -87,8 +83,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
           return;
         }
 
-        const endpoint = wsEndpoints[currentEndpointIndex % wsEndpoints.length];
-        const ws = new WebSocket(endpoint);
+        const ws = new WebSocket(streamUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -140,11 +135,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
 
         ws.onclose = () => {
           if (!isMounted) return;
-          setIsConnected(false);
           clearTimeout(reconnectTimeout);
-          // Cycle through fallback endpoints on failure
-          currentEndpointIndex++;
-          reconnectTimeout = setTimeout(connect, 1500);
+          reconnectTimeout = setTimeout(connect, 3000);
         };
 
         ws.onerror = () => {
@@ -154,9 +146,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         };
       } catch (err) {
         if (!isMounted) return;
-        currentEndpointIndex++;
         clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(connect, 1500);
+        reconnectTimeout = setTimeout(connect, 3000);
       }
     };
 
