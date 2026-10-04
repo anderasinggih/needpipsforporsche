@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType } from "lightweight-charts";
+import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType, CrosshairMode } from "lightweight-charts";
 
 export interface CandleData {
   time: number; // Unix seconds
@@ -145,14 +145,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         horzLines: { color: "#18181B" },
       },
       crosshair: {
-        mode: 1,
+        mode: CrosshairMode.Normal, // Normal free movement (exact cursor position, no magnet snapping to candle)
         vertLine: {
-          color: "#27272A",
+          color: "#3F3F46",
           width: 1,
           style: LineStyle.Dashed,
         },
         horzLine: {
-          color: "#27272A",
+          color: "#3F3F46",
           width: 1,
           style: LineStyle.Dashed,
         },
