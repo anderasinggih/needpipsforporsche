@@ -86,6 +86,7 @@ export default function OwnerKeyPage() {
   const [slots, setSlots] = useState<KeySlot[]>(DEFAULT_SLOTS);
   const [isSaved, setIsSaved] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
+  const [testingStatus, setTestingStatus] = useState<Record<string, { loading: boolean; ok?: boolean; msg?: string }>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -126,6 +127,51 @@ export default function OwnerKeyPage() {
     setSlots((prev) =>
       prev.map((slot) => (slot.id === id ? { ...slot, [field]: value } : slot))
     );
+  };
+
+  const handleTestKey = async (slot: KeySlot) => {
+    if (!slot.apiKey || !slot.apiKey.trim()) {
+      setTestingStatus((prev) => ({
+        ...prev,
+        [slot.id]: { loading: false, ok: false, msg: "Isi API key dulu" },
+      }));
+      return;
+    }
+
+    setTestingStatus((prev) => ({
+      ...prev,
+      [slot.id]: { loading: true },
+    }));
+
+    try {
+      const res = await fetch("/api/ai/test-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: slot.provider,
+          model: slot.model,
+          apiKey: slot.apiKey.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        setTestingStatus((prev) => ({
+          ...prev,
+          [slot.id]: { loading: false, ok: true, msg: data.message || "Key aktif & terhubung!" },
+        }));
+      } else {
+        setTestingStatus((prev) => ({
+          ...prev,
+          [slot.id]: { loading: false, ok: false, msg: data.error || "Gagal terhubung" },
+        }));
+      }
+    } catch (e: any) {
+      setTestingStatus((prev) => ({
+        ...prev,
+        [slot.id]: { loading: false, ok: false, msg: e.message || "Network error" },
+      }));
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -197,9 +243,7 @@ export default function OwnerKeyPage() {
               </div>
               <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
                 Anda bebas mengisi hingga 10 API Key (misal 3 Gemini, 2 Groq, 2 OpenAI, DeepSeek, dll.).
-                Jika salah satu API Key mati/habis limit, sistem akan mencatat statusnya sebagai{" "}
-                <span className="text-amber-400 font-mono font-bold">Not Contributed (Offline)</span> di collapse bar dashboard,
-                sementara sisa otak AI yang aktif dan AI penyimpul (Synthesizer) akan tetap mengkalkulasi scalping 30–50 pips secara presisi.
+                Tersedia tombol <span className="text-zinc-200 font-semibold">Test Key</span> untuk langsung memverifikasi apakah kunci dan kuota model Anda valid sebelum digunakan scalping secara live.
               </p>
             </div>
           </div>
@@ -225,6 +269,8 @@ export default function OwnerKeyPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {slots.map((slot, index) => {
               const isConfigured = slot.apiKey.trim().length > 0;
+              const testState = testingStatus[slot.id];
+
               return (
                 <Card
                   key={slot.id}
@@ -243,16 +289,26 @@ export default function OwnerKeyPage() {
                         className="h-6 text-[11px] font-semibold bg-transparent border-0 p-0 text-zinc-200 focus-visible:ring-0 w-48"
                       />
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={`text-[9px] font-mono ${
-                        isConfigured
-                          ? "border-emerald-900/60 text-emerald-400 bg-emerald-950/30"
-                          : "border-zinc-800 text-zinc-500"
-                      }`}
-                    >
-                      {isConfigured ? "ACTIVE KEY" : "EMPTY"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTestKey(slot)}
+                        disabled={testState?.loading}
+                        className="px-2 py-0.5 text-[10px] font-mono font-medium rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        {testState?.loading ? "Testing..." : "Test Key"}
+                      </button>
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] font-mono ${
+                          isConfigured
+                            ? "border-emerald-900/60 text-emerald-400 bg-emerald-950/30"
+                            : "border-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {isConfigured ? "ACTIVE" : "EMPTY"}
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mb-2">
@@ -333,6 +389,23 @@ export default function OwnerKeyPage() {
                       className="mt-1 font-mono text-[11px] h-8 bg-black border-zinc-800"
                     />
                   </div>
+
+                  {testState && (
+                    <div className="mt-2 pt-1.5 border-t border-zinc-900 flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-zinc-500">Hasil Tes:</span>
+                      <span
+                        className={`truncate max-w-[260px] font-medium ${
+                          testState.loading
+                            ? "text-blue-400"
+                            : testState.ok
+                            ? "text-emerald-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {testState.loading ? "Sedang menghubungi server AI..." : testState.msg}
+                      </span>
+                    </div>
+                  )}
                 </Card>
               );
             })}
