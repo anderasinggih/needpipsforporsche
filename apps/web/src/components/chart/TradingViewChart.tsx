@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType } from "lightweight-charts";
 
 export interface CandleData {
@@ -32,6 +32,7 @@ interface TradingViewChartProps {
   historicalCandles?: CandleData[];
   symbol?: string;
   onSymbolChange?: (symbol: string) => void;
+  lastTickTimestamp?: number;
 }
 
 export const TradingViewChart: React.FC<TradingViewChartProps> = ({
@@ -40,11 +41,23 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   historicalCandles = [],
   symbol = "BTCUSD",
   onSymbolChange,
+  lastTickTimestamp,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lineSeriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const isDataSetRef = useRef(false);
+  const [pulse, setPulse] = useState(false);
+
+  // Trigger brief visual pulse on every real-time tick update
+  useEffect(() => {
+    if (lastTickTimestamp) {
+      setPulse(true);
+      const timer = setTimeout(() => setPulse(false), 250);
+      return () => clearTimeout(timer);
+    }
+  }, [lastTickTimestamp, currentCandle?.close]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -104,10 +117,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       window.removeEventListener("resize", handleResize);
       chart.remove();
       lineSeriesMap.current.clear();
+      isDataSetRef.current = false;
     };
   }, []);
-
-  const isDataSetRef = useRef(false);
 
   // Reset viewport state when symbol changes
   useEffect(() => {
@@ -117,7 +129,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   // Update whole series when historicalCandles arrive (only fitContent once per symbol)
   useEffect(() => {
     if (candleSeriesRef.current && historicalCandles.length > 0) {
-      // Ensure sorted ascending and deduplicated by time
       const sorted = [...historicalCandles].sort((a, b) => a.time - b.time);
       const unique = sorted.filter((item, index, self) => 
         index === 0 || item.time > self[index - 1].time
@@ -126,14 +137,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       
       if (chartRef.current && !isDataSetRef.current) {
         chartRef.current.timeScale().fitContent();
-        isDataSetRef.current = true;
       }
+      isDataSetRef.current = true;
     }
   }, [historicalCandles, symbol]);
 
-  // Real-time tick update
+  // Real-time tick update: only update if historical data is already loaded and candleSeries exists
   useEffect(() => {
-    if (candleSeriesRef.current && currentCandle) {
+    if (candleSeriesRef.current && isDataSetRef.current && currentCandle) {
       try {
         const candleTime = Number(currentCandle.time);
         candleSeriesRef.current.update({
@@ -242,6 +253,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           <span className="rounded bg-[#00FF66]/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-[#00FF66] border border-[#00FF66]/20">
             1M TIMEFRAME
           </span>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-neutral-400">
+            <span className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#00FF66] scale-125 shadow-[0_0_6px_#00FF66]" : "bg-neutral-600"} transition-all duration-150`} />
+            <span>LIVE FEED</span>
+          </div>
           {positions.length > 0 && (
             <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400 border border-amber-500/20">
               {positions.length} OPEN POSITION{positions.length > 1 ? 'S' : ''}
@@ -250,8 +265,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-[10px] font-mono text-neutral-500 uppercase">CURRENT PRICE</div>
-            <div className="text-sm font-mono font-bold text-[#00FF66]">
+            <div className="text-[10px] font-mono text-neutral-500 uppercase flex items-center justify-end gap-1.5">
+              <span>CURRENT PRICE</span>
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#00FF66]" : "bg-neutral-700"} transition-all`} />
+            </div>
+            <div className={`text-sm font-mono font-bold transition-colors duration-150 ${pulse ? "text-white" : "text-[#00FF66]"}`}>
               {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Awaiting Data..."}
             </div>
           </div>

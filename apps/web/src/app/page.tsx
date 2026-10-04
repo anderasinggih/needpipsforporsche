@@ -29,7 +29,7 @@ interface EvaluationResult {
 
 export default function DashboardPage() {
   const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
-  const { currentCandle, historicalCandles, positions, isConnected } = useMarketStream(activeSymbol);
+  const { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp } = useMarketStream(activeSymbol);
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
@@ -187,6 +187,7 @@ export default function DashboardPage() {
             historicalCandles={historicalCandles}
             positions={positions}
             symbol={activeSymbol}
+            lastTickTimestamp={lastTickTimestamp}
             onSymbolChange={(sym) => {
               setActiveSymbol(sym);
               if (typeof window !== "undefined") localStorage.setItem("active_symbol", sym);
