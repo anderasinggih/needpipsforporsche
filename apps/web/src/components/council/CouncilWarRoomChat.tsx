@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 interface CouncilWarRoomChatProps {
+  evaluationId?: string;
   discussion?: DiscussionMessage[];
   isEvaluating?: boolean;
   symbol: string;
@@ -23,6 +24,7 @@ const ROUND_BADGES = {
 };
 
 export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
+  evaluationId,
   discussion = [],
   isEvaluating = false,
   symbol,
@@ -41,6 +43,9 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
 
   // Progressive streaming / typing simulation when new evaluation arrives
   useEffect(() => {
+    // Reset any previous evaluation's user Q&A messages so they don't leak into new signals
+    setUserMessages([]);
+
     if (!discussion || discussion.length === 0) {
       setMessages([]);
       setTypingIndex(-1);
@@ -64,7 +69,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
     }, 550);
 
     return () => clearInterval(interval);
-  }, [discussion]);
+  }, [discussion, evaluationId]);
 
   // Auto scroll
   useEffect(() => {

@@ -772,6 +772,7 @@ export default function DashboardPage() {
                 {/* Mode 1: War Room Interactive Chat */}
                 {councilViewTab === "chat" && (
                   <CouncilWarRoomChat
+                    evaluationId={evaluation.id}
                     discussion={evaluation.councilDiscussion}
                     isEvaluating={isEvaluating}
                     symbol={activeSymbol}
