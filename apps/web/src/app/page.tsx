@@ -308,10 +308,10 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <Badge
               variant="outline"
-              className="flex items-center gap-1.5 py-1 px-2.5 text-[10px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
+              className="flex items-center gap-1.5 py-1 px-2.5 text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
             >
               <Radio className={`h-3 w-3 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
-              <span>{isConnected ? "LIVE FEED ACTIVE" : "CONNECTING..."}</span>
+              <span>{isConnected ? "Live feed active" : "Connecting..."}</span>
             </Badge>
 
             <Link href="/owner/key">
@@ -365,17 +365,16 @@ export default function DashboardPage() {
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-400" />
-                <span className="text-xs font-semibold font-mono tracking-wider uppercase text-zinc-200">
+                <span className="text-xs font-semibold text-zinc-200">
                   10-Agent Multi-Key Scalping Council
                 </span>
-                <span className="text-[11px] text-zinc-500 font-mono">
+                <span className="text-[11px] text-zinc-500">
                   ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Contributed &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Not Contributed)
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                  Scalp {evaluation.signal} ({evaluation.confidence}%) &bull; SL: {evaluation.slPips ?? 35} pips
+                <Badge variant="outline" className="text-[11px] font-mono border-zinc-800 text-zinc-400">
+                  Scalp {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"} ({evaluation.confidence}%) &bull; SL: {evaluation.slPips ?? 35} pips
                 </Badge>
                 <button
                   type="button"
@@ -419,11 +418,11 @@ export default function DashboardPage() {
                           </span>
                           {isNotContributed ? (
                             <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-amber-500 border border-amber-900/40">
-                              OFFLINE
+                              Offline
                             </span>
                           ) : (
                             <span
-                              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              className={`text-[9px] font-mono font-medium px-1.5 py-0.5 rounded ${
                                 agent.bias === "BULLISH"
                                   ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
                                   : agent.bias === "BEARISH"
@@ -431,13 +430,13 @@ export default function DashboardPage() {
                                   : "bg-zinc-800 text-zinc-400"
                               }`}
                             >
-                              {agent.bias}
+                              {agent.bias === "BULLISH" ? "Bullish" : agent.bias === "BEARISH" ? "Bearish" : "Neutral"}
                             </span>
                           )}
                         </div>
 
                         <div className="text-[9px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
-                          <span className="truncate">{agent.provider.toUpperCase()}</span>
+                          <span className="truncate">{agent.provider}</span>
                           <span className="text-[8px] text-zinc-600 truncate">{agent.modelUsed}</span>
                         </div>
 
@@ -483,21 +482,21 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                            {selectedAgent.provider.toUpperCase()} ({selectedAgent.modelUsed})
+                            {selectedAgent.provider} ({selectedAgent.modelUsed})
                           </Badge>
                           {isOffline ? (
-                            <Badge className="text-[10px] font-mono font-bold bg-amber-950/40 text-amber-400 border border-amber-900/50">
-                              NOT CONTRIBUTED
+                            <Badge className="text-[10px] font-mono font-medium bg-amber-950/40 text-amber-400 border border-amber-900/50">
+                              Not Contributed
                             </Badge>
                           ) : (
-                            <Badge className={`text-[10px] font-mono font-bold ${
+                            <Badge className={`text-[10px] font-mono font-medium ${
                               selectedAgent.bias === "BULLISH"
                                 ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
                                 : selectedAgent.bias === "BEARISH"
                                 ? "bg-red-950/60 text-red-400 border border-red-800"
                                 : "bg-zinc-900 text-zinc-300"
                             }`}>
-                              Bias: {selectedAgent.bias} ({selectedAgent.confidence}%)
+                              Bias: {selectedAgent.bias === "BULLISH" ? "Bullish" : selectedAgent.bias === "BEARISH" ? "Bearish" : "Neutral"} ({selectedAgent.confidence}%)
                             </Badge>
                           )}
                         </div>
@@ -505,7 +504,7 @@ export default function DashboardPage() {
 
                       <div className="space-y-3">
                         <div>
-                          <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
+                          <div className="text-[11px] text-zinc-500 mb-1">
                             {isOffline ? "Status Agen AI:" : "Analisis Mendalam Scalping:"}
                           </div>
                           <p className={`text-xs leading-relaxed ${isOffline ? "text-amber-300/80 font-mono" : "text-zinc-200"}`}>
@@ -515,7 +514,7 @@ export default function DashboardPage() {
 
                         {selectedAgent.evidence && selectedAgent.evidence.length > 0 && (
                           <div className="pt-2 border-t border-zinc-900">
-                            <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
+                            <div className="text-[11px] text-zinc-500 mb-1.5">
                               Bukti &amp; Dasar Pertimbangan:
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -548,7 +547,7 @@ export default function DashboardPage() {
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-3 gap-3">
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                <div className="text-[11px] text-zinc-500">
                   Target Scalping SL
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-red-400">
@@ -556,7 +555,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                <div className="text-[11px] text-zinc-500">
                   Target Scalping TP
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-emerald-400">
@@ -564,7 +563,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                <div className="text-[11px] text-zinc-500">
                   Dewan Berkontribusi
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
@@ -576,14 +575,13 @@ export default function DashboardPage() {
             {/* AI Technical Analysis & Evaluation Card */}
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-200">
-                  <Zap className="h-4 w-4 text-emerald-400" />
+                <CardTitle className="text-xs font-semibold text-zinc-200">
                   Scalping Execution Plan (Synthesized by Council)
                 </CardTitle>
                 {evaluation?.signal && (
                   <Badge
                     variant="outline"
-                    className={`font-mono text-xs font-semibold ${
+                    className={`font-mono text-xs font-medium ${
                       evaluation.signal === "BUY"
                         ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
                         : evaluation.signal === "SELL"
@@ -591,7 +589,7 @@ export default function DashboardPage() {
                         : "bg-zinc-900 text-zinc-300 border-zinc-800"
                     }`}
                   >
-                    SIGNAL: SCALP {evaluation.signal} &bull; Conf {evaluation.confidence}%
+                    Signal: Scalp {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"} &bull; Conf {evaluation.confidence}%
                   </Badge>
                 )}
               </CardHeader>
@@ -636,8 +634,7 @@ export default function DashboardPage() {
                     {/* Mathematical Calculations & Volatility Metrics */}
                     {evaluation.calculations && (
                       <div className="rounded border border-zinc-800 bg-black p-3">
-                        <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                          <Calculator className="h-3 w-3 text-zinc-400" />
+                        <div className="font-semibold text-zinc-400 font-mono text-[11px]">
                           Quantitative Calculations &amp; Pip Multipliers
                         </div>
                         <p className="mt-1 font-mono text-zinc-300 text-[11px] leading-relaxed">
@@ -649,9 +646,8 @@ export default function DashboardPage() {
                     {/* KESIMPULAN MENDALAM DARI AI PENYIMPUL */}
                     {evaluation.detailedVerdict && (
                       <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-3.5">
-                        <div className="font-semibold text-emerald-400 font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-emerald-900/40">
-                          <Scale className="h-3.5 w-3.5 text-emerald-400" />
-                          Kesimpulan Akhir &amp; Putusan AI Penyimpul (Supreme Arbiter)
+                        <div className="font-semibold text-emerald-400 font-mono text-[11px] pb-1 border-b border-emerald-900/40">
+                          Kesimpulan Akhir &amp; Putusan AI Penyimpul
                         </div>
                         <p className="mt-2 text-zinc-200 text-xs leading-relaxed font-sans">
                           {evaluation.detailedVerdict}
@@ -661,8 +657,7 @@ export default function DashboardPage() {
 
                     {/* Detailed Indonesian Market Thesis Synthesized by Council */}
                     <div className="rounded border border-zinc-800 bg-black p-3">
-                      <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                        <Activity className="h-3 w-3 text-zinc-400" />
+                      <div className="font-semibold text-zinc-400 font-mono text-[11px]">
                         Tesis Konsensus Dewan AI ({activeSymbol} &bull; {timeframe.toUpperCase()})
                       </div>
                       <p className="mt-1 text-zinc-200 leading-relaxed">{evaluation.thesis}</p>
@@ -673,7 +668,7 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {evaluation.slReason && (
                           <div className="rounded border border-zinc-800 bg-black p-3">
-                            <div className="font-semibold text-red-400 font-mono text-[10px] uppercase tracking-wider">
+                            <div className="font-semibold text-red-400 font-mono text-[11px]">
                               Alasan Penempatan Stop Loss
                             </div>
                             <p className="mt-1 text-zinc-300 text-[11px] leading-relaxed">
@@ -683,7 +678,7 @@ export default function DashboardPage() {
                         )}
                         {evaluation.tpReason && (
                           <div className="rounded border border-zinc-800 bg-black p-3">
-                            <div className="font-semibold text-emerald-400 font-mono text-[10px] uppercase tracking-wider">
+                            <div className="font-semibold text-emerald-400 font-mono text-[11px]">
                               Alasan Penempatan Take Profit
                             </div>
                             <p className="mt-1 text-zinc-300 text-[11px] leading-relaxed">
@@ -697,8 +692,7 @@ export default function DashboardPage() {
                     {/* Risk Invalidation & Tactical Instructions */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded border border-zinc-800 bg-black p-3">
-                        <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                          <Crosshair className="h-3 w-3 text-zinc-400" />
+                        <div className="font-semibold text-zinc-400 font-mono text-[11px]">
                           Level Pembatalan Skenario (Invalidation)
                         </div>
                         <p className="mt-1 font-mono text-zinc-300 text-[11px]">
@@ -706,8 +700,7 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       <div className="rounded border border-zinc-800 bg-black p-3">
-                        <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                          <Target className="h-3 w-3 text-zinc-400" />
+                        <div className="font-semibold text-zinc-400 font-mono text-[11px]">
                           Instruksi Eksekusi Scalping
                         </div>
                         <p className="mt-1 text-zinc-200 text-[11px]">
@@ -728,7 +721,7 @@ export default function DashboardPage() {
 
                     {evaluation.notes && (
                       <div className="rounded border border-zinc-800 bg-black p-3">
-                        <div className="font-semibold text-zinc-500 font-mono text-[10px] uppercase tracking-wider">
+                        <div className="font-semibold text-zinc-500 font-mono text-[11px]">
                           Catatan Manajemen Lot 0.01 &amp; Psikologi
                         </div>
                         <p className="mt-1 text-zinc-300 font-mono text-[11px]">{evaluation.notes}</p>
@@ -770,12 +763,9 @@ export default function DashboardPage() {
             {/* Strategy Checklist */}
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-zinc-400" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
-                    Discipline Checklist &amp; Strategy
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-xs font-semibold text-zinc-200">
+                  Discipline Checklist &amp; Strategy
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
@@ -813,7 +803,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="text-[10px] font-mono font-medium text-zinc-500 uppercase tracking-wider">
+                    <div className="text-[11px] text-zinc-500">
                       Validation Rules ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
                     </div>
                     {rules.map((rule) => (
@@ -838,7 +828,7 @@ export default function DashboardPage() {
                         <div className="leading-tight">
                           <span>{rule.text}</span>
                           {rule.required && (
-                            <span className="ml-1 text-[10px] text-zinc-400 font-mono font-semibold">[REQUIRED]</span>
+                            <span className="ml-1 text-[10px] text-zinc-400 font-mono font-medium">[Required]</span>
                           )}
                         </div>
                       </div>
@@ -857,10 +847,7 @@ export default function DashboardPage() {
                           <span>Deliberating 10 Minds...</span>
                         </>
                       ) : (
-                        <>
-                          <Compass className="h-3.5 w-3.5" />
-                          <span>Run 10-Agent Deliberation &amp; Mapping</span>
-                        </>
+                        <span>Run 10-Agent Deliberation &amp; Mapping</span>
                       )}
                     </Button>
                   </div>
@@ -871,12 +858,9 @@ export default function DashboardPage() {
             {/* Persistent AI Generation History Log */}
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-zinc-400" />
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
-                    Analysis History Log ({evalLogs.length})
-                  </CardTitle>
-                </div>
+                <CardTitle className="text-xs font-semibold text-zinc-200">
+                  Analysis History Log ({evalLogs.length})
+                </CardTitle>
                 {evalLogs.length > 0 && (
                   <button
                     type="button"

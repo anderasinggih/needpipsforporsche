@@ -172,8 +172,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     // CANDLESTICK MURNI ASLI TRADINGVIEW:
     // UP: upColor #089981, borderUpColor #089981, wickUpColor #089981
-    // DOWN: downColor #f23645, borderDownColor #f23645, wickDownColor #f23645
-    // TIDAK ADA BORDER HIJAU PADA CANDLE MERAH
+    // DOWN: downColor #f23645, borderDownColor #f23645 (tanpa outline beda warna), wickDownColor #f23645
+    // TIDAK ADA BORDER HIJAU ATAU CONSTRASTING BORDER PADA CANDLE MERAH
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#089981",
       downColor: "#f23645",
@@ -513,16 +513,16 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[10px] text-zinc-400">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[11px] text-zinc-400">
             <span
               className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-600"} transition-colors duration-150`}
             />
-            <span>FEED</span>
+            <span>Feed</span>
           </div>
 
           {aiSignal?.signal && (
             <span
-              className={`rounded px-2.5 py-0.5 text-[10px] font-semibold border ${
+              className={`rounded px-2.5 py-0.5 text-[11px] font-medium border ${
                 aiSignal.signal === "BUY"
                   ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
                   : aiSignal.signal === "SELL"
@@ -530,24 +530,24 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
                   : "bg-zinc-900 text-zinc-300 border-zinc-800"
               }`}
             >
-              SCALP {aiSignal.signal}
+              Scalp {aiSignal.signal === "BUY" ? "Buy" : aiSignal.signal === "SELL" ? "Sell" : "Wait"}
             </span>
           )}
 
           {aiSignal?.slPips && (
-            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
+            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
               SL: {aiSignal.slPips} pips &bull; TP: {aiSignal.tpPips} pips
             </span>
           )}
 
           {aiMapping?.harmonicPattern?.name && (
-            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-900/50">
+            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-900/50">
               {aiMapping.harmonicPattern.name} (XABCD)
             </span>
           )}
 
           {aiMapping?.fibonacciRetracement && (
-            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
+            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
               Fib 0.618 Pocket
             </span>
           )}
@@ -555,8 +555,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-[10px] text-zinc-500 uppercase flex items-center justify-end gap-1.5">
-              <span>MARKET PRICE</span>
+            <div className="text-[11px] text-zinc-500 flex items-center justify-end gap-1.5">
+              <span>Market Price</span>
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-700"} transition-colors`}
               />
@@ -567,7 +567,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           </div>
           {positions.length > 0 && (
             <div className="text-right">
-              <div className="text-[10px] text-zinc-500 uppercase">PnL</div>
+              <div className="text-[11px] text-zinc-500">PnL</div>
               <div
                 className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}
               >
@@ -584,24 +584,24 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       {aiSignal && (aiSignal.stopLoss || aiSignal.takeProfit) && (
         <div className="absolute top-14 left-4 z-10 max-w-sm rounded border border-zinc-800 bg-zinc-950/90 p-2.5 backdrop-blur shadow-lg text-[11px] space-y-1.5 pointer-events-none">
           <div className="flex items-center justify-between text-zinc-400 border-b border-zinc-800/80 pb-1">
-            <span className="text-zinc-300 font-semibold">SCALPING POSITION OVERLAY</span>
-            <span className="text-[10px] text-emerald-400 font-semibold">RR 1:2.5</span>
+            <span className="text-zinc-300 font-medium">Scalping Position Overlay</span>
+            <span className="text-[10px] text-emerald-400 font-medium">RR 1:2.5</span>
           </div>
           <div className="grid grid-cols-3 gap-1 pt-0.5">
             <div>
-              <span className="text-[10px] text-zinc-500 block">ENTRY</span>
-              <span className="text-zinc-200 font-semibold">${aiSignal.entryPrice?.toFixed(2)}</span>
+              <span className="text-[10px] text-zinc-500 block">Entry</span>
+              <span className="text-zinc-200 font-medium">${aiSignal.entryPrice?.toFixed(2)}</span>
             </div>
             <div>
-              <span className="text-[10px] text-red-400 block">STOP LOSS</span>
-              <span className="text-red-400 font-semibold">
+              <span className="text-[10px] text-red-400 block">Stop Loss</span>
+              <span className="text-red-400 font-medium">
                 ${aiSignal.stopLoss?.toFixed(2)}
                 {aiSignal.slPips ? <span className="text-[9px] block text-red-500">(-{aiSignal.slPips} pips)</span> : null}
               </span>
             </div>
             <div>
-              <span className="text-[10px] text-emerald-400 block">TAKE PROFIT</span>
-              <span className="text-emerald-400 font-semibold">
+              <span className="text-[10px] text-emerald-400 block">Take Profit</span>
+              <span className="text-emerald-400 font-medium">
                 ${aiSignal.takeProfit?.toFixed(2)}
                 {aiSignal.tpPips ? <span className="text-[9px] block text-emerald-500">(+{aiSignal.tpPips} pips)</span> : null}
               </span>
