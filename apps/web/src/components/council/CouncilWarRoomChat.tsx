@@ -11,6 +11,9 @@ interface CouncilWarRoomChatProps {
   isEvaluating?: boolean;
   symbol: string;
   timeframe: string;
+  price?: number;
+  agentOpinions?: any[];
+  signal?: string;
 }
 
 const ROUND_BADGES = {
@@ -24,10 +27,14 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   isEvaluating = false,
   symbol,
   timeframe,
+  price = 0,
+  agentOpinions = [],
+  signal = "WAIT",
 }) => {
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [typingIndex, setTypingIndex] = useState<number>(-1);
   const [userQuery, setUserQuery] = useState("");
+  const [isAskingAi, setIsAskingAi] = useState(false);
   const [userMessages, setUserMessages] = useState<Array<{ sender: string; text: string; time: number; targetAgent?: string }>>([]);
   const [activeTab, setActiveTab] = useState<"all" | "pitch" | "rebuttal" | "ruling">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -54,7 +61,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
         clearInterval(interval);
         setTypingIndex(-1);
       }
-    }, 650);
+    }, 550);
 
     return () => clearInterval(interval);
   }, [discussion]);
@@ -62,11 +69,11 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typingIndex, userMessages]);
+  }, [messages, typingIndex, userMessages, isAskingAi]);
 
-  const handleSendUserMessage = (e: React.FormEvent) => {
+  const handleSendUserMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userQuery.trim()) return;
+    if (!userQuery.trim() || isAskingAi) return;
 
     const query = userQuery.trim();
     setUserQuery("");
@@ -77,32 +84,69 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
       { sender: "Trader", text: query, time: Date.now() },
     ]);
 
-    // Simulate intelligent reply from the most relevant specialist agent
-    setTimeout(() => {
-      let replyingAgent = "Agent 1 (Chief Synthesizer)";
-      let responseText = "Pertanyaan tercatat. Seluruh parameter risiko diatur berdasarkan volatilitas pasar aktual dan tidak boleh dilanggar.";
+    setIsAskingAi(true);
 
-      if (query.toLowerCase().includes("sl") || query.toLowerCase().includes("stop") || query.toLowerCase().includes("resiko")) {
-        replyingAgent = "Agent 5 (Volatility & Risk)";
-        responseText = `Menjawab pertimbanganmu: Stop Loss diatur berdasarkan batas swing struktural dan ATR. Menggeser atau memperlebar SL saat floating melanggar aturan manajemen risiko dasar!`;
-      } else if (query.toLowerCase().includes("entry") || query.toLowerCase().includes("buy") || query.toLowerCase().includes("sell")) {
-        replyingAgent = "Agent 2 (Market Structure)";
-        responseText = `Mengenai timing entry: Tunggu konfirmasi close candle pada timeframe ${timeframe.toUpperCase()}. Masuk sebelum konfirmasi meningkatkan risiko terjebak fakeout breakout.`;
-      } else if (query.toLowerCase().includes("tp") || query.toLowerCase().includes("target") || query.toLowerCase().includes("profit")) {
-        replyingAgent = "Agent 3 (Liquidity Hunter)";
-        responseText = `Target profit diposisikan sebelum liquidity pool lawan. Jangan serakah menunggu lebih jauh jika area resistance/support kuat sudah dekat.`;
+    try {
+      let keySlots: any[] = [];
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("ai_council_keys_10");
+        if (saved) {
+          try {
+            keySlots = JSON.parse(saved);
+          } catch {
+            keySlots = [];
+          }
+        }
+      }
+
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userQuery: query,
+          symbol,
+          price,
+          timeframe,
+          keySlots,
+          agentOpinions,
+          signal,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setUserMessages((prev) => [
+          ...prev,
+          {
+            sender: "System",
+            text: `[Error: ${data.error || "Gagal menghubungi model AI"}]`,
+            time: Date.now(),
+          },
+        ]);
+        return;
       }
 
       setUserMessages((prev) => [
         ...prev,
         {
-          sender: replyingAgent,
-          text: responseText,
-          time: Date.now(),
-          targetAgent: replyingAgent,
+          sender: data.sender || "Council AI",
+          text: data.text,
+          time: data.timestamp || Date.now(),
+          targetAgent: data.agentId,
         },
       ]);
-    }, 900);
+    } catch (err: any) {
+      setUserMessages((prev) => [
+        ...prev,
+        {
+          sender: "System",
+          text: `[Network Error: ${err?.message || "Tidak dapat terhubung"}]`,
+          time: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsAskingAi(false);
+    }
   };
 
   const filteredMessages = messages.filter((m) => activeTab === "all" || m.round === activeTab);
@@ -262,7 +306,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
           );
         })}
 
-        {/* Live Typing Indicator */}
+        {/* Live Typing Indicator for Debate Stream */}
         {typingIndex >= 0 && (
           <div className="flex items-center gap-2 p-2 rounded-md bg-zinc-900/40 border border-zinc-800/60 text-zinc-400 text-[10px] font-mono">
             <span className="flex gap-1 items-center">
@@ -271,6 +315,18 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
             </span>
             <span>Dewan AI sedang menanggapi & memperdebatkan argumen...</span>
+          </div>
+        )}
+
+        {/* Real Live LLM Thinking Indicator when user asks question */}
+        {isAskingAi && (
+          <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-950/30 border border-emerald-800/50 text-emerald-300 text-[10px] font-mono animate-pulse">
+            <span className="flex gap-1 items-center">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
+            </span>
+            <span>Menghubungi otak model AI... sedang merumuskan jawaban kuantitatif live</span>
           </div>
         )}
 
@@ -283,17 +339,18 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
           type="text"
           value={userQuery}
           onChange={(e) => setUserQuery(e.target.value)}
-          placeholder="Tanyakan sesuatu ke dewan AI (misal: '@Agen 5 kenapa SL gak dilebarin?')..."
-          className="flex-1 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-600 font-sans"
+          disabled={isAskingAi}
+          placeholder="Tanyakan / debatkan langsung ke dewan AI (misal: '@Agent 5 kenapa SL gak dilebarin?')..."
+          className="flex-1 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-600 font-sans disabled:opacity-50"
         />
         <Button
           type="submit"
           size="sm"
-          disabled={!userQuery.trim()}
+          disabled={!userQuery.trim() || isAskingAi}
           className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
         >
           <Send className="h-3 w-3 mr-1" />
-          Kirim
+          {isAskingAi ? "Menjawab..." : "Kirim"}
         </Button>
       </form>
     </div>

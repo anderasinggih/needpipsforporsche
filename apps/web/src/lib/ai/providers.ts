@@ -112,15 +112,16 @@ const readErrorMessage = async (res: Response, provider: string): Promise<string
 export const callProvider = async (
   slot: KeySlotPayload,
   prompt: string,
-  opts: { timeoutMs?: number; maxOutputTokens?: number } = {},
+  opts: { timeoutMs?: number; maxOutputTokens?: number; json?: boolean } = {},
 ): Promise<any> => {
-  const { timeoutMs = 16000, maxOutputTokens = 1400 } = opts;
+  const { timeoutMs = 16000, maxOutputTokens = 1400, json = true } = opts;
   const apiKey = slot.apiKey.trim();
   if (!apiKey) throw new ProviderError("API Key kosong");
 
   const model = sanitizeModel(slot.provider, slot.model);
-  const jsonHint =
-    "KEMBALIKAN HANYA JSON VALID MURNI TANPA KATA PENGANTAR DAN TANPA CODE BLOCK:";
+  const jsonHint = json
+    ? "KEMBALIKAN HANYA JSON VALID MURNI TANPA KATA PENGANTAR DAN TANPA CODE BLOCK:"
+    : "";
 
   if (slot.provider === "gemini") {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -132,11 +133,11 @@ export const callProvider = async (
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${prompt}\n\n${jsonHint}` }] }],
+          contents: [{ role: "user", parts: [{ text: json ? `${prompt}\n\n${jsonHint}` : prompt }] }],
           generationConfig: {
             temperature: 0.25,
             maxOutputTokens,
-            responseMimeType: "application/json",
+            ...(json ? { responseMimeType: "application/json" } : {}),
           },
         }),
       },
@@ -145,7 +146,7 @@ export const callProvider = async (
     if (!res.ok) throw new ProviderError(await readErrorMessage(res, "Gemini"), res.status >= 500 || res.status === 429);
     const data = await res.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return extractJson(rawText);
+    return json ? extractJson(rawText) : rawText.trim();
   }
 
   const endpoints: Partial<Record<ProviderId, { url: string; jsonMode?: boolean; host: string }>> = {
@@ -160,11 +161,11 @@ export const callProvider = async (
 
   const body: Record<string, unknown> = {
     model,
-    messages: [{ role: "user", content: `${prompt}\n\n${jsonHint}` }],
+    messages: [{ role: "user", content: json ? `${prompt}\n\n${jsonHint}` : prompt }],
     temperature: 0.25,
     max_tokens: maxOutputTokens,
   };
-  if (endpoint.jsonMode) body.response_format = { type: "json_object" };
+  if (json && endpoint.jsonMode) body.response_format = { type: "json_object" };
 
   const res = await fetchWithTimeout(
     endpoint.url,
@@ -183,14 +184,15 @@ export const callProvider = async (
 
   if (!res.ok) throw new ProviderError(await readErrorMessage(res, endpoint.host), res.status >= 500 || res.status === 429);
   const data = await res.json();
-  return extractJson(data?.choices?.[0]?.message?.content || "");
+  const rawText = data?.choices?.[0]?.message?.content || "";
+  return json ? extractJson(rawText) : rawText.trim();
 };
 
 /** One silent retry for transient failures, then give up cleanly. */
 export const callProviderWithRetry = async (
   slot: KeySlotPayload,
   prompt: string,
-  opts: { timeoutMs?: number; budgetMs?: number } = {},
+  opts: { timeoutMs?: number; budgetMs?: number; json?: boolean } = {},
 ): Promise<any> => {
   try {
     return await callProvider(slot, prompt, opts);

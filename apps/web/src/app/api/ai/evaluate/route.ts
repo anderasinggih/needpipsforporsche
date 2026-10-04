@@ -537,98 +537,65 @@ const buildCouncilDiscussion = (o: {
     }
   }
 
-  // Fallback high-fidelity multi-agent debate synthesis if raw LLM response had no discussion
+  // If synthesizer did not return explicit discussion, build directly from live agents
   if (msgs.length === 0) {
     const active = o.agentOpinions.filter((a) => a.status === "active");
-    const bullAgents = active.filter((a) => a.bias === "BULLISH");
-    const bearAgents = active.filter((a) => a.bias === "BEARISH");
-    const neutralAgents = active.filter((a) => a.bias === "NEUTRAL");
-
     let t = o.currentUnix - 40;
-    let idx = 0;
 
-    // Round 1: Opening Pitches
-    if (bullAgents.length > 0) {
-      const b = bullAgents[0];
+    // Build genuine discussion messages from actual live agent opinions
+    for (const agent of active) {
+      if (agent.agentId === "slot_1") continue; // Chief synthesizes in the final ruling
       msgs.push({
-        id: `disc_${idx++}`,
-        agentId: b.agentId,
-        agentName: b.agentName,
-        role: b.role,
-        bias: "BULLISH",
-        avatarIcon: b.emotionIcon || "🟢",
+        id: `disc_${agent.agentId}_${Date.now()}`,
+        agentId: agent.agentId,
+        agentName: agent.agentName,
+        role: agent.role,
+        bias: agent.bias,
+        avatarIcon: agent.emotionIcon || (agent.bias === "BULLISH" ? "🟢" : agent.bias === "BEARISH" ? "🔴" : "⚖️"),
         round: "pitch",
-        message: `Melihat data harga di $${round(o.price)}, ${b.keyObservation}. Sinyal bullish terbentuk dan momentum condong ke atas.`,
-        timestamp: t += 6,
+        message: `${agent.keyObservation} ${agent.detailedAnalysis ? agent.detailedAnalysis.slice(0, 220) : ""}`.trim(),
+        timestamp: t += 4,
       });
     }
 
-    if (bearAgents.length > 0) {
-      const br = bearAgents[0];
-      msgs.push({
-        id: `disc_${idx++}`,
-        agentId: br.agentId,
-        agentName: br.agentName,
-        role: br.role,
-        bias: "BEARISH",
-        avatarIcon: br.emotionIcon || "🔴",
-        round: "pitch",
-        message: `Tunggu dulu, ${br.keyObservation}. Di level ini terdapat resistensi dan tekanan jual masih nyata.`,
-        timestamp: t += 7,
-      });
-    }
-
-    // Round 2: Rebuttal & Risk / Liquidity Cross-Challenge
-    if (neutralAgents.length > 0) {
-      const n = neutralAgents[0];
-      const targetName = bullAgents[0]?.agentName || bearAgents[0]?.agentName || "Dewan";
-      msgs.push({
-        id: `disc_${idx++}`,
-        agentId: n.agentId,
-        agentName: n.agentName,
-        role: n.role,
-        bias: "NEUTRAL",
-        avatarIcon: n.emotionIcon || "⚠️",
-        round: "rebuttal",
-        replyToAgentName: targetName,
-        message: `Saran saya waspada kepada @${targetName}: ${n.keyObservation}. Risk-reward belum optimal jika kita terburu-buru masuk sebelum validasi likuiditas bersih.`,
-        timestamp: t += 8,
-      });
-    }
-
-    if (active.length >= 3) {
-      const extra = active.find((a) => a.agentId !== msgs[0]?.agentId && a.agentId !== msgs[1]?.agentId && a.agentId !== msgs[2]?.agentId) || active[1];
-      if (extra) {
+    // Round 2: Active Rebuttal / Cross-Discussion if there are conflicting biases
+    const opposing = active.filter((a) => a.bias !== "NEUTRAL" && a.agentId !== "slot_1");
+    if (opposing.length >= 2) {
+      const bulls = opposing.filter((a) => a.bias === "BULLISH");
+      const bears = opposing.filter((a) => a.bias === "BEARISH");
+      if (bulls.length > 0 && bears.length > 0) {
+        const b = bulls[0];
+        const br = bears[0];
         msgs.push({
-          id: `disc_${idx++}`,
-          agentId: extra.agentId,
-          agentName: extra.agentName,
-          role: extra.role,
-          bias: extra.bias,
-          avatarIcon: extra.emotionIcon || "⚡",
+          id: `disc_reb_${br.agentId}`,
+          agentId: br.agentId,
+          agentName: br.agentName,
+          role: br.role,
+          bias: "BEARISH",
+          avatarIcon: br.emotionIcon || "⚠️",
           round: "rebuttal",
-          replyToAgentName: msgs[msgs.length - 1]?.agentName,
-          message: `Tambahan dari perspektif ${extra.role}: ${extra.detailedAnalysis.slice(0, 140)}... Kita harus disiplin pada invalidasi teknikal.`,
-          timestamp: t += 8,
+          replyToAgentName: b.agentName,
+          message: `Sanggahan untuk @${b.agentName}: Meskipun ada indikasi bullish, level risiko ${br.keyObservation}. Kita tidak bisa mengabaikan potensi rejection.`,
+          timestamp: t += 5,
         });
       }
     }
 
-    // Round 3: Chief Final Ruling
+    // Round 3: Chief Final Ruling from actual Chief agent analysis
     const chief = o.agentOpinions.find((a) => a.agentId === "slot_1") || o.agentOpinions[0];
-    msgs.push({
-      id: `disc_${idx++}`,
-      agentId: chief.agentId,
-      agentName: chief.agentName,
-      role: chief.role,
-      bias: o.consensus.decision === "WAIT" ? "NEUTRAL" : o.direction === "BULLISH" ? "BULLISH" : "BEARISH",
-      avatarIcon: chief.emotionIcon || "⚖️",
-      round: "ruling",
-      message: o.consensus.decision === "WAIT"
-        ? `Menimbang seluruh sanggahan dan risiko: Putusan dewan bulat menahan posisi (WAIT). Jangan memaksakan entry sampai pemicu struktural teruji.`
-        : `Kesimpulan konsensus disepakati: Eksekusi ${o.consensus.decision} dengan kontrol risiko ketat. Patuhi batas SL yang telah ditetapkan.`,
-      timestamp: t += 9,
-    });
+    if (chief) {
+      msgs.push({
+        id: `disc_ruling_${Date.now()}`,
+        agentId: chief.agentId,
+        agentName: chief.agentName,
+        role: chief.role,
+        bias: o.consensus.decision === "WAIT" ? "NEUTRAL" : o.direction === "BULLISH" ? "BULLISH" : "BEARISH",
+        avatarIcon: chief.emotionIcon || "⚖️",
+        round: "ruling",
+        message: chief.detailedAnalysis || chief.keyObservation,
+        timestamp: t += 5,
+      });
+    }
   }
 
   return msgs;

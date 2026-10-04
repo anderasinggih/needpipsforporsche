@@ -776,6 +776,9 @@ export default function DashboardPage() {
                     isEvaluating={isEvaluating}
                     symbol={activeSymbol}
                     timeframe={timeframe}
+                    price={currentCandle?.close || evaluation.entryPrice}
+                    agentOpinions={evaluation.agentOpinions}
+                    signal={evaluation.signal}
                   />
                 )}
 
