@@ -84,6 +84,7 @@ export interface EvaluationResult {
   agentOpinions?: AgentOpinion[];
   activeAgentCount?: number;
   offlineAgentCount?: number;
+  mtfMatrix?: Record<string, { tf: string; trend: "BULLISH" | "BEARISH"; rsi: number; smaFast: number; smaSlow: number; lastClose: number }>;
 }
 
 export default function DashboardPage() {
@@ -597,6 +598,55 @@ export default function DashboardPage() {
               <CardContent className="p-0 pt-3">
                 {evaluation ? (
                   <div className="space-y-3 text-xs leading-relaxed">
+                    {/* Multi-Timeframe Alignment Matrix (M1, M5, M15, H1) */}
+                    {evaluation.mtfMatrix && Object.keys(evaluation.mtfMatrix).length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-black border border-zinc-800">
+                        <div className="flex items-center justify-between text-[11px] mb-2 font-mono">
+                          <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                            Multi-Timeframe Trend Matrix
+                          </span>
+                          <span className="text-zinc-500 text-[10px]">
+                            Live Binance Sync &bull; M1 &bull; M5 &bull; M15 &bull; H1
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {["1M", "5M", "15M", "1H"].map((tfKey) => {
+                            const data = evaluation.mtfMatrix?.[tfKey];
+                            const isBull = data?.trend === "BULLISH";
+                            const isActiveTF = timeframe.toUpperCase() === tfKey;
+                            return (
+                              <div
+                                key={tfKey}
+                                className={`p-2 rounded border text-center transition-all ${
+                                  isActiveTF
+                                    ? "border-zinc-500 bg-zinc-900/90 shadow-sm"
+                                    : "border-zinc-800/80 bg-zinc-950"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 mb-0.5">
+                                  <span className="font-semibold text-zinc-200">{tfKey}</span>
+                                  {isActiveTF && (
+                                    <span className="text-[9px] text-cyan-400 font-normal">Active</span>
+                                  )}
+                                </div>
+                                <div
+                                  className={`text-[11px] font-semibold font-mono ${
+                                    isBull ? "text-emerald-400" : "text-red-400"
+                                  }`}
+                                >
+                                  {data ? (isBull ? "BULLISH" : "BEARISH") : "SYNCING"}
+                                </div>
+                                <div className="text-[9px] text-zinc-500 font-mono mt-0.5">
+                                  RSI: {data?.rsi ?? 50}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bounded Entry, SL, and TP Level Metrics with Exact Pips */}
                     {evaluation.entryPrice && (
                       <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black border border-zinc-800 font-mono">

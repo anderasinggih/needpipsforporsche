@@ -212,6 +212,15 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
   useEffect(() => {
     isDataSetRef.current = false;
+    // Clear old timeframe overlays so new timeframe redraws with accurate coordinates
+    if (chartRef.current) {
+      lineSeriesMap.current.forEach((line) => {
+        try {
+          chartRef.current?.removeSeries(line);
+        } catch (e) {}
+      });
+      lineSeriesMap.current.clear();
+    }
   }, [symbol, timeframe]);
 
   useEffect(() => {
@@ -440,12 +449,28 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
 
       const timeScale = chart.timeScale();
-      const lastTime = historicalCandles[historicalCandles.length - 1]?.time || Math.floor(Date.now() / 1000);
-      const startTime = aiSignal.positionBox?.startTime || (lastTime - 60 * 4);
-      const endTime = aiSignal.positionBox?.endTime || (startTime + 60 * 18);
+      const lastCandle = historicalCandles[historicalCandles.length - 1];
+      const prevCandle = historicalCandles.length > 1 ? historicalCandles[historicalCandles.length - 2] : null;
+      const lastTime = lastCandle?.time || Math.floor(Date.now() / 1000);
 
-      const x1 = timeScale.timeToCoordinate(startTime as any);
-      const x2 = timeScale.timeToCoordinate(endTime as any);
+      // Detect candle spacing interval dynamically from historical data for seamless multi-timeframe scaling
+      const candleIntervalSec = (prevCandle && lastCandle) ? Math.max(1, lastCandle.time - prevCandle.time) : 60;
+      
+      // Keep box bounded to ~4 candles in the past and ~14 candles in the future on ANY timeframe (M1, M5, M15, H1)
+      const startTime = aiSignal.positionBox?.startTime || (lastTime - candleIntervalSec * 4);
+      const endTime = aiSignal.positionBox?.endTime || (startTime + candleIntervalSec * 16);
+
+      let x1 = timeScale.timeToCoordinate(startTime as any) as number | null;
+      let x2 = timeScale.timeToCoordinate(endTime as any) as number | null;
+
+      // Robust fallback if time falls outside visible range on different timeframe
+      const lastCoord = timeScale.timeToCoordinate(lastTime as any) as number | null;
+      if (x1 === null && lastCoord !== null) {
+        x1 = Math.max(20, lastCoord - 80);
+      }
+      if (x2 === null && lastCoord !== null) {
+        x2 = Math.min(width - 20, lastCoord + 140);
+      }
 
       const yEntry = candleSeries.priceToCoordinate(aiSignal.entryPrice);
       const yTP = candleSeries.priceToCoordinate(aiSignal.takeProfit);
@@ -456,7 +481,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
 
       const boxLeft = Math.min(x1, x2);
-      const boxWidth = Math.max(Math.abs(x2 - x1), 100);
+      const boxWidth = Math.max(Math.abs(x2 - x1), 110);
       const isLong = (aiSignal.signal || "BUY") === "BUY";
 
       // 1. Draw Target (Green) Profit Box

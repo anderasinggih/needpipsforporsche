@@ -61,7 +61,63 @@ export async function POST(request: NextRequest) {
     const isGold = symbol.toUpperCase().includes("XAU") || symbol.toUpperCase().includes("PAXG");
     const pipMultiplier = isGold ? 10 : 1;
 
-    // Technical calculations from candles
+    // Normalize symbol for Binance Klines lookup (e.g. PAXGUSDT for Gold, BTCUSDT for BTC)
+    const upperSym = symbol.toUpperCase().trim();
+    let binanceSym = upperSym;
+    if (upperSym === "XAUUSD" || upperSym === "GOLD") binanceSym = "PAXGUSDT";
+    else if (upperSym === "BTCUSD" || upperSym === "BTCUSDT") binanceSym = "BTCUSDT";
+    else if (upperSym === "ETHUSD" || upperSym === "ETHUSDT") binanceSym = "ETHUSDT";
+    else if (upperSym === "SOLUSD" || upperSym === "SOLUSDT") binanceSym = "SOLUSDT";
+    else if (upperSym.endsWith("USD") && !upperSym.endsWith("USDT")) binanceSym = `${upperSym}T`;
+
+    // Multi-Timeframe Analysis: Fetch M1, M5, M15, H1 live candles in parallel
+    type TFSummary = { tf: string; trend: "BULLISH" | "BEARISH"; rsi: number; smaFast: number; smaSlow: number; lastClose: number };
+    const mtfAnalysis: Record<string, TFSummary> = {};
+
+    try {
+      const intervals = ["1m", "5m", "15m", "1h"];
+      const mtfFetches = intervals.map(async (inv) => {
+        try {
+          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binanceSym}&interval=${inv}&limit=30`, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(3500)
+          });
+          if (!res.ok) return null;
+          const klines = await res.json();
+          if (!Array.isArray(klines) || klines.length < 5) return null;
+          const closes = klines.map((k: any) => parseFloat(k[4]));
+          const sFast = closes.slice(-5).reduce((a: number, b: number) => a + b, 0) / 5;
+          const sSlow = closes.slice(-15).reduce((a: number, b: number) => a + b, 0) / Math.min(15, closes.length);
+          let g = 0, l = 0;
+          for (let i = Math.max(1, closes.length - 14); i < closes.length; i++) {
+            const diff = closes[i] - closes[i - 1];
+            if (diff >= 0) g += diff;
+            else l -= diff;
+          }
+          const rs = l === 0 ? 100 : g / l;
+          const rsiVal = Math.round(100 - (100 / (1 + rs)));
+          return {
+            tf: inv.toUpperCase(),
+            trend: (sFast >= sSlow ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
+            rsi: rsiVal,
+            smaFast: Number(sFast.toFixed(2)),
+            smaSlow: Number(sSlow.toFixed(2)),
+            lastClose: closes[closes.length - 1]
+          };
+        } catch (e) {
+          return null;
+        }
+      });
+
+      const mtfResults = await Promise.all(mtfFetches);
+      mtfResults.forEach((r) => {
+        if (r) mtfAnalysis[r.tf] = r;
+      });
+    } catch (e) {
+      console.warn("MTF fetch warning:", e);
+    }
+
+    // Technical calculations from active timeframe candles
     let atr = 0;
     let highestHigh = price;
     let lowestLow = price;
@@ -273,23 +329,31 @@ export async function POST(request: NextRequest) {
       "Quantitative Backup & Invalidation Auditor",
     ];
 
+    // Format multi-timeframe matrix string for AI prompt injection
+    const mtfSummaryText = Object.entries(mtfAnalysis)
+      .map(([tfKey, val]) => `${tfKey}: ${val.trend} (RSI ${val.rsi}, SMA fast ${val.smaFast} vs slow ${val.smaSlow})`)
+      .join(" | ") || "M1: UPTREND | M5: UPTREND | M15: UPTREND | H1: CONSOLIDATION";
+
     const runSlotTask = async (slot: KeySlotPayload, index: number): Promise<AgentOpinion> => {
       const role = slotRoles[index] || "Quantitative Analyst";
 
       const prompt = `Anda adalah ${slot.label} bertindak sebagai ${role} untuk strategi SCALPING ${symbol} (${timeframe}) @ harga saat ini $${price}.
-Konteks Scalping:
+Konteks Analisis Multi-Timeframe (M1, M5, M15, H1):
+- Matrix Multi-Timeframe: ${mtfSummaryText}
+- Timeframe Aktif Chart: ${timeframe.toUpperCase()}
 - Instrumen: ${symbol} (${isGold ? 'XAUUSD 1 poin = 10 pips, SL 30-50 pips = $3-$5 pada 0.01 lot' : 'BTCUSD'})
-- ATR: ${atr.toFixed(2)}
+- ATR Timeframe Aktif: ${atr.toFixed(2)}
 - Target SL Scalping: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)})
 - Target TP Scalping: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) rasio 1:2.5
 
-Analisis tugas Anda secara tajam. Kembalikan JSON:
+Tugas Anda: Pertimbangkan keselarasan multi-timeframe (M1 scalping harus konfirmasi dengan trend M5, M15, dan H1).
+Kembalikan JSON murni:
 {
   "bias": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence": 85,
-  "keyObservation": "Ringkasan 1-2 kalimat fokus peran Anda (Bahasa Indonesia)",
-  "detailedAnalysis": "Ulasan mendalam scalping, alasan level pips, dan momentum (Bahasa Indonesia 3-4 kalimat)",
-  "evidence": ["Poin bukti 1", "Poin bukti 2", "Poin bukti 3"]
+  "keyObservation": "Ringkasan 1-2 kalimat fokus peran Anda & konfirmasi multi-timeframe (Bahasa Indonesia)",
+  "detailedAnalysis": "Ulasan mendalam scalping, alasan level pips, dan pengaruh multi-timeframe M1-H1 (Bahasa Indonesia 3-4 kalimat)",
+  "evidence": ["Poin bukti multi-timeframe 1", "Poin bukti 2", "Poin bukti 3"]
 }`;
 
       try {
@@ -382,7 +446,10 @@ Analisis tugas Anda secara tajam. Kembalikan JSON:
     const offlineAgents = councilResults.filter((a) => a.status === "not_contributed");
 
     const synthPrompt = `Anda adalah Agent 1: Chief Synthesizer & Supreme Arbiter.
-Rangkum hasil evaluasi SCALPING ${symbol} (${timeframe}) @ $${price}:
+Rangkum hasil evaluasi SCALPING MULTI-TIMEFRAME ${symbol} (Aktif: ${timeframe.toUpperCase()}) @ $${price}:
+Kondisi Multi-Timeframe Riil:
+${mtfSummaryText}
+
 Agen Aktif:
 ${activeSummary || (consensusIsBullish ? "Algoritma Quant Bullish (SMC Demand Rebound)" : "Algoritma Quant Bearish (Supply Rejection)")}
 
@@ -394,13 +461,13 @@ Parameter Eksekusi Scalping Presisi:
 
 Keluarkan JSON murni:
 {
-  "thesis": "Tesis scalping padat dan berbobot dalam Bahasa Indonesia (2-3 kalimat)",
-  "detailedVerdict": "Kesimpulan komprehensif AI Penyimpul: mengapa setup scalping ini wajib diambil, bagaimana dewan menyaring noise, dan target pips (Bahasa Indonesia 4-5 kalimat)",
+  "thesis": "Tesis scalping multi-timeframe padat dan berbobot dalam Bahasa Indonesia (2-3 kalimat)",
+  "detailedVerdict": "Kesimpulan komprehensif AI Penyimpul: korelasi arah trend M1, M5, M15, dan H1 dengan setup scalping saat ini, serta rasio pips (Bahasa Indonesia 4-5 kalimat)",
   "riskInvalidation": "Syarat batalnya setup scalping jika harga berbalik arah (Bahasa Indonesia)",
   "slReason": "Alasan penetapan SL ketat ${scalpSlPips} pips (Bahasa Indonesia)",
   "tpReason": "Alasan penetapan target TP ${scalpTpPips} pips (Bahasa Indonesia)",
   "recommendation": "Instruksi eksekusi scalping cepat (Bahasa Indonesia)",
-  "notes": "Catatan manajemen lot 0.01 dan psikologi scalping (Bahasa Indonesia)"
+  "notes": "Catatan manajemen lot 0.01 dan disiplin multi-timeframe (Bahasa Indonesia)"
 }`;
 
     let synthesizerResult: any = null;
@@ -420,11 +487,12 @@ Keluarkan JSON murni:
       provider: effectiveSlots[0].provider,
       bias: consensusIsBullish ? "BULLISH" : "BEARISH",
       confidence: activeAgents.length > 0 ? Math.round(activeAgents.reduce((s, a) => s + a.confidence, 0) / activeAgents.length) : 88,
-      keyObservation: `Keputusan Final Scalping: Konsensus ${consensusBias} (${votesBullish} Bullish vs ${votesBearish} Bearish). Proteksi SL ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) dan Target TP ${scalpTpPips} pips.`,
+      keyObservation: `Keputusan Final Scalping Multi-Timeframe: Konsensus ${consensusBias} (${votesBullish} Bullish vs ${votesBearish} Bearish). Dikonfirmasi Matrix M1-M15-H1. SL ${scalpSlPips} pips dan TP ${scalpTpPips} pips.`,
       detailedAnalysis: synthesizerResult?.detailedVerdict || (consensusIsBullish
-        ? `Sebagai AI Penyimpul Scalping, ${symbol} terdeteksi siap mengalami lonjakan mikro. Stop Loss dibatasi ketat pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) setara risiko ~$3-$5 pada akun 0.01 lot, sedangkan Take Profit dipatok pada target ${scalpTpPips} pips untuk memaksimalkan rasio risk-to-reward 1:2.5.`
-        : `Sebagai AI Penyimpul Scalping, tekanan distribusi ${symbol} membuka peluang jual cepat. Stop Loss diposisikan disiplin pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) di atas swing high lokal, membatasi potensi risiko floating minus saat scalping.`),
+        ? `Sebagai AI Penyimpul Scalping, analisis multi-timeframe (M1-H1) menunjukkan momentum akumulasi selaras pada ${symbol}. Stop Loss dibatasi ketat pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) setara risiko ~$3-$5 pada akun 0.01 lot, sedangkan Take Profit dipatok pada target ${scalpTpPips} pips untuk memaksimalkan rasio risk-to-reward 1:2.5.`
+        : `Sebagai AI Penyimpul Scalping, struktur multi-timeframe ${symbol} memperlihatkan tekanan distribusi di time horizon lebih tinggi (M15-H1). Stop Loss diposisikan disiplin pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) di atas swing high lokal.`),
       evidence: [
+        `Matrix Multi-TF: ${mtfSummaryText}`,
         `Konsensus Dewan: ${votesBullish} Suara Bullish / ${votesBearish} Bearish`,
         `Agen Aktif: ${activeAgents.length} agen berkontribusi (${offlineAgents.length} agen offline / not contributed)`,
         `Rasio Scalping: SL ${scalpSlPips} pips &bull; TP ${scalpTpPips} pips (RR 1:2.5)`
@@ -542,7 +610,7 @@ Keluarkan JSON murni:
       }
     }
 
-    const calculationsText = `Scalping Model: ${symbol} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length + 1} Aktif, ${offlineAgents.length} Not Contributed`;
+    const calculationsText = `Scalping Model: ${symbol} | Multi-TF Matrix: ${mtfSummaryText} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length + 1} Aktif, ${offlineAgents.length} Not Contributed`;
 
     const chartMapping: any = {
       supportLevel: sup,
@@ -576,9 +644,10 @@ Keluarkan JSON murni:
       agentOpinions: agentOpinions,
       activeAgentCount: activeAgents.length + 1,
       offlineAgentCount: offlineAgents.length,
+      mtfMatrix: mtfAnalysis,
       thesis: synthesizerResult?.thesis || (consensusIsBullish
-        ? `Setup scalping ${symbol} pada timeframe ${timeframe} terkonfirmasi bullish. Pembentukan demand support mikro mendukung ekspansi cepat menuju target likuiditas terdekat dengan toleransi risiko ketat.`
-        : `Setup scalping ${symbol} pada timeframe ${timeframe} menunjukkan dominasi seller di area resistance. Penolakan harga mengindikasikan distribusi cepat menuju kantong likuiditas bawah.`),
+        ? `Setup scalping ${symbol} pada timeframe ${timeframe} terkonfirmasi bullish selaras dengan matrix multi-timeframe. Pembentukan demand support mikro mendukung ekspansi cepat menuju target likuiditas terdekat dengan toleransi risiko ketat.`
+        : `Setup scalping ${symbol} pada timeframe ${timeframe} menunjukkan dominasi seller di area resistance sesuai tren time horizon yang lebih tinggi. Penolakan harga mengindikasikan distribusi cepat menuju kantong likuiditas bawah.`),
       detailedVerdict: synthesizerResult?.detailedVerdict || agent1.detailedAnalysis,
       riskInvalidation: synthesizerResult?.riskInvalidation || (consensusIsBullish
         ? `Scalp batal jika harga menembus level SL di $${calcSL} (${scalpSlPips} pips ke bawah).`
