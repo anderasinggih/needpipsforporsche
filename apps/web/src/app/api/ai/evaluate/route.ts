@@ -107,8 +107,18 @@ export async function POST(request: NextRequest) {
     const isBullishBaseline = smaFast >= smaSlow;
 
     // Scalping Constraints as specified:
-    // Gold SL: 30-50 pips ($3.00 - $5.00) = $3 - $5 risk per 0.01 lot
-    const scalpSlPips = isGold ? Math.min(50, Math.max(30, Math.round(atr * pipMultiplier * 1.2))) : Math.round(atr * 1.5);
+    // Gold & Crypto SL: strictly 30-50 pips (never too small like 14 pips or 3 pips)
+    // 30-50 pips = $3 - $5 risk per 0.01 lot on Gold
+    let scalpSlPips = 35;
+    if (isGold) {
+      const calculated = Math.round(atr * pipMultiplier * 1.5);
+      scalpSlPips = Math.min(50, Math.max(30, calculated || 35));
+    } else {
+      // BTC scalping: enforce at least 35 to 50 pips ($35-$50)
+      const calculated = Math.round(atr * 1.5);
+      scalpSlPips = Math.min(50, Math.max(35, calculated || 35));
+    }
+
     const scalpSlPriceDist = isGold ? scalpSlPips / 10 : scalpSlPips;
     const scalpTpPriceDist = Number((scalpSlPriceDist * 2.5).toFixed(2));
     const scalpTpPips = Math.round(scalpTpPriceDist * pipMultiplier);
@@ -444,7 +454,12 @@ Keluarkan JSON murni:
     }
 
     // -------------------------------------------------------------
-    // GENERATE AI TOOLS MAPPING: XABCD Harmonic & Fibonacci Levels
+    // ADAPTIVE CHART TOOL SELECTION & SWING PIVOT DETECTION
+    // Do NOT force arbitrary XABCD on every chart!
+    // Detect market condition:
+    // 1. Trending market -> Dynamic Trendline from genuine swing point to current price
+    // 2. Retracement / Range -> Fibonacci Golden Pocket (0.5 - 0.618)
+    // 3. Genuine Harmonic Pivot -> ONLY if at least 25 candles with distinct swing pivots exist
     // -------------------------------------------------------------
     const fibRange = Math.abs(highestHigh - lowestLow) || (atr * 4);
     const fibBase = lowestLow;
@@ -456,31 +471,98 @@ Keluarkan JSON murni:
       { ratio: 0.786, label: "78.6%", price: Number((fibBase + fibRange * 0.786).toFixed(2)) },
     ];
 
-    // XABCD Harmonic Pattern points
-    const harmonicSpan = tfSeconds * 20;
-    const harmonicPoints: HarmonicPoint[] = consensusIsBullish
-      ? [
-          { label: "X", time: currentUnix - harmonicSpan, price: Number((price - atr * 2).toFixed(2)) },
-          { label: "A", time: currentUnix - Math.floor(harmonicSpan * 0.75), price: Number((price + atr * 2.2).toFixed(2)) },
-          { label: "B", time: currentUnix - Math.floor(harmonicSpan * 0.5), price: Number((price - atr * 0.5).toFixed(2)) },
-          { label: "C", time: currentUnix - Math.floor(harmonicSpan * 0.25), price: Number((price + atr * 1.5).toFixed(2)) },
-          { label: "D", time: currentUnix, price: calcEntry },
-        ]
-      : [
-          { label: "X", time: currentUnix - harmonicSpan, price: Number((price + atr * 2).toFixed(2)) },
-          { label: "A", time: currentUnix - Math.floor(harmonicSpan * 0.75), price: Number((price - atr * 2.2).toFixed(2)) },
-          { label: "B", time: currentUnix - Math.floor(harmonicSpan * 0.5), price: Number((price + atr * 0.5).toFixed(2)) },
-          { label: "C", time: currentUnix - Math.floor(harmonicSpan * 0.25), price: Number((price - atr * 1.5).toFixed(2)) },
-          { label: "D", time: currentUnix, price: calcEntry },
-        ];
-
-    const harmonicPattern: HarmonicPattern = {
-      name: consensusIsBullish ? "Bullish Gartley" : "Bearish Bat",
-      type: consensusIsBullish ? "BULLISH" : "BEARISH",
-      points: harmonicPoints,
+    // Find actual swing highs and swing lows from historical candles for realistic trendline
+    let trendlineStart = {
+      time: candles.length > 10 ? candles[candles.length - 10].time : currentUnix - 600,
+      price: consensusIsBullish ? lowestLow : highestHigh,
     };
 
+    if (candles.length >= 15) {
+      if (consensusIsBullish) {
+        let minC = candles[0];
+        for (let i = 0; i < candles.length - 2; i++) {
+          if (candles[i].low < minC.low) minC = candles[i];
+        }
+        trendlineStart = { time: minC.time, price: minC.low };
+      } else {
+        let maxC = candles[0];
+        for (let i = 0; i < candles.length - 2; i++) {
+          if (candles[i].high > maxC.high) maxC = candles[i];
+        }
+        trendlineStart = { time: maxC.time, price: maxC.high };
+      }
+    }
+
+    // Determine if condition warrants a real harmonic pattern or dynamic trendline
+    // Harmonic patterns should only appear when there are sufficient genuine swing points
+    let harmonicPattern: HarmonicPattern | undefined = undefined;
+
+    // Detect actual swing pivots for harmonic if there are >= 30 candles
+    if (candles.length >= 30) {
+      const segmentSize = Math.floor((candles.length - 1) / 4);
+      if (segmentSize >= 3) {
+        const seg0 = candles.slice(0, segmentSize);
+        const seg1 = candles.slice(segmentSize, segmentSize * 2);
+        const seg2 = candles.slice(segmentSize * 2, segmentSize * 3);
+        const seg3 = candles.slice(segmentSize * 3, candles.length - 1);
+
+        const pX = consensusIsBullish
+          ? seg0.reduce((min, c) => (c.low < min.low ? c : min), seg0[0])
+          : seg0.reduce((max, c) => (c.high > max.high ? c : max), seg0[0]);
+
+        const pA = consensusIsBullish
+          ? seg1.reduce((max, c) => (c.high > max.high ? c : max), seg1[0])
+          : seg1.reduce((min, c) => (c.low < min.low ? c : min), seg1[0]);
+
+        const pB = consensusIsBullish
+          ? seg2.reduce((min, c) => (c.low < min.low ? c : min), seg2[0])
+          : seg2.reduce((max, c) => (c.high > max.high ? c : max), seg2[0]);
+
+        const pC = consensusIsBullish
+          ? seg3.reduce((max, c) => (c.high > max.high ? c : max), seg3[0])
+          : seg3.reduce((min, c) => (c.low < min.low ? c : min), seg3[0]);
+
+        const isValidHarmonicSwings = consensusIsBullish
+          ? pA.high > pX.low && pB.low < pA.high && pB.low > pX.low && pC.high > pB.low
+          : pA.low < pX.high && pB.high > pA.low && pB.high < pX.high && pC.low < pB.high;
+
+        if (isValidHarmonicSwings) {
+          harmonicPattern = {
+            name: consensusIsBullish ? "Gartley Pattern" : "Bat Pattern",
+            type: consensusIsBullish ? "BULLISH" : "BEARISH",
+            points: [
+              { label: "X", time: pX.time, price: consensusIsBullish ? pX.low : pX.high },
+              { label: "A", time: pA.time, price: consensusIsBullish ? pA.high : pA.low },
+              { label: "B", time: pB.time, price: consensusIsBullish ? pB.low : pB.high },
+              { label: "C", time: pC.time, price: consensusIsBullish ? pC.high : pC.low },
+              { label: "D", time: currentUnix, price: calcEntry },
+            ],
+          };
+        }
+      }
+    }
+
     const calculationsText = `Scalping Model: ${symbol} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length + 1} Aktif, ${offlineAgents.length} Not Contributed`;
+
+    const chartMapping: any = {
+      supportLevel: sup,
+      resistanceLevel: res,
+      trendDirection: consensusIsBullish ? "UPTREND" : "DOWNTREND",
+      trendlineStart: trendlineStart,
+      trendlineEnd: {
+        time: currentUnix,
+        price: calcEntry,
+      },
+      fibonacciRetracement: {
+        high: { time: currentUnix - tfSeconds * 15, price: highestHigh },
+        low: { time: currentUnix - tfSeconds * 15, price: lowestLow },
+        levels: fibLevels,
+      },
+    };
+
+    if (harmonicPattern) {
+      chartMapping.harmonicPattern = harmonicPattern;
+    }
 
     const responseData = {
       signal: consensusBias,
@@ -504,25 +586,7 @@ Keluarkan JSON murni:
       slReason: synthesizerResult?.slReason || `SL dipatok disiplin ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) untuk menjaga risiko per 0.01 lot tetap di kisaran $3 - $5.`,
       tpReason: synthesizerResult?.tpReason || `TP ditargetkan ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) dengan rasio 1:2.5 guna menghasilkan profit asimetris.`,
       calculations: calculationsText,
-      chartMapping: {
-        supportLevel: sup,
-        resistanceLevel: res,
-        trendDirection: consensusIsBullish ? "UPTREND" : "DOWNTREND",
-        trendlineStart: {
-          time: candles.length > 0 ? candles[0].time : currentUnix - 3600,
-          price: consensusIsBullish ? sup : res,
-        },
-        trendlineEnd: {
-          time: currentUnix,
-          price: calcEntry,
-        },
-        fibonacciRetracement: {
-          high: { time: currentUnix - tfSeconds * 15, price: highestHigh },
-          low: { time: currentUnix - tfSeconds * 15, price: lowestLow },
-          levels: fibLevels,
-        },
-        harmonicPattern: harmonicPattern,
-      },
+      chartMapping: chartMapping,
       positionBox: {
         startTime: currentUnix,
         endTime: currentUnix + tfSeconds * 12,

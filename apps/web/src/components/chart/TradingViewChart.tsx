@@ -297,7 +297,38 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 2. XABCD Harmonic Pattern Mapping Tool
+    // 2. Dynamic Trendline (when market is trending)
+    if (aiMapping?.trendlineStart && aiMapping?.trendlineEnd) {
+      const trendId = "ai_dynamic_trendline";
+      activeOverlayIds.add(trendId);
+      if (!lineMap.has(trendId)) {
+        const isUp = (aiSignal?.signal || "BUY") === "BUY";
+        const trendLine = chartRef.current.addLineSeries({
+          color: isUp ? "#10B981" : "#EF4444",
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        trendLine.setData([
+          { time: aiMapping.trendlineStart.time as any, value: aiMapping.trendlineStart.price },
+          { time: aiMapping.trendlineEnd.time as any, value: aiMapping.trendlineEnd.price },
+        ]);
+        trendLine.setMarkers([
+          {
+            time: aiMapping.trendlineStart.time as any,
+            position: isUp ? "belowBar" : "aboveBar",
+            color: isUp ? "#10B981" : "#EF4444",
+            shape: "circle",
+            text: isUp ? "Swing Low" : "Swing High",
+          },
+        ]);
+        lineMap.set(trendId, trendLine);
+      }
+    }
+
+    // 3. XABCD Harmonic Pattern Mapping Tool (Only rendered if genuine swing pivots were found)
     if (aiMapping?.harmonicPattern?.points && aiMapping.harmonicPattern.points.length >= 5) {
       const pts = aiMapping.harmonicPattern.points;
       const isHarmonicBullish = aiMapping.harmonicPattern.type === "BULLISH";
@@ -344,7 +375,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 3. Fibonacci Retracement Levels (Bounded short horizontal lines around recent candles)
+    // 4. Fibonacci Retracement Levels (Bounded short horizontal lines around recent candles)
     if (aiMapping?.fibonacciRetracement?.levels && aiMapping.fibonacciRetracement.levels.length > 0) {
       const fib = aiMapping.fibonacciRetracement;
       const fibStart = Math.min(fib.high.time, fib.low.time);
@@ -458,8 +489,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // 4. Corner Drag / Grip Handles (Blue square grips like TradingView screenshot 2)
-      const handleSize = 7;
+      // 4. Corner Drag / Grip Handles (Blue square grips like TradingView)
+      const handleSize = 6;
       const drawGrip = (x: number, y: number) => {
         ctx.fillStyle = "#2962FF";
         ctx.strokeStyle = "#FFFFFF";
@@ -476,31 +507,37 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       drawGrip(boxLeft, ySL);
       drawGrip(boxLeft + boxWidth, ySL);
 
-      // 5. Middle Floating TradingView PnL & Risk/Reward Badge (Exactly like screenshot 2)
+      // 5. Floating TradingView PnL & Risk/Reward Badge
+      // Positioned to the RIGHT or offset so it NEVER covers active candlesticks!
       const rewardDist = Math.abs(aiSignal.takeProfit - aiSignal.entryPrice);
       const riskDist = Math.max(0.01, Math.abs(aiSignal.entryPrice - aiSignal.stopLoss));
       const rrRatio = (rewardDist / riskDist).toFixed(2);
       const tpPipsText = aiSignal.tpPips ? `${aiSignal.tpPips} pips` : `${(rewardDist * 10).toFixed(0)} pips`;
       const slPipsText = aiSignal.slPips ? `${aiSignal.slPips} pips` : `${(riskDist * 10).toFixed(0)} pips`;
 
-      // Badge Container at Middle Entry Line
       const badgeText1 = `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
       const badgeText2 = `Rasio Risk/Reward: 1:${rrRatio}`;
 
-      ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
       const w1 = ctx.measureText(badgeText1).width;
       const w2 = ctx.measureText(badgeText2).width;
-      const badgeW = Math.max(w1, w2) + 24;
-      const badgeH = 38;
-      const badgeX = boxLeft + (boxWidth - badgeW) / 2;
+      const badgeW = Math.max(w1, w2) + 16;
+      const badgeH = 34;
+
+      // Place badge at right edge of the position box so the actual candle columns remain completely clear
+      // If position box touches right screen boundary, nudge leftwards inside box boundary
+      let badgeX = boxLeft + boxWidth + 8;
+      if (badgeX + badgeW > width - 10) {
+        badgeX = Math.max(10, boxLeft + boxWidth - badgeW - 6);
+      }
       const badgeY = yEntry - badgeH / 2;
 
       // Rounded background pill
       ctx.fillStyle = isLong ? "rgba(8, 153, 129, 0.95)" : "rgba(242, 54, 69, 0.95)";
       ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6) : ctx.rect(badgeX, badgeY, badgeW, badgeH);
+      ctx.roundRect ? ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 5) : ctx.rect(badgeX, badgeY, badgeW, badgeH);
       ctx.fill();
       ctx.stroke();
 
@@ -508,8 +545,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(badgeText1, badgeX + badgeW / 2, badgeY + 12);
-      ctx.fillText(badgeText2, badgeX + badgeW / 2, badgeY + 26);
+      ctx.fillText(badgeText1, badgeX + badgeW / 2, badgeY + 11);
+      ctx.fillText(badgeText2, badgeX + badgeW / 2, badgeY + 23);
     };
 
     const loop = () => {
