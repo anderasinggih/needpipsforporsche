@@ -40,52 +40,139 @@ import {
   AlertCircle,
   Zap,
 } from "lucide-react";
+import type {
+  AgentOpinion,
+  Bias,
+  ConsensusResult,
+  EmotionalState,
+  Emotion,
+  EmotionTone,
+  EvaluationResult,
+  Expectancy,
+  ExecutionPlan,
+  MtfConfluence,
+  RiskPlan,
+  TechnicalContext,
+} from "@/lib/ai/types";
 
-export interface AgentOpinion {
-  agentId: string;
-  agentName: string;
-  role: string;
-  modelUsed: string;
-  provider: string;
-  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
-  confidence: number;
-  keyObservation: string;
-  detailedAnalysis?: string;
-  evidence?: string[];
-  suggestedLevel?: { entry: number; sl: number; tp: number; slPips?: number; tpPips?: number };
-  status: "active" | "not_contributed";
-  errorMessage?: string;
-}
+export type { AgentOpinion, EvaluationResult } from "@/lib/ai/types";
 
-export interface EvaluationResult {
+// Historic logs are persisted in localStorage, so every new field must stay optional.
+export type EvaluationOutcome = "WIN" | "LOSE" | "WAIT" | "ACTIVE";
+
+export type StoredEvaluation = Partial<EvaluationResult> & {
   id?: string;
   timestamp?: number;
   symbol?: string;
   timeframe?: string;
   signal?: "BUY" | "SELL" | "WAIT";
+  confidence?: number;
+  thesis?: string;
+  riskInvalidation?: string;
+  recommendation?: string;
+  notes?: string;
   entryPrice?: number;
   stopLoss?: number;
   takeProfit?: number;
   slPips?: number;
   tpPips?: number;
-  riskRewardRatio?: string;
-  confidence: number;
-  thesis: string;
-  detailedVerdict?: string;
-  riskInvalidation: string;
-  slReason?: string;
-  tpReason?: string;
-  calculations?: string;
-  chartMapping?: AIMapping;
-  positionBox?: PositionBox;
-  predictiveTrajectory?: Array<{ time: number; price: number }>;
-  recommendation: string;
-  notes: string;
   agentOpinions?: AgentOpinion[];
-  activeAgentCount?: number;
-  offlineAgentCount?: number;
   mtfMatrix?: Record<string, { tf: string; trend: "BULLISH" | "BEARISH"; rsi: number; smaFast: number; smaSlow: number; lastClose: number }>;
+  outcome?: EvaluationOutcome;
+  resolvedPrice?: number;
+  resolvedAt?: number;
+};
+
+/**
+ * Determine trade outcome for a historical log given candles or current price.
+ */
+function resolveOutcome(
+  log: StoredEvaluation,
+  currentPrice?: number,
+  recentCandles?: { high: number; low: number; close: number; time?: number }[]
+): EvaluationOutcome {
+  if (log.outcome && log.outcome !== "ACTIVE") {
+    return log.outcome;
+  }
+  if (!log.signal || log.signal === "WAIT") {
+    return "WAIT";
+  }
+  if (!log.entryPrice || !log.stopLoss || !log.takeProfit) {
+    return "WAIT";
+  }
+
+  const { entryPrice, stopLoss, takeProfit, signal } = log;
+
+  // If we have recent historical candles after the setup timestamp:
+  if (recentCandles && recentCandles.length > 0) {
+    for (const c of recentCandles) {
+      if (signal === "BUY") {
+        if (c.high >= takeProfit && c.low <= stopLoss) {
+          // Both touched in the same candle: conservatively check close or treat as LOSE
+          return c.close >= takeProfit ? "WIN" : "LOSE";
+        }
+        if (c.high >= takeProfit) return "WIN";
+        if (c.low <= stopLoss) return "LOSE";
+      } else if (signal === "SELL") {
+        if (c.low <= takeProfit && c.high >= stopLoss) {
+          return c.close <= takeProfit ? "WIN" : "LOSE";
+        }
+        if (c.low <= takeProfit) return "WIN";
+        if (c.high >= stopLoss) return "LOSE";
+      }
+    }
+  }
+
+  // Fallback to current live price
+  if (currentPrice) {
+    if (signal === "BUY") {
+      if (currentPrice >= takeProfit) return "WIN";
+      if (currentPrice <= stopLoss) return "LOSE";
+    } else if (signal === "SELL") {
+      if (currentPrice <= takeProfit) return "WIN";
+      if (currentPrice >= stopLoss) return "LOSE";
+    }
+  }
+
+  return "ACTIVE";
 }
+
+const EMOTION_TONE_CLASS: Record<EmotionTone, string> = {
+  constructive: "border-emerald-800/70 bg-emerald-950/30 text-emerald-300",
+  neutral: "border-zinc-700 bg-zinc-900/70 text-zinc-300",
+  caution: "border-amber-800/70 bg-amber-950/30 text-amber-300",
+  destructive: "border-red-800/70 bg-red-950/30 text-red-300",
+};
+
+const METER_TONE_CLASS: Record<EmotionTone, string> = {
+  constructive: "bg-emerald-400",
+  neutral: "bg-zinc-400",
+  caution: "bg-amber-400",
+  destructive: "bg-red-400",
+};
+
+const MeterBar = ({
+  value,
+  tone = "neutral",
+  className = "",
+}: {
+  value: number;
+  tone?: EmotionTone;
+  className?: string;
+}) => (
+  <div className={`h-1.5 w-full overflow-hidden rounded-full bg-zinc-800 ${className}`}>
+    <div
+      className={`h-full rounded-full ${METER_TONE_CLASS[tone]}`}
+      style={{ width: `${Math.max(2, Math.min(100, value))}%` }}
+    />
+  </div>
+);
+
+const BIAS_LABEL: Record<Bias, string> = {
+  BULLISH: "Bullish",
+  BEARISH: "Bearish",
+  NEUTRAL: "Neutral",
+};
 
 export default function DashboardPage() {
   const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
@@ -99,6 +186,9 @@ export default function DashboardPage() {
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
 
+  // Configurable Target Risk-Reward Ratio (e.g. 1.5, 2.0, 2.5, 3.0)
+  const [targetRr, setTargetRr] = useState<number>(2.5);
+
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -108,7 +198,7 @@ export default function DashboardPage() {
   const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
 
   // Persistent AI Evaluation History Log
-  const [evalLogs, setEvalLogs] = useState<EvaluationResult[]>([]);
+  const [evalLogs, setEvalLogs] = useState<StoredEvaluation[]>([]);
 
   const rules = selectedSkill?.rules_checklist ?? [];
   const allRequiredMet =
@@ -125,6 +215,29 @@ export default function DashboardPage() {
       const tf = localStorage.getItem("active_timeframe");
       if (tf) setTimeframe(tf);
 
+      // Restore Target RR
+      const savedRr = localStorage.getItem("ai_target_rr");
+      if (savedRr) {
+        const parsedRr = parseFloat(savedRr);
+        if (!isNaN(parsedRr) && parsedRr > 0) {
+          setTargetRr(parsedRr);
+        }
+      }
+
+      // Restore Selected Strategy & Rules Checklist
+      try {
+        const savedSkill = localStorage.getItem("trading_selected_skill");
+        if (savedSkill) {
+          setSelectedSkill(JSON.parse(savedSkill));
+        }
+        const savedRules = localStorage.getItem("trading_checked_rules");
+        if (savedRules) {
+          setCheckedRules(JSON.parse(savedRules));
+        }
+      } catch (e) {
+        console.warn("Failed to restore strategy/checklist", e);
+      }
+
       try {
         const savedLogs = localStorage.getItem("ai_evaluation_logs");
         if (savedLogs) {
@@ -135,6 +248,44 @@ export default function DashboardPage() {
       }
     }
   }, []);
+
+  // Live evaluation of trade outcomes (WIN / LOSE / ACTIVE / WAIT) when new market ticks arrive
+  useEffect(() => {
+    if (!currentCandle || evalLogs.length === 0) return;
+
+    let hasChanges = false;
+    const updated = evalLogs.map((log) => {
+      // Only evaluate if it matches current symbol and is still active/unresolved
+      if (log.symbol && log.symbol !== activeSymbol) return log;
+      if (log.outcome && log.outcome !== "ACTIVE") return log;
+      if (log.signal === "WAIT" || !log.entryPrice || !log.takeProfit || !log.stopLoss) {
+        if (log.outcome !== "WAIT") {
+          hasChanges = true;
+          return { ...log, outcome: "WAIT" as EvaluationOutcome };
+        }
+        return log;
+      }
+
+      const outcome = resolveOutcome(log, currentCandle.close, historicalCandles.slice(-30));
+      if (outcome !== log.outcome) {
+        hasChanges = true;
+        return {
+          ...log,
+          outcome,
+          resolvedPrice: outcome !== "ACTIVE" ? currentCandle.close : undefined,
+          resolvedAt: outcome !== "ACTIVE" ? Date.now() : undefined,
+        };
+      }
+      return log;
+    });
+
+    if (hasChanges) {
+      setEvalLogs(updated);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("ai_evaluation_logs", JSON.stringify(updated));
+      }
+    }
+  }, [currentCandle?.close, activeSymbol, historicalCandles.length]);
 
   const handleSymbolChange = (sym: string) => {
     setActiveSymbol(sym);
@@ -152,18 +303,36 @@ export default function DashboardPage() {
     showToast(`Active Timeframe: ${tf.toUpperCase()}`);
   };
 
+  const handleTargetRrChange = (rr: number) => {
+    setTargetRr(rr);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("ai_target_rr", rr.toString());
+    }
+    showToast(`Target Risk:Reward set to 1:${rr}`);
+  };
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
   const toggleRule = (id: string) => {
-    setCheckedRules((prev) => ({ ...prev, [id]: !prev[id] }));
+    setCheckedRules((prev) => {
+      const updated = { ...prev, [id]: !prev[id] };
+      if (typeof window !== "undefined") {
+        localStorage.setItem("trading_checked_rules", JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
   const handleSkillSelect = (skill: TradingSkill) => {
     setSelectedSkill(skill);
     setCheckedRules({});
+    if (typeof window !== "undefined") {
+      localStorage.setItem("trading_selected_skill", JSON.stringify(skill));
+      localStorage.removeItem("trading_checked_rules");
+    }
     setIsSkillModalOpen(false);
     showToast(`Strategy selected: ${skill.title}`);
   };
@@ -205,32 +374,51 @@ export default function DashboardPage() {
           symbol: activeSymbol,
           price: currentCandle.close,
           timeframe,
+          targetRr,
           checklistMet: allRequiredMet,
           indicatorsSummary: `${activeSymbol} ${timeframe.toUpperCase()} @ ${currentCandle.close.toFixed(2)}`,
-          candles: historicalCandles.slice(-25),
+          // Enough history for genuine swing structure, Fibonacci anchors and
+          // harmonic ratio validation on the server side.
+          candles: historicalCandles.slice(-120),
           keySlots,
         }),
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        const detail = Array.isArray(data?.details) ? data.details.join(", ") : data?.error;
+        showToast(detail || "Council evaluation failed");
+        return;
+      }
+
       if (data.evaluation) {
-        const newRecord: EvaluationResult = {
-          ...data.evaluation,
+        const initialOutcome: EvaluationOutcome =
+          data.evaluation.signal === "WAIT" ? "WAIT" : "ACTIVE";
+
+        const newRecord: EvaluationResult & { outcome: EvaluationOutcome } = {
+          ...(data.evaluation as EvaluationResult),
           id: `eval_${Date.now()}`,
           timestamp: Date.now(),
           symbol: activeSymbol,
           timeframe: timeframe,
+          outcome: initialOutcome,
         };
         setEvaluation(newRecord);
         setExpandedAgentId(newRecord.agentOpinions?.[0]?.agentId || "slot_1");
 
-        const updatedLogs = [newRecord, ...evalLogs.slice(0, 49)];
+        const updatedLogs: StoredEvaluation[] = [newRecord, ...evalLogs.slice(0, 49)];
         setEvalLogs(updatedLogs);
         if (typeof window !== "undefined") {
           localStorage.setItem("ai_evaluation_logs", JSON.stringify(updatedLogs));
         }
 
-        showToast(`10-Agent Council deliberation completed!`);
+        const verdict =
+          newRecord.signal === "WAIT"
+            ? `Council: WAIT (${newRecord.confidence}%) - ${newRecord.noTradeReasons?.length ?? 0} alasan menahan entry`
+            : `Council: ${newRecord.signal} ${newRecord.confidence}% | ${newRecord.emotionalState?.dominantEmotionIcon ?? ""} ${
+                newRecord.emotionalState?.dominantEmotionLabel ?? ""
+              }`;
+        showToast(verdict);
       }
     } catch (err) {
       console.error("Evaluation failed:", err);
@@ -240,8 +428,8 @@ export default function DashboardPage() {
     }
   };
 
-  const selectHistoricalLog = (item: EvaluationResult) => {
-    setEvaluation(item);
+  const selectHistoricalLog = (item: StoredEvaluation) => {
+    setEvaluation(item as EvaluationResult);
     if (item.symbol && item.symbol !== activeSymbol) {
       setActiveSymbol(item.symbol);
     }
@@ -347,11 +535,13 @@ export default function DashboardPage() {
               evaluation?.signal
                 ? {
                     signal: evaluation.signal,
+                    direction: evaluation.direction,
                     entryPrice: evaluation.entryPrice,
                     stopLoss: evaluation.stopLoss,
                     takeProfit: evaluation.takeProfit,
                     slPips: evaluation.slPips,
                     tpPips: evaluation.tpPips,
+                    riskRewardRatio: evaluation.riskRewardRatio,
                     positionBox: evaluation.positionBox,
                     predictiveTrajectory: evaluation.predictiveTrajectory,
                     note: evaluation.calculations,
@@ -361,21 +551,50 @@ export default function DashboardPage() {
           />
         </Card>
 
-        {/* 10-Agent Council Discussion Strip with Individual Collapse Bars */}
+        {/* Council strip: consensus verdict + collective emotional state */}
         {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5 mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-200">
-                  10-Agent Multi-Key Scalping Council
+                  Multi-Agent Scalping Council
                 </span>
                 <span className="text-[11px] text-zinc-500">
-                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Contributed &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Not Contributed)
+                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Aktif &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Tidak Berkontribusi)
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant="outline" className="text-[11px] font-mono border-zinc-800 text-zinc-400">
-                  Scalp {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"} ({evaluation.confidence}%) &bull; SL: {evaluation.slPips ?? 35} pips
+                {/* Interactive Target RR Selector */}
+                <div className="flex items-center gap-1.5 rounded-md bg-black border border-zinc-800 p-1">
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase px-1">Target RR:</span>
+                  {[1.5, 2.0, 2.5, 3.0].map((rrVal) => (
+                    <button
+                      key={rrVal}
+                      type="button"
+                      onClick={() => handleTargetRrChange(rrVal)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors ${
+                        targetRr === rrVal
+                          ? "bg-zinc-800 text-emerald-400 border border-zinc-700 shadow-sm"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      1:{rrVal.toFixed(1)}
+                    </button>
+                  ))}
+                </div>
+
+                <Badge
+                  variant="outline"
+                  className={`text-[11px] font-mono ${
+                    evaluation.signal === "BUY"
+                      ? "border-emerald-800 text-emerald-400"
+                      : evaluation.signal === "SELL"
+                      ? "border-red-800 text-red-400"
+                      : "border-amber-800 text-amber-400"
+                  }`}
+                >
+                  {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
+                  ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35} pips &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
                 </Badge>
                 <button
                   type="button"
@@ -388,9 +607,144 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {evaluation.emotionalState && (
+              <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                {/* Overall council emotion + meter */}
+                <div className="rounded border border-zinc-800 bg-black p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
+                      State Emosi Dewan
+                    </span>
+                    <span
+                      className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${
+                        EMOTION_TONE_CLASS[evaluation.emotionalState.dominantEmotionTone]
+                      }`}
+                    >
+                      {evaluation.emotionalState.dominantEmotionIcon}{" "}
+                      {evaluation.emotionalState.dominantEmotionLabel}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="font-mono text-2xl leading-none">
+                      {evaluation.emotionalState.dominantEmotionIcon}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                        <span>Emotion meter</span>
+                        <span className="text-zinc-300">{evaluation.emotionalState.emotionMeter}/100</span>
+                      </div>
+                      <MeterBar
+                        value={evaluation.emotionalState.emotionMeter}
+                        tone={evaluation.emotionalState.dominantEmotionTone}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                    {[
+                      { label: "Mood", value: `${evaluation.emotionalState.moodIndex > 0 ? "+" : ""}${evaluation.emotionalState.moodIndex}` },
+                      { label: "Kohesif", value: `${evaluation.emotionalState.coherence}%` },
+                      { label: "Dispersi", value: `${evaluation.emotionalState.emotionSpread}%` },
+                    ].map((m) => (
+                      <div key={m.label} className="rounded bg-zinc-900/60 px-1 py-1">
+                        <div className="text-[9px] font-mono text-zinc-500">{m.label}</div>
+                        <div className="text-[11px] font-mono text-zinc-200">{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+                    {evaluation.emotionalState.councilMood}
+                  </p>
+                </div>
+
+                {/* Emotion distribution + psychology profile */}
+                <div className="rounded border border-zinc-800 bg-black p-3">
+                  <div className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
+                    Komposisi Emosi &amp; Profil Psikologis
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {evaluation.emotionalState.breakdown.map((entry) => (
+                      <span
+                        key={entry.emotion}
+                        className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${EMOTION_TONE_CLASS[entry.tone]}`}
+                        title={`${entry.count} agen, intensitas rata-rata ${entry.avgIntensity}`}
+                      >
+                        {entry.icon} {entry.label} &middot; {entry.count} &middot; {entry.weight}%
+                      </span>
+                    ))}
+                    {evaluation.emotionalState.breakdown.length === 0 && (
+                      <span className="text-[10px] font-mono text-zinc-600">Tidak ada data emosi</span>
+                    )}
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { label: "Disiplin", value: evaluation.emotionalState.psychology.discipline },
+                      { label: "Kesabaran", value: evaluation.emotionalState.psychology.patience },
+                      { label: "Anti FOMO", value: evaluation.emotionalState.psychology.fomoResistance },
+                      { label: "Siap eksekusi", value: evaluation.emotionalState.psychology.executionReadiness },
+                    ].map((m) => (
+                      <div key={m.label}>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500">
+                          <span>{m.label}</span>
+                          <span className="text-zinc-300">{m.value}</span>
+                        </div>
+                        <MeterBar
+                          value={m.value}
+                          tone={m.value >= 70 ? "constructive" : m.value >= 50 ? "neutral" : m.value >= 35 ? "caution" : "destructive"}
+                          className="mt-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+                    {evaluation.emotionalState.psychology.summary}
+                  </p>
+                  {evaluation.emotionalState.warning && (
+                    <p className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-amber-300/90">
+                      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span>{evaluation.emotionalState.warning}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {evaluation.consensus && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-zinc-800 bg-black px-3 py-2 text-[10px] font-mono text-zinc-400">
+                <span className="text-zinc-300">Weighted voting:</span>
+                <span className="text-emerald-400">bull {evaluation.consensus.bullishWeight}</span>
+                <span className="text-red-400">bear {evaluation.consensus.bearishWeight}</span>
+                <span className="text-zinc-500">netral {evaluation.consensus.neutralWeight}</span>
+                <span className="text-zinc-700">|</span>
+                <span>kesesuaian {(evaluation.consensus.agreement * 100).toFixed(0)}%</span>
+                <span className="text-zinc-700">|</span>
+                <span>partisipasi {(evaluation.consensus.participation * 100).toFixed(0)}%</span>
+                <span className="text-zinc-700">|</span>
+                <span>veto {evaluation.consensus.vetoes.length}</span>
+                {evaluation.expectancy && (
+                  <>
+                    <span className="text-zinc-700">|</span>
+                    <span
+                      className={
+                        evaluation.expectancy.verdict === "POSITIVE_EDGE"
+                          ? "text-emerald-400"
+                          : evaluation.expectancy.verdict === "THIN_EDGE"
+                          ? "text-amber-400"
+                          : "text-red-400"
+                      }
+                    >
+                      EV {evaluation.expectancy.expectedValuePips} pips @ WR{" "}
+                      {(evaluation.expectancy.winProbability * 100).toFixed(0)}% (BE{" "}
+                      {(evaluation.expectancy.breakEvenWinRate * 100).toFixed(0)}%)
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
             {isCouncilStripOpen && (
               <div className="space-y-2.5">
-                {/* 10-Agent Grid (2 rows of 5) */}
+                {/* Agent grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                   {evaluation.agentOpinions.map((agent) => {
                     const isExpanded = expandedAgentId === agent.agentId;
@@ -413,7 +767,7 @@ export default function DashboardPage() {
                             : "border-zinc-800/90 bg-black hover:border-zinc-700"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-1">
                           <span className="font-mono text-[10px] font-semibold text-zinc-200 truncate pr-1">
                             {agent.agentName}
                           </span>
@@ -431,9 +785,28 @@ export default function DashboardPage() {
                                   : "bg-zinc-800 text-zinc-400"
                               }`}
                             >
-                              {agent.bias === "BULLISH" ? "Bullish" : agent.bias === "BEARISH" ? "Bearish" : "Neutral"}
+                              {BIAS_LABEL[agent.bias]}
                             </span>
                           )}
+                        </div>
+
+                        {/* Emotion chip with intensity meter */}
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <span
+                            className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-mono ${
+                              EMOTION_TONE_CLASS[agent.emotionTone || "neutral"]
+                            }`}
+                            title={agent.emotionReason || agent.emotionLabel}
+                          >
+                            <span className="text-[11px] leading-none">{agent.emotionIcon || "😐"}</span>
+                            {agent.emotionLabel || "Netral"}
+                          </span>
+                          <div className="flex-1">
+                            <MeterBar
+                              value={agent.emotionIntensity ?? 0}
+                              tone={agent.emotionTone || "neutral"}
+                            />
+                          </div>
                         </div>
 
                         <div className="text-[9px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
@@ -446,7 +819,13 @@ export default function DashboardPage() {
                         </p>
 
                         <div className="mt-1.5 pt-1 border-t border-zinc-900 flex items-center justify-between text-[9px] font-mono text-zinc-500">
-                          <span>{isNotContributed ? "Detail Offline" : isExpanded ? "Collapse" : "Lihat Detail"}</span>
+                          <span className="flex items-center gap-1.5">
+                            {!isNotContributed && (
+                              <span className="text-zinc-600">qual {agent.reasoningQuality ?? 0}</span>
+                            )}
+                            {agent.voteVetoed && <span className="text-red-400">veto</span>}
+                            <span>{isNotContributed ? "Detail Offline" : isExpanded ? "Tutup" : "Detail"}</span>
+                          </span>
                           <ChevronDown className={`h-2.5 w-2.5 transition-transform ${isExpanded ? "rotate-180 text-emerald-400" : ""}`} />
                         </div>
                       </div>
@@ -487,23 +866,48 @@ export default function DashboardPage() {
                           </Badge>
                           {isOffline ? (
                             <Badge className="text-[10px] font-mono font-medium bg-amber-950/40 text-amber-400 border border-amber-900/50">
-                              Not Contributed
+                              Tidak Berkontribusi
                             </Badge>
                           ) : (
-                            <Badge className={`text-[10px] font-mono font-medium ${
-                              selectedAgent.bias === "BULLISH"
-                                ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
-                                : selectedAgent.bias === "BEARISH"
-                                ? "bg-red-950/60 text-red-400 border border-red-800"
-                                : "bg-zinc-900 text-zinc-300"
-                            }`}>
-                              Bias: {selectedAgent.bias === "BULLISH" ? "Bullish" : selectedAgent.bias === "BEARISH" ? "Bearish" : "Neutral"} ({selectedAgent.confidence}%)
-                            </Badge>
+                            <>
+                              <Badge className={`text-[10px] font-mono font-medium ${
+                                selectedAgent.bias === "BULLISH"
+                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
+                                  : selectedAgent.bias === "BEARISH"
+                                  ? "bg-red-950/60 text-red-400 border border-red-800"
+                                  : "bg-zinc-900 text-zinc-300"
+                              }`}>
+                                Bias: {BIAS_LABEL[selectedAgent.bias]} ({selectedAgent.confidence}%)
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] font-mono ${EMOTION_TONE_CLASS[selectedAgent.emotionTone || "neutral"]}`}
+                              >
+                                {selectedAgent.emotionIcon || "😐"} {selectedAgent.emotionLabel || "Netral"}{" "}
+                                {selectedAgent.emotionIntensity ?? 0}%
+                              </Badge>
+                              {selectedAgent.voteVetoed && (
+                                <Badge className="text-[10px] font-mono bg-red-950/60 text-red-300 border border-red-900/60">
+                                  Vote Dibatalkan
+                                </Badge>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
 
                       <div className="space-y-3">
+                        {!isOffline && selectedAgent.emotionReason && (
+                          <div className="rounded border border-zinc-800 bg-zinc-950/60 px-2.5 py-2">
+                            <div className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
+                              Why this emotion
+                            </div>
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-300">
+                              {selectedAgent.emotionReason}
+                            </p>
+                          </div>
+                        )}
+
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1">
                             {isOffline ? "Status Agen AI:" : "Analisis Mendalam Scalping:"}
@@ -512,6 +916,64 @@ export default function DashboardPage() {
                             {selectedAgent.detailedAnalysis || selectedAgent.keyObservation}
                           </p>
                         </div>
+
+                        {!isOffline && selectedAgent.psychology && (
+                          <div className="pt-2 border-t border-zinc-900">
+                            <div className="text-[11px] text-zinc-500 mb-1.5 flex items-center gap-1.5">
+                              <BrainCircuit className="h-3.5 w-3.5 text-cyan-400" />
+                              Psikologi &amp; Disiplin Agen
+                              {typeof selectedAgent.reasoningQuality === "number" && (
+                                <span className="font-mono text-[10px] text-zinc-600">
+                                  reasoning quality {selectedAgent.reasoningQuality}/100 &middot; bobot vote{" "}
+                                  {selectedAgent.voteWeight ?? 0}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {[
+                                { label: "Disiplin", value: selectedAgent.psychology.discipline },
+                                { label: "Kesabaran", value: selectedAgent.psychology.patience },
+                                { label: "Anti FOMO", value: selectedAgent.psychology.fomoResistance },
+                                { label: "Siap eksekusi", value: selectedAgent.psychology.executionReadiness },
+                              ].map((m) => (
+                                <div key={m.label} className="rounded bg-zinc-950 border border-zinc-900 p-2">
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                                    <span>{m.label}</span>
+                                    <span className="text-zinc-300">{m.value}</span>
+                                  </div>
+                                  <MeterBar
+                                    value={m.value}
+                                    tone={m.value >= 70 ? "constructive" : m.value >= 50 ? "neutral" : m.value >= 35 ? "caution" : "destructive"}
+                                    className="mt-1"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            {selectedAgent.psychology.read && (
+                              <p className="mt-2 text-[11px] leading-relaxed text-zinc-300">
+                                {selectedAgent.psychology.read}
+                              </p>
+                            )}
+                            {selectedAgent.psychology.riskFlags?.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {selectedAgent.psychology.riskFlags.map((flag, i) => (
+                                  <span
+                                    key={i}
+                                    className="rounded border border-amber-900/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-mono text-amber-300"
+                                  >
+                                    {flag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {selectedAgent.vetoReason && (
+                              <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed text-red-300/90">
+                                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                                <span>{selectedAgent.vetoReason}</span>
+                              </p>
+                            )}
+                          </div>
+                        )}
 
                         {selectedAgent.evidence && selectedAgent.evidence.length > 0 && (
                           <div className="pt-2 border-t border-zinc-900">
@@ -546,29 +1008,56 @@ export default function DashboardPage() {
           {/* Left Column: AI Technical Breakdown & Analysis (7 cols) */}
           <div className="space-y-4 lg:col-span-7">
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
                 <div className="text-[11px] text-zinc-500">
-                  Target Scalping SL
+                  SL Adaptif
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-red-400">
-                  {evaluation?.slPips ?? 35} Pips (~$3.50 / 0.01 lot)
+                  {evaluation?.slPips ?? 35} Pips
+                </div>
+                <div className="text-[10px] font-mono text-zinc-600 truncate">
+                  {evaluation?.riskPlan?.slBasis ?? "Regime volatilitas + struktur swing"}
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
                 <div className="text-[11px] text-zinc-500">
-                  Target Scalping TP
+                  TP &amp; Rasio Risiko
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-emerald-400">
-                  {evaluation?.tpPips ?? 88} Pips (RR 1:2.5)
+                  {evaluation?.tpPips ?? 88} Pips ({evaluation?.riskRewardRatio ?? "1:2.5"})
+                </div>
+                <div className="text-[10px] font-mono text-zinc-600">
+                  EV{" "}
+                  <span
+                    className={
+                      (evaluation?.expectancy?.expectedValuePips ?? 0) > 0 ? "text-emerald-500" : "text-red-500"
+                    }
+                  >
+                    {evaluation?.expectancy?.expectedValuePips ?? "-"} pips
+                  </span>
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
                 <div className="text-[11px] text-zinc-500">
-                  Dewan Berkontribusi
+                  Regime Volatilitas
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
-                  {evaluation ? `${evaluation.activeAgentCount ?? 10} / 10 Otak Aktif` : "10 AI Slots"}
+                  {evaluation?.technicalContext?.volatility?.regime ?? "-"}
+                </div>
+                <div className="text-[10px] font-mono text-zinc-600">
+                  ATR {evaluation?.technicalContext?.atrPips ?? "-"} pips
+                </div>
+              </Card>
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[11px] text-zinc-500">
+                  Dewan &amp; Veto
+                </div>
+                <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
+                  {evaluation ? `${evaluation.activeAgentCount ?? 0} aktif` : "Menunggu"}
+                </div>
+                <div className="text-[10px] font-mono text-zinc-600">
+                  veto psikologis {evaluation?.consensus?.vetoes.length ?? 0}
                 </div>
               </Card>
             </div>
@@ -673,7 +1162,7 @@ export default function DashboardPage() {
                             ${evaluation.takeProfit?.toFixed(2)}
                             {evaluation.tpPips && (
                               <span className="text-[10px] block text-emerald-400/80 font-normal">
-                                (+{evaluation.tpPips} pips / RR 1:2.5)
+                                (+{evaluation.tpPips} pips / RR {evaluation.riskRewardRatio ?? `1:${targetRr}`})
                               </span>
                             )}
                           </div>
@@ -908,9 +1397,48 @@ export default function DashboardPage() {
             {/* Persistent AI Generation History Log */}
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <CardTitle className="text-xs font-semibold text-zinc-200">
-                  Analysis History Log ({evalLogs.length})
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-xs font-semibold text-zinc-200">
+                    Analysis History Log ({evalLogs.length})
+                  </CardTitle>
+                  {(() => {
+                    const decidedLogs = evalLogs.filter(
+                      (l) => l.outcome === "WIN" || l.outcome === "LOSE"
+                    );
+                    const wins = evalLogs.filter((l) => l.outcome === "WIN").length;
+                    const losses = evalLogs.filter((l) => l.outcome === "LOSE").length;
+                    const activeCount = evalLogs.filter(
+                      (l) => l.outcome === "ACTIVE" || (!l.outcome && l.signal && l.signal !== "WAIT")
+                    ).length;
+                    const winrate =
+                      decidedLogs.length > 0
+                        ? Math.round((wins / decidedLogs.length) * 100)
+                        : null;
+
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        {winrate !== null ? (
+                          <Badge
+                            className={`px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
+                              winrate >= 50
+                                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800"
+                                : "bg-red-950/60 text-red-400 border-red-800"
+                            }`}
+                          >
+                            Winrate: {winrate}% ({wins}W / {losses}L)
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="px-1.5 py-0.5 text-[10px] font-mono border-zinc-800 text-zinc-400"
+                          >
+                            Winrate: Pending ({activeCount} active)
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
                 {evalLogs.length > 0 && (
                   <button
                     type="button"
@@ -925,7 +1453,7 @@ export default function DashboardPage() {
               <CardContent className="p-0 pt-3">
                 {evalLogs.length === 0 ? (
                   <div className="py-6 text-center text-xs text-zinc-500">
-                    No generated analyses logged yet. Each evaluation will automatically be archived here.
+                    No generated analyses logged yet. Each evaluation will automatically be archived here with live WIN / LOSE / WAIT tracking.
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
@@ -934,6 +1462,9 @@ export default function DashboardPage() {
                       const dateStr = log.timestamp
                         ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                         : "Recent";
+
+                      const outcomeStatus: EvaluationOutcome =
+                        log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
 
                       return (
                         <div
@@ -947,6 +1478,7 @@ export default function DashboardPage() {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
+                              {/* Signal Badge */}
                               <span
                                 className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
                                   log.signal === "BUY"
@@ -958,6 +1490,28 @@ export default function DashboardPage() {
                               >
                                 {log.signal}
                               </span>
+
+                              {/* WIN / LOSE / ACTIVE / WAIT Outcome Status Badge */}
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border tracking-wider ${
+                                  outcomeStatus === "WIN"
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.2)]"
+                                    : outcomeStatus === "LOSE"
+                                    ? "bg-red-500/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
+                                    : outcomeStatus === "ACTIVE"
+                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
+                                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
+                                }`}
+                              >
+                                {outcomeStatus === "WIN"
+                                  ? "✓ WIN"
+                                  : outcomeStatus === "LOSE"
+                                  ? "✕ LOSE"
+                                  : outcomeStatus === "ACTIVE"
+                                  ? "● ACTIVE"
+                                  : "— WAIT"}
+                              </span>
+
                               <span className="font-mono text-xs font-semibold text-zinc-200">
                                 {log.symbol || activeSymbol} &bull; {(log.timeframe || timeframe).toUpperCase()}
                               </span>

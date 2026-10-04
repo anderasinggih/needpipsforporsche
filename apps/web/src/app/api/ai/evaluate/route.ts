@@ -1,731 +1,1125 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-interface KeySlotPayload {
-  id: string;
-  label: string;
-  provider: "gemini" | "groq" | "openai" | "deepseek" | "openrouter";
-  model: string;
-  apiKey: string;
-}
+import {
+  baselineDirection,
+  computeExpectancy,
+  deriveRoleWeights,
+  normalizeModelOutput,
+  runConsensus,
+  scoreReasoningQuality,
+  type RoleProfile,
+} from "@/lib/ai/consensus";
+import {
+  EMOTION_META,
+  buildEmotionalState,
+  clamp,
+  deriveEmotion,
+  derivePsychology,
+  psychologyFlagsFor,
+} from "@/lib/ai/emotions";
+import { CHIEF_ROLE, buildAgentPrompt, buildSynthesizerPrompt, roleAt } from "@/lib/ai/prompts";
+import { callProviderWithRetry, sanitizeSlots, type KeySlotPayload } from "@/lib/ai/providers";
+import {
+  atr as calcAtr,
+  atrSeries,
+  buildFibonacci,
+  classifyVolatility,
+  detectHarmonic,
+  detectPivots,
+  findImpulseLeg,
+  fromPips,
+  getSpec,
+  planRisk,
+  readStructure,
+  rsi as calcRsi,
+  round,
+  sma,
+  toPips,
+  computeMtfConfluence,
+  type Candle,
+  type ImpulseLeg,
+  type Pivot,
+  type SymbolSpec,
+} from "@/lib/ai/technical";
+import type {
+  AgentOpinion,
+  Bias,
+  ConsensusResult,
+  Direction,
+  EmotionalState,
+  EvaluationResult,
+  Expectancy,
+  MtfConfluence,
+  MtfSummary,
+  RiskPlan,
+  Signal,
+  TechnicalContext,
+} from "@/lib/ai/types";
+
+// Re-exported so existing importers keep working.
+export type {
+  AgentOpinion,
+  ConsensusResult,
+  EmotionalState,
+  EvaluationResult,
+  FibonacciLevel,
+  HarmonicPattern,
+  HarmonicPoint,
+  MtfSummary,
+  TechnicalContext,
+} from "@/lib/ai/types";
+
+const MAX_CANDLES = 200;
+const AGENT_TIMEOUT_MS = 16000;
+const SYNTH_TIMEOUT_MS = 18000;
+const STAGGER_MS = 450;
+const BATCH_SIZE = 2;
+const MTF_TIMEOUT_MS = 3500;
+const MTF_MAX_DRIFT = 0.03;
+const MTF_INTERVALS = ["1m", "5m", "15m", "1h"];
 
 interface EvaluateRequest {
+  symbol?: unknown;
+  price?: unknown;
+  direction?: unknown;
+  checklistMet?: unknown;
+  indicatorsSummary?: unknown;
+  timeframe?: unknown;
+  candles?: unknown;
+  keySlots?: unknown;
+  targetRr?: unknown;
+}
+
+interface ParsedRequest {
   symbol: string;
   price: number;
-  direction?: 'BUY' | 'SELL';
-  checklistMet?: boolean;
-  indicatorsSummary?: string;
-  timeframe?: string;
-  candles?: Array<{ time: number; open: number; high: number; low: number; close: number }>;
-  keySlots?: KeySlotPayload[];
+  timeframe: string;
+  candles: Candle[];
+  checklistMet: boolean;
+  keySlots: KeySlotPayload[];
+  currentUnix: number;
+  targetRr?: number | undefined;
 }
 
-export interface FibonacciLevel {
-  ratio: number;
-  label: string;
+// ------------------------------------------------------------- validation ---
+
+const sanitizeCandles = (raw: unknown): Candle[] => {
+  if (!Array.isArray(raw)) return [];
+  const out: Candle[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const time = Number(rec.time);
+    const close = Number(rec.close);
+    if (!Number.isFinite(time) || !Number.isFinite(close) || close <= 0) continue;
+    const high = Number(rec.high);
+    const low = Number(rec.low);
+    const open = Number(rec.open);
+    out.push({
+      time,
+      open: Number.isFinite(open) && open > 0 ? open : close,
+      high: Number.isFinite(high) && high >= close ? high : close,
+      low: Number.isFinite(low) && low > 0 && low <= close ? low : close,
+      close,
+      volume: Number.isFinite(Number(rec.volume)) ? Number(rec.volume) : 0,
+    });
+  }
+  return out.slice(-MAX_CANDLES);
+};
+
+const parseTimeframeSeconds = (timeframe: string): number => {
+  const m = /^(\d{1,2})\s*([smhd])$/i.exec(timeframe.trim());
+  if (!m) return 60;
+  const value = Math.max(1, parseInt(m[1], 10) || 1);
+  const unit = m[2].toLowerCase();
+  if (unit === "s") return value;
+  if (unit === "m") return value * 60;
+  if (unit === "h") return value * 3600;
+  return value * 86400;
+};
+
+const parseRequest = (body: EvaluateRequest): { errors: string[]; payload: ParsedRequest | null } => {
+  const errors: string[] = [];
+
+  const symbol = String(body.symbol || "").trim().toUpperCase();
+  if (!symbol || symbol.length > 24) errors.push("symbol wajib diisi dan maksimal 24 karakter.");
+  else if (!/^[A-Z0-9]+$/.test(symbol)) errors.push("symbol hanya boleh huruf dan angka, contoh XAUUSD.");
+
+  const price = Number(body.price);
+  if (!Number.isFinite(price) || price <= 0) errors.push("price harus angka lebih besar dari nol.");
+
+  const timeframe = String(body.timeframe || "1m").trim().toLowerCase();
+  if (!/^\d{1,2}[smhd]$/.test(timeframe)) errors.push("timeframe tidak valid, contoh 1m, 5m, 15m, 1h.");
+
+  const candles = sanitizeCandles(body.candles);
+
+  if (errors.length) return { errors, payload: null };
+
+  const targetRrNum = Number(body.targetRr);
+  const targetRr = (Number.isFinite(targetRrNum) && targetRrNum >= 1 && targetRrNum <= 10) ? Number(targetRrNum.toFixed(1)) : undefined;
+
+  return {
+    errors,
+    payload: {
+      symbol,
+      price,
+      timeframe,
+      candles,
+      checklistMet: body.checklistMet === false ? false : true,
+      keySlots: sanitizeSlots(body.keySlots),
+      currentUnix: candles.length ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000),
+      targetRr,
+    },
+  };
+};
+
+// ----------------------------------------------------------- market data ----
+
+const normalizeBinanceSymbol = (symbol: string): string => {
+  if (symbol === "XAUUSD" || symbol === "GOLD") return "PAXGUSDT";
+  if (symbol === "BTCUSD") return "BTCUSDT";
+  if (symbol === "ETHUSD") return "ETHUSDT";
+  if (symbol === "SOLUSD") return "SOLUSDT";
+  if (symbol.endsWith("USD") && !symbol.endsWith("USDT")) return `${symbol}T`;
+  return symbol;
+};
+
+const fetchMtfMatrix = async (symbol: string): Promise<Record<string, MtfSummary>> => {
+  const binanceSymbol = normalizeBinanceSymbol(symbol);
+  const matrix: Record<string, MtfSummary> = {};
+
+  const results = await Promise.all(
+    MTF_INTERVALS.map(async (interval) => {
+      try {
+        const res = await fetch(
+          `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=60`,
+          { cache: "no-store", signal: AbortSignal.timeout(MTF_TIMEOUT_MS) },
+        );
+        if (!res.ok) return null;
+        const klines = await res.json();
+        if (!Array.isArray(klines) || klines.length < 10) return null;
+        const closes = klines.map((k: any) => parseFloat(k[4])).filter((n: number) => Number.isFinite(n));
+        if (closes.length < 10) return null;
+        return {
+          tf: interval.toUpperCase(),
+          trend: (sma(closes, 5) >= sma(closes, 15) ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
+          rsi: Math.round(calcRsi(closes)),
+          smaFast: round(sma(closes, 5)),
+          smaSlow: round(sma(closes, 15)),
+          lastClose: closes[closes.length - 1],
+        } as MtfSummary;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  for (const r of results) if (r) matrix[r.tf] = r;
+  return matrix;
+};
+
+const formatMtfText = (matrix: Record<string, MtfSummary>, confluence: MtfConfluence): string => {
+  const summary =
+    Object.values(matrix)
+      .map((v) => `${v.tf}: ${v.trend} (RSI ${v.rsi}, SMA ${v.smaFast} vs ${v.smaSlow})`)
+      .join(" | ") || "1M: FLAT | 5M: FLAT | 15M: FLAT | 1H: FLAT";
+  const verdict =
+    `Confluence ${confluence.verdict} ${confluence.score}/100, bias ${confluence.bias}, ` +
+    `selaras ${confluence.aligned.join("/") || "-"}, melawan ${confluence.opposing.join("/") || "-"}`;
+  return `${summary} || ${verdict}`;
+};
+
+// ---------------------------------------------------------------- council ---
+
+const defaultSlots = (request: NextRequest): KeySlotPayload[] => {
+  const gemini = request.headers.get("x-gemini-key") || "";
+  const groq = request.headers.get("x-groq-key") || "";
+  const openai = request.headers.get("x-openai-key") || "";
+  const deepseek = request.headers.get("x-deepseek-key") || "";
+  const openrouter = request.headers.get("x-openrouter-key") || "";
+  return [
+    { id: "slot_1", label: "Agent 1 (Chief Synthesizer)", provider: "gemini", model: "gemini-2.5-flash", apiKey: gemini },
+    { id: "slot_2", label: "Agent 2 (Market Structure)", provider: "gemini", model: "gemini-2.5-flash", apiKey: gemini },
+    { id: "slot_3", label: "Agent 3 (Liquidity Hunter)", provider: "openai", model: "gpt-4o-mini", apiKey: openai },
+    { id: "slot_4", label: "Agent 4 (Momentum & Trend)", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: groq },
+    { id: "slot_5", label: "Agent 5 (Volatility & Risk)", provider: "gemini", model: "gemini-2.5-pro", apiKey: gemini },
+    { id: "slot_6", label: "Agent 6 (Harmonic & XABCD)", provider: "groq", model: "llama3-8b-8192", apiKey: groq },
+    { id: "slot_7", label: "Agent 7 (Fibonacci Retracement)", provider: "openai", model: "gpt-4o-mini", apiKey: openai },
+    { id: "slot_8", label: "Agent 8 (Multi-TF Matrix)", provider: "deepseek", model: "deepseek-chat", apiKey: deepseek },
+    { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "auto", apiKey: openrouter },
+    { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.0-flash", apiKey: gemini },
+  ];
+};
+
+const offlineAgent = (slot: KeySlotPayload, profile: RoleProfile, message: string): AgentOpinion => {
+  const meta = EMOTION_META.NEUTRAL;
+  return {
+    agentId: slot.id,
+    agentName: slot.label,
+    role: profile.role,
+    modelUsed: slot.model,
+    provider: slot.provider,
+    bias: "NEUTRAL",
+    confidence: 0,
+    keyObservation: message,
+    detailedAnalysis:
+      "Agen ini tidak berkontribusi pada sesi ini. Dewan tetap berjalan dengan suara yang valid.",
+    evidence: ["Tidak ada input valid dari agen ini"],
+    status: "not_contributed",
+    errorMessage: message,
+    emotion: "NEUTRAL",
+    emotionIcon: meta.icon,
+    emotionLabel: meta.label,
+    emotionTone: meta.tone,
+    emotionIntensity: 10,
+    emotionReason: "Agen mati, jadi tidak ada emosi pasar yang masuk ke frontline dewan.",
+    psychology: {
+      discipline: 60,
+      patience: 70,
+      fomoResistance: 70,
+      executionReadiness: 0,
+      riskFlags: ["Agen offline"],
+      read: "Netral karena tidak ada data.",
+    },
+    reasoningQuality: 0,
+    voteWeight: 0,
+    voteVetoed: false,
+  };
+};
+
+interface OpinionContext {
+  regime: string;
+  mtfVerdict: string;
+  structure: string;
+  slPips: number;
+  tpPips: number;
+  atrPips: number;
+}
+
+const buildAgentOpinion = (opts: {
+  slot: KeySlotPayload;
+  profile: RoleProfile;
+  raw: any;
+  ctx: OpinionContext;
+}): AgentOpinion => {
+  const { slot, profile, raw, ctx } = opts;
+  const parsed = normalizeModelOutput(raw);
+  const modelProvidedEmotion = typeof raw?.emotion === "string" && Number.isFinite(Number(raw?.emotionIntensity));
+
+  const derived = deriveEmotion({
+    bias: parsed.bias,
+    confidence: parsed.confidence,
+    mtfVerdict: ctx.mtfVerdict,
+    regime: ctx.regime,
+  });
+
+  const emotion = modelProvidedEmotion ? parsed.emotion : derived.emotion;
+  const intensity = modelProvidedEmotion ? parsed.emotionIntensity : derived.intensity;
+  const meta = EMOTION_META[emotion];
+
+  const fallbackPsych = derivePsychology({
+    bias: parsed.bias,
+    confidence: parsed.confidence,
+    emotion,
+    mtfVerdict: ctx.mtfVerdict,
+    regime: ctx.regime,
+  });
+
+  const modelPsych = parsed.psychology;
+  const psychology = {
+    discipline: modelPsych?.discipline ?? fallbackPsych.discipline,
+    patience: modelPsych?.patience ?? fallbackPsych.patience,
+    fomoResistance: modelPsych?.fomoResistance ?? fallbackPsych.fomoResistance,
+    executionReadiness: modelPsych?.executionReadiness ?? fallbackPsych.executionReadiness,
+    riskFlags: modelPsych?.riskFlags?.length ? modelPsych.riskFlags : fallbackPsych.riskFlags,
+    read: modelPsych?.read || fallbackPsych.read,
+  };
+
+  const keyObservation =
+    (typeof raw?.keyObservation === "string" && raw.keyObservation.trim().slice(0, 400)) ||
+    `${profile.role} ${parsed.bias} tanpa observasi tertulis.`;
+  const detailedAnalysis =
+    (typeof raw?.detailedAnalysis === "string" && raw.detailedAnalysis.trim().slice(0, 1400)) ||
+    `Evaluasi ${profile.role}: bias ${parsed.bias} dengan confidence ${Math.round(
+      parsed.confidence,
+    )}%, struktur ${ctx.structure}, SL ${ctx.slPips} pips dan TP ${ctx.tpPips} pips.`;
+
+  const modelEvidence = Array.isArray(raw?.evidence)
+    ? raw.evidence
+        .filter((e: unknown) => typeof e === "string" && e.trim())
+        .slice(0, 4)
+        .map((e: string) => e.trim().slice(0, 220))
+    : [];
+  const evidence = modelEvidence.length
+    ? modelEvidence
+    : [
+        `Confluence ${ctx.mtfVerdict}, ATR ${ctx.atrPips} pips`,
+        `Struktur ${ctx.structure}`,
+        `SL ${ctx.slPips} pips / TP ${ctx.tpPips} pips`,
+      ];
+
+  return {
+    agentId: slot.id,
+    agentName: slot.label,
+    role: profile.role,
+    modelUsed: slot.model,
+    provider: slot.provider,
+    bias: parsed.bias,
+    confidence: Math.round(parsed.confidence),
+    keyObservation,
+    detailedAnalysis,
+    evidence,
+    status: "active",
+    emotion,
+    emotionIcon: meta.icon,
+    emotionLabel: meta.label,
+    emotionTone: meta.tone,
+    emotionIntensity: Math.round(intensity),
+    emotionReason:
+      parsed.emotionReason ||
+      `${meta.label} karena confidence ${Math.round(parsed.confidence)}% pada struktur ${ctx.structure}.`,
+    psychology,
+    reasoningQuality: scoreReasoningQuality({
+      keyObservation,
+      detailedAnalysis,
+      evidence,
+      confidence: parsed.confidence,
+      bias: parsed.bias,
+    }),
+    voteWeight: 0,
+    voteVetoed: false,
+  };
+};
+
+// ------------------------------------------------------- narrative helpers --
+
+const defaultThesis = (o: {
+  direction: Direction;
+  consensus: ConsensusResult;
+  confluence: MtfConfluence;
+  symbol: string;
+  timeframe: string;
+}) =>
+  `Arah dasar ${o.direction} pada ${o.symbol} ${o.timeframe.toUpperCase()} dengan confluence ${o.confluence.verdict} ` +
+  `${o.confluence.score}/100. Kesesuaian antar-agen ${Math.round(
+    o.consensus.agreement * 100,
+  )}% menghasilkan confidence gabungan ${o.consensus.confidence}% dari ${o.consensus.quorum} agen aktif. ` +
+  `Level diambil dari swing nyata dan koridor risiko 30-50 pips, bukan dari angka template.`;
+
+const defaultEdge = (o: {
+  confluence: MtfConfluence;
+  fib?: ReturnType<typeof buildFibonacci> | undefined;
+  harmonic?: ReturnType<typeof detectHarmonic>;
+  ctx: TechnicalContext;
+  direction: Direction;
+}) => {
+  const parts: string[] = [];
+  if (o.confluence.verdict === "STRONG_CONFLUENCE") parts.push(`confluence M1-H1 ${o.confluence.score}/100`);
+  if (o.fib?.goldenPocket?.priceInside) parts.push("harga sudah berada di zona Golden Pocket 0.5-0.618");
+  if (o.harmonic) parts.push(`pola ${o.harmonic.name} dengan rasio XABCD terukur`);
+  if (o.ctx.structureBias === o.direction) parts.push(`struktur mendukung (${o.ctx.structure})`);
+  if (o.ctx.volatility.regime === "COMPRESSION") parts.push("volatilitas kompresi, risiko SL bisa rapat");
+  if (!parts.length) {
+    return "Edge tipis dan marginal. Karena itu ambang vote dinaikkan dan setup cenderung berakhir WAIT.";
+  }
+  return `Keunggulan berasal dari ${parts.join(", ")}. Semua level dihitung dari swing dan rasio nyata, bukan dari asumsi.`;
+};
+
+const defaultRecommendation = (o: {
+  consensus: ConsensusResult;
+  direction: Direction;
   price: number;
-}
+  risk: RiskPlan;
+  spec: SymbolSpec;
+}) => {
+  if (o.consensus.decision === "WAIT") {
+    return `JANGAN entry di $${round(o.price)} sekarang. Arah dasar ${o.direction}, tetapi ${o.consensus.reasoning}`;
+  }
+  const riskNote = o.spec.isGold
+    ? `risiko per 0.01 lot tetap di kisaran $${(o.risk.slPips / 10).toFixed(2)}`
+    : `risiko $${o.risk.slPrice && o.risk.slPips} pip per unit`;
+  return `Eksekusi ${o.consensus.decision} di $${round(o.price)} dengan SL ${o.risk.slPips} pips (${riskNote}) dan TP ${
+    o.risk.tpPips
+  } pips (RR 1:${o.risk.rr}). Jangan tambah posisi dan jangan gerakkan SL.`;
+};
 
-export interface HarmonicPoint {
-  label: "X" | "A" | "B" | "C" | "D";
-  time: number;
+const defaultNotes = (o: {
+  risk: RiskPlan;
+  expectancy: Expectancy;
+  emotional: EmotionalState;
+}) =>
+  `Lot 0.01 dengan SL ${o.risk.slPips} pips (${o.risk.slBasis}). ${o.expectancy.note} ` +
+  `Psikologi dewan: ${o.emotional.psychology.summary}`;
+
+const buildExecutionPlan = (o: {
+  consensus: ConsensusResult;
+  direction: Direction;
   price: number;
-}
+  risk: RiskPlan;
+  tfSeconds: number;
+  fib?: ReturnType<typeof buildFibonacci> | undefined;
+  confluence: MtfConfluence;
+}) => {
+  const wait = o.consensus.decision === "WAIT";
+  const pocket = o.fib?.goldenPocket;
+  const trigger = wait
+    ? pocket
+      ? `Tunggu harga masuk zona Golden Pocket $${pocket.zoneLow} - $${pocket.zoneHigh}, lalu ${
+          pocket.direction === "BULLISH" ? "tunggu candle close bullish" : "tunggu candle close bearish"
+        }.`
+      : `Tunggu konfirmasi ${
+          o.confluence.verdict === "CONFLICT" ? "timeframe tinggi" : "struktur"
+        } searah ${o.direction} sebelum entry.`
+    : `Entry market di $${round(o.price)} sekarang, atau lebih baik limit di $${round(
+        o.price,
+      )} saat harga retest level ini.`;
 
-export interface HarmonicPattern {
-  name: string;
-  type: "BULLISH" | "BEARISH";
-  points: HarmonicPoint[];
-}
+  const timeStopMinutes = Math.max(3, Math.round((o.tfSeconds * 12) / 60));
 
-export interface AgentOpinion {
-  agentId: string;
-  agentName: string;
-  role: string;
-  modelUsed: string;
-  provider: string;
-  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
-  confidence: number;
-  keyObservation: string;
-  detailedAnalysis: string;
-  evidence: string[];
-  suggestedLevel?: { entry: number; sl: number; tp: number; slPips?: number; tpPips?: number };
-  status: "active" | "not_contributed";
-  errorMessage?: string;
-}
+  return {
+    trigger,
+    entry: round(o.price),
+    sl: o.risk.slPrice,
+    tp: o.risk.tpPrice,
+    timeStopMinutes,
+    breakevenMoveAtPips: Math.round(o.risk.slPips * 0.6),
+    partials: [
+      "Tutup 50% di TP1 sekitar 1.5R, lalu pindahkan SL ke break-even.",
+      "Sisa posisi memakai trailing mengikuti swing terbaru, bukan angka tetap.",
+      "Jangan menambah posisi setelah SL tersentuh.",
+    ],
+    steps: [
+      { phase: "Pra-trade", action: "Pastikan checklist terpenuhi dan lot dihitung dari SL, bukan sebaliknya." },
+      { phase: "Entry", action: trigger },
+      {
+        phase: "Manajemen",
+        action: `Time stop ${timeStopMinutes} menit. Tanpa respons harga dalam window itu, setup dianggap gagal.`,
+      },
+      { phase: "Exit", action: `TP ${o.risk.tpPips} pips dengan RR 1:${o.risk.rr}. SL tidak boleh dijauhkan.` },
+    ],
+  };
+};
+
+const buildTrajectory = (o: {
+  price: number;
+  direction: Direction;
+  slDistance: number;
+  tpDistance: number;
+  currentUnix: number;
+  tfSeconds: number;
+}) => {
+  const steps = 6;
+  const long = o.direction === "BULLISH";
+  const target = long ? o.price + o.tpDistance : o.price - o.tpDistance;
+  const traj: Array<{ time: number; price: number }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const progress = i / steps;
+    const wiggle = i === 1 ? (long ? -o.slDistance * 0.15 : o.slDistance * 0.15) : 0;
+    traj.push({
+      time: o.currentUnix + Math.floor((o.tfSeconds * 12 * i) / steps),
+      price: round(o.price + (target - o.price) * progress + wiggle),
+    });
+  }
+  return traj;
+};
+
+const buildChartMapping = (o: {
+  candles: Candle[];
+  pivots: Pivot[];
+  price: number;
+  direction: Direction;
+  fib?: ReturnType<typeof buildFibonacci> | undefined;
+  harmonic?: ReturnType<typeof detectHarmonic>;
+  currentUnix: number;
+  atrValue: number;
+}) => {
+  const highs = o.pivots.filter((p) => p.kind === "HIGH");
+  const lows = o.pivots.filter((p) => p.kind === "LOW");
+  const candleHighs = o.candles.map((c) => c.high).filter(Number.isFinite);
+  const candleLows = o.candles.map((c) => c.low).filter(Number.isFinite);
+
+  const highest = highs.length ? Math.max(...highs.map((p) => p.price)) : Math.max(o.price, ...candleHighs);
+  const lowest = lows.length ? Math.min(...lows.map((p) => p.price)) : Math.min(o.price, ...candleLows);
+
+  const long = o.direction === "BULLISH";
+  const anchor = long ? lows[lows.length - 1] : highs[highs.length - 1];
+
+  const mapping: Record<string, any> = {
+    supportLevel: round(Math.min(lowest - o.atrValue * 0.4, o.price)),
+    resistanceLevel: round(Math.max(highest + o.atrValue * 0.4, o.price)),
+    trendDirection: long ? "UPTREND" : "DOWNTREND",
+    trendlineStart: anchor
+      ? { time: anchor.time, price: anchor.price }
+      : { time: o.currentUnix - 600, price: round(o.price) },
+    trendlineEnd: { time: o.currentUnix, price: round(o.price) },
+  };
+
+  if (o.fib) {
+    mapping.fibonacciRetracement = { high: o.fib.high, low: o.fib.low, levels: o.fib.levels };
+  }
+  if (o.harmonic) mapping.harmonicPattern = o.harmonic;
+
+  return mapping;
+};
+
+const buildCalculations = (o: {
+  symbol: string;
+  spec: SymbolSpec;
+  atrValue: number;
+  volatility: ReturnType<typeof classifyVolatility>;
+  confluence: MtfConfluence;
+  structure: string;
+  risk: RiskPlan;
+  consensus: ConsensusResult;
+  activeCount: number;
+  offlineCount: number;
+  expectancy: Expectancy;
+}) =>
+  `${o.symbol} | ATR ${round(o.atrValue)} (${Math.round(toPips(o.atrValue, o.spec))} pips, regime ${
+    o.volatility.regime
+  } x${o.volatility.atrVsMedian}) | Confluence ${o.confluence.verdict} ${o.confluence.score}/100 | Struktur ${
+    o.structure
+  } | SL ${o.risk.slPips} pips (${o.risk.slBasis}) | TP ${o.risk.tpPips} pips (RR 1:${o.risk.rr}) | EV ${
+    o.expectancy.expectedValuePips
+  } pips pada win rate ${Math.round(o.expectancy.winProbability * 100)}% | Dewan: ${
+    o.activeCount
+  } aktif, ${o.offlineCount} offline | Putusan: ${o.consensus.decision}`;
+
+const confluenceFallback = (
+  matrix: Record<string, MtfSummary>,
+  candles: Candle[],
+  structureBias: Bias,
+): MtfConfluence => {
+  const base = computeMtfConfluence(matrix);
+  if (base.verdict !== "UNKNOWN") return base;
+
+  const closes = candles.map((c) => c.close);
+  if (closes.length < 5) return base;
+
+  const last = closes[closes.length - 1];
+  const fast = sma(closes, 5);
+  const slow = sma(closes, Math.min(15, closes.length));
+  const spread = Math.abs(fast - slow) / (last || 1);
+  const score = Math.round(clamp(40 + spread * 150, 0, 100));
+  const bias: Bias = structureBias !== "NEUTRAL" ? structureBias : fast >= slow ? "BULLISH" : "BEARISH";
+
+  const scoredFrom = Object.values(matrix)
+    .map((t) => t.tf)
+    .filter(Boolean);
+  const neutralList = scoredFrom.length ? scoredFrom : ["1M", "5M", "15M", "1H"];
+
+  return {
+    score,
+    verdict: score >= 65 ? "STRONG_CONFLUENCE" : score >= 30 ? "PARTIAL" : "CONFLICT",
+    bias,
+    aligned: [],
+    opposing: [],
+    neutral: neutralList,
+    notes: [
+      `Matrix Binance gagal di-sync, confluence dihitung dari timeframe aktif saja sehingga confidence dipotong.`,
+      ...base.notes,
+    ],
+  };
+};
+
+const structuralStopPips = (
+  pivots: Pivot[],
+  price: number,
+  direction: Direction,
+  atrValue: number,
+  pipValue: number,
+): number | null => {
+  const long = direction === "BULLISH";
+  const pivot = [...pivots].reverse().find((p) => (long ? p.kind === "LOW" : p.kind === "HIGH"));
+  if (!pivot) return null;
+  return Math.ceil((Math.abs(price - pivot.price) + atrValue * 0.25) / pipValue);
+};
+
+// -------------------------------------------------------------------- POST --
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+  const warnings: string[] = [];
+
+  let body: EvaluateRequest;
   try {
-    const body: EvaluateRequest = await request.json();
-    const { symbol, price, timeframe = '1m', candles = [], keySlots = [] } = body;
+    body = (await request.json()) as EvaluateRequest;
+  } catch {
+    return NextResponse.json({ error: "Body JSON tidak valid." }, { status: 400 });
+  }
 
-    const isGold = symbol.toUpperCase().includes("XAU") || symbol.toUpperCase().includes("PAXG");
-    const pipMultiplier = isGold ? 10 : 1;
+  const { errors, payload } = parseRequest(body);
+  if (errors.length || !payload) {
+    return NextResponse.json({ error: "Permintaan tidak valid.", details: errors }, { status: 400 });
+  }
 
-    // Normalize symbol for Binance Klines lookup (e.g. PAXGUSDT for Gold, BTCUSDT for BTC)
-    const upperSym = symbol.toUpperCase().trim();
-    let binanceSym = upperSym;
-    if (upperSym === "XAUUSD" || upperSym === "GOLD") binanceSym = "PAXGUSDT";
-    else if (upperSym === "BTCUSD" || upperSym === "BTCUSDT") binanceSym = "BTCUSDT";
-    else if (upperSym === "ETHUSD" || upperSym === "ETHUSDT") binanceSym = "ETHUSDT";
-    else if (upperSym === "SOLUSD" || upperSym === "SOLUSDT") binanceSym = "SOLUSDT";
-    else if (upperSym.endsWith("USD") && !upperSym.endsWith("USDT")) binanceSym = `${upperSym}T`;
+  const { symbol, price, timeframe, candles, checklistMet, keySlots, currentUnix, targetRr } = payload;
+  const spec = getSpec(symbol);
+  const tfSeconds = parseTimeframeSeconds(timeframe);
 
-    // Multi-Timeframe Analysis: Fetch M1, M5, M15, H1 live candles in parallel
-    type TFSummary = { tf: string; trend: "BULLISH" | "BEARISH"; rsi: number; smaFast: number; smaSlow: number; lastClose: number };
-    const mtfAnalysis: Record<string, TFSummary> = {};
+  try {
+    const rawMtfMatrix = await fetchMtfMatrix(symbol).catch(() => ({}) as Record<string, MtfSummary>);
 
-    try {
-      const intervals = ["1m", "5m", "15m", "1h"];
-      const mtfFetches = intervals.map(async (inv) => {
-        try {
-          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${binanceSym}&interval=${inv}&limit=30`, {
-            cache: "no-store",
-            signal: AbortSignal.timeout(3500)
-          });
-          if (!res.ok) return null;
-          const klines = await res.json();
-          if (!Array.isArray(klines) || klines.length < 5) return null;
-          const closes = klines.map((k: any) => parseFloat(k[4]));
-          const sFast = closes.slice(-5).reduce((a: number, b: number) => a + b, 0) / 5;
-          const sSlow = closes.slice(-15).reduce((a: number, b: number) => a + b, 0) / Math.min(15, closes.length);
-          let g = 0, l = 0;
-          for (let i = Math.max(1, closes.length - 14); i < closes.length; i++) {
-            const diff = closes[i] - closes[i - 1];
-            if (diff >= 0) g += diff;
-            else l -= diff;
-          }
-          const rs = l === 0 ? 100 : g / l;
-          const rsiVal = Math.round(100 - (100 / (1 + rs)));
-          return {
-            tf: inv.toUpperCase(),
-            trend: (sFast >= sSlow ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
-            rsi: rsiVal,
-            smaFast: Number(sFast.toFixed(2)),
-            smaSlow: Number(sSlow.toFixed(2)),
-            lastClose: closes[closes.length - 1]
-          };
-        } catch (e) {
-          return null;
-        }
-      });
+    // A proxied Binance feed (PAXGUSDT standing in for XAUUSD, for example) can sit
+    // far away from the broker price the client is charting. Confluence built on
+    // that drift would poison the whole vote, so it is discarded instead of trusted.
+    const mtfEntries = Object.values(rawMtfMatrix);
+    const referenceClose = mtfEntries.length ? mtfEntries[mtfEntries.length - 1].lastClose : null;
+    const mtfDriftPct =
+      referenceClose && price ? Math.abs(referenceClose - price) / (price || 1) : null;
+    const mtfUsable = mtfDriftPct != null && mtfDriftPct <= MTF_MAX_DRIFT;
+    const mtfMatrix = mtfUsable ? rawMtfMatrix : ({} as Record<string, MtfSummary>);
 
-      const mtfResults = await Promise.all(mtfFetches);
-      mtfResults.forEach((r) => {
-        if (r) mtfAnalysis[r.tf] = r;
-      });
-    } catch (e) {
-      console.warn("MTF fetch warning:", e);
-    }
+    const closes = candles.map((c) => c.close);
+    const atrValue = candles.length >= 5 ? calcAtr(candles) : spec.isGold ? 0.35 : 8.5;
+    const volatility = classifyVolatility(
+      atrValue,
+      price,
+      atrSeries(candles).filter((v) => v > 0),
+    );
+    const pivots = detectPivots(candles);
+    const structure = readStructure(pivots);
+    const confluence = confluenceFallback(mtfMatrix, candles, structure.bias);
 
-    // Technical calculations from active timeframe candles
-    let atr = 0;
-    let highestHigh = price;
-    let lowestLow = price;
-    let currentRsi = 50;
-    let smaFast = price;
-    let smaSlow = price;
-
-    if (candles.length >= 10) {
-      const closes = candles.map(c => c.close);
-      const highs = candles.map(c => c.high);
-      const lows = candles.map(c => c.low);
-
-      highestHigh = Math.max(...highs);
-      lowestLow = Math.min(...lows);
-
-      const trs = [];
-      for (let i = 1; i < candles.length; i++) {
-        const tr = Math.max(
-          candles[i].high - candles[i].low,
-          Math.abs(candles[i].high - candles[i - 1].close),
-          Math.abs(candles[i].low - candles[i - 1].close)
-        );
-        trs.push(tr);
-      }
-      atr = trs.length > 0 ? trs.reduce((a, b) => a + b, 0) / trs.length : 1.5;
-      smaFast = closes.slice(-5).reduce((a, b) => a + b, 0) / 5;
-      smaSlow = closes.slice(-15).reduce((a, b) => a + b, 0) / Math.min(15, closes.length);
-
-      let gains = 0, losses = 0;
-      for (let i = Math.max(1, closes.length - 14); i < closes.length; i++) {
-        const diff = closes[i] - closes[i - 1];
-        if (diff >= 0) gains += diff;
-        else losses -= diff;
-      }
-      const rs = losses === 0 ? 100 : gains / losses;
-      currentRsi = 100 - (100 / (1 + rs));
-    } else {
-      atr = isGold ? 3.5 : 85.0;
-      highestHigh = price + atr * 2;
-      lowestLow = price - atr * 2;
-    }
-
-    const isBullishBaseline = smaFast >= smaSlow;
-
-    // Scalping Constraints as specified:
-    // Gold & Crypto SL: strictly 30-50 pips (never too small like 14 pips or 3 pips)
-    // 30-50 pips = $3 - $5 risk per 0.01 lot on Gold
-    let scalpSlPips = 35;
-    if (isGold) {
-      const calculated = Math.round(atr * pipMultiplier * 1.5);
-      scalpSlPips = Math.min(50, Math.max(30, calculated || 35));
-    } else {
-      // BTC scalping: enforce at least 35 to 50 pips ($35-$50)
-      const calculated = Math.round(atr * 1.5);
-      scalpSlPips = Math.min(50, Math.max(35, calculated || 35));
-    }
-
-    const scalpSlPriceDist = isGold ? scalpSlPips / 10 : scalpSlPips;
-    const scalpTpPriceDist = Number((scalpSlPriceDist * 2.5).toFixed(2));
-    const scalpTpPips = Math.round(scalpTpPriceDist * pipMultiplier);
-
-    let tfSeconds = 60;
-    if (timeframe.endsWith("s")) tfSeconds = parseInt(timeframe) || 1;
-    else if (timeframe.endsWith("m")) tfSeconds = (parseInt(timeframe) || 1) * 60;
-    else if (timeframe.endsWith("h")) tfSeconds = (parseInt(timeframe) || 1) * 3600;
-    else if (timeframe.endsWith("d")) tfSeconds = (parseInt(timeframe) || 1) * 86400;
-
-    const currentUnix = candles.length > 0 ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000);
-
-    const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 15000) => {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(id);
-        return response;
-      } catch (e) {
-        clearTimeout(id);
-        throw e;
-      }
-    };
-
-    const callAIProvider = async (slot: KeySlotPayload, prompt: string) => {
-      if (!slot.apiKey || !slot.apiKey.trim()) return null;
-
-      if (slot.provider === "gemini") {
-        const key = slot.apiKey.trim();
-        let m = slot.model || "gemini-2.5-flash";
-        // Strip leading 'models/' if user pasted it
-        if (m.startsWith("models/")) {
-          m = m.replace("models/", "");
-        }
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
-        const res = await fetchWithTimeout(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nKEMBALIKAN HANYA JSON VALID MURNI (RAW JSON TANPA KATA PENGANTAR):` }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 1000,
-              responseMimeType: "application/json"
-            }
-          })
-        }, 15000);
-
-        if (!res.ok) {
-          const errBody = await res.text();
-          let parsedMsg = errBody.slice(0, 150);
-          try {
-            const errJson = JSON.parse(errBody);
-            parsedMsg = errJson.error?.message || parsedMsg;
-          } catch {}
-          throw new Error(`Gemini ${m} (${res.status}): ${parsedMsg}`);
-        }
-
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const cleaned = rawText
-          .replace(/```json/gi, "")
-          .replace(/```/g, "")
-          .trim();
-        const parsed = JSON.parse(cleaned);
-        return parsed;
-      }
-
-      if (slot.provider === "openai") {
-        const m = slot.model || "gpt-4o-mini";
-        const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${slot.apiKey.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.2,
-            response_format: { type: "json_object" }
-          })
-        });
-        if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
-        const data = await res.json();
-        return JSON.parse(data.choices?.[0]?.message?.content);
-      }
-
-      if (slot.provider === "groq") {
-        const m = slot.model || "llama-3.3-70b-versatile";
-        const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${slot.apiKey.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.2
-          })
-        });
-        if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content?.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(content);
-      }
-
-      if (slot.provider === "deepseek") {
-        const m = slot.model || "deepseek-chat";
-        const res = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${slot.apiKey.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.2
-          })
-        });
-        if (!res.ok) throw new Error(`DeepSeek HTTP ${res.status}`);
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content?.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(content);
-      }
-
-      if (slot.provider === "openrouter") {
-        const m = slot.model || "google/gemini-2.0-flash-exp:free";
-        const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${slot.apiKey.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: m,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.2
-          })
-        });
-        if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}`);
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content?.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(content);
-      }
-
-      return null;
-    };
-
-    const effectiveSlots: KeySlotPayload[] = keySlots.length > 0 ? keySlots : [
-      { id: "slot_1", label: "Agent 1 (Chief Synthesizer)", provider: "gemini", model: "gemini-2.5-flash", apiKey: request.headers.get("x-gemini-key") || "" },
-      { id: "slot_2", label: "Agent 2 (Market Structure)", provider: "gemini", model: "gemini-2.5-flash", apiKey: request.headers.get("x-gemini-key") || "" },
-      { id: "slot_3", label: "Agent 3 (Liquidity Hunter)", provider: "openai", model: "gpt-4o-mini", apiKey: request.headers.get("x-openai-key") || "" },
-      { id: "slot_4", label: "Agent 4 (Momentum & Trend)", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: request.headers.get("x-groq-key") || "" },
-      { id: "slot_5", label: "Agent 5 (Volatility & Risk)", provider: "gemini", model: "gemini-2.5-pro", apiKey: request.headers.get("x-gemini-key") || "" },
-      { id: "slot_6", label: "Agent 6 (Harmonic & XABCD)", provider: "groq", model: "llama3-8b-8192", apiKey: request.headers.get("x-groq-key") || "" },
-      { id: "slot_7", label: "Agent 7 (Fibonacci Retracement)", provider: "openai", model: "gpt-4o-mini", apiKey: request.headers.get("x-openai-key") || "" },
-      { id: "slot_8", label: "Agent 8 (Multi-TF Matrix)", provider: "deepseek", model: "deepseek-chat", apiKey: request.headers.get("x-deepseek-key") || "" },
-      { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "auto", apiKey: request.headers.get("x-openrouter-key") || "" },
-      { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.0-flash", apiKey: request.headers.get("x-gemini-key") || "" },
-    ];
-
-    const slotRoles = [
-      "Chief Synthesizer & Scalping Consensus Arbiter",
-      "Market Structure & Smart Money Concepts Specialist",
-      "Liquidity Hunter & Fair Value Gap Scout",
-      "Multi-Timeframe Trend & Momentum Analyst",
-      "Dynamic ATR Volatility & Drawdown Architect",
-      "Harmonic Pattern & XABCD Geometric Geometry Specialist",
-      "Fibonacci Retracement & Golden Pocket (0.618) Analyst",
-      "Multi-Timeframe Confirmation Matrix",
-      "Volume Profile & Volume-Weighted Average Scout",
-      "Quantitative Backup & Invalidation Auditor",
-    ];
-
-    // Format multi-timeframe matrix string for AI prompt injection
-    const mtfSummaryText = Object.entries(mtfAnalysis)
-      .map(([tfKey, val]) => `${tfKey}: ${val.trend} (RSI ${val.rsi}, SMA fast ${val.smaFast} vs slow ${val.smaSlow})`)
-      .join(" | ") || "M1: UPTREND | M5: UPTREND | M15: UPTREND | H1: CONSOLIDATION";
-
-    const runSlotTask = async (slot: KeySlotPayload, index: number): Promise<AgentOpinion> => {
-      const role = slotRoles[index] || "Quantitative Analyst";
-
-      const prompt = `Anda adalah ${slot.label} bertindak sebagai ${role} untuk strategi SCALPING ${symbol} (${timeframe}) @ harga saat ini $${price}.
-Konteks Analisis Multi-Timeframe (M1, M5, M15, H1):
-- Matrix Multi-Timeframe: ${mtfSummaryText}
-- Timeframe Aktif Chart: ${timeframe.toUpperCase()}
-- Instrumen: ${symbol} (${isGold ? 'XAUUSD 1 poin = 10 pips, SL 30-50 pips = $3-$5 pada 0.01 lot' : 'BTCUSD'})
-- ATR Timeframe Aktif: ${atr.toFixed(2)}
-- Target SL Scalping: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)})
-- Target TP Scalping: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) rasio 1:2.5
-
-Tugas Anda: Pertimbangkan keselarasan multi-timeframe (M1 scalping harus konfirmasi dengan trend M5, M15, dan H1).
-Kembalikan JSON murni:
-{
-  "bias": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence": 85,
-  "keyObservation": "Ringkasan 1-2 kalimat fokus peran Anda & konfirmasi multi-timeframe (Bahasa Indonesia)",
-  "detailedAnalysis": "Ulasan mendalam scalping, alasan level pips, dan pengaruh multi-timeframe M1-H1 (Bahasa Indonesia 3-4 kalimat)",
-  "evidence": ["Poin bukti multi-timeframe 1", "Poin bukti 2", "Poin bukti 3"]
-}`;
-
-      try {
-        if (!slot.apiKey || !slot.apiKey.trim()) {
-          return {
-            agentId: slot.id,
-            agentName: slot.label,
-            role,
-            modelUsed: slot.model,
-            provider: slot.provider,
-            bias: "NEUTRAL",
-            confidence: 0,
-            keyObservation: "API Key tidak terpasang di /owner/key.",
-            detailedAnalysis: "Agen ini dinonaktifkan sementara karena kunci API belum diisi. Sistem tetap berjalan menggunakan dewan agen lainnya.",
-            evidence: ["API Key Kosong di pengaturan"],
-            status: "not_contributed",
-            errorMessage: "API Key Not Configured"
-          };
-        }
-
-        const res = await callAIProvider(slot, prompt);
-        if (res && res.bias) {
-          return {
-            agentId: slot.id,
-            agentName: slot.label,
-            role,
-            modelUsed: slot.model,
-            provider: slot.provider,
-            bias: res.bias,
-            confidence: res.confidence || 85,
-            keyObservation: res.keyObservation || "Analisis scalping terkonfirmasi dengan probabilitas tinggi.",
-            detailedAnalysis: res.detailedAnalysis || `Evaluasi scalping ${symbol} mengonfirmasi momentum ${res.bias} dengan proteksi risiko ${scalpSlPips} pips.`,
-            evidence: Array.isArray(res.evidence) && res.evidence.length > 0 ? res.evidence : [
-              `Target SL terikat ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)})`,
-              `Target TP terikat ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)})`,
-              "Struktur mikro time horizon mendukung eksekusi cepat"
-            ],
-            status: "active"
-          };
-        }
-        throw new Error("Invalid response JSON");
-      } catch (err: any) {
-        console.warn(`Slot ${slot.id} (${slot.provider}) failed:`, err?.message || err);
-        return {
-          agentId: slot.id,
-          agentName: slot.label,
-          role,
-          modelUsed: slot.model,
-          provider: slot.provider,
-          bias: "NEUTRAL",
-          confidence: 0,
-          keyObservation: `AI Key bermasalah (${err?.message || "Rate limit / Offline"}). Tidak berkontribusi pada sesi ini.`,
-          detailedAnalysis: `Slot API mengalami kegagalan request. Dewan melanjutkan voting tanpa suara dari ${slot.label}.`,
-          evidence: [`Status: Offline / Gagal terhubung (${err?.message || "Network"})`],
-          status: "not_contributed",
-          errorMessage: err?.message || "Offline"
-        };
-      }
-    };
-
-    // Execute slots in pairs (batch of 2) with 500ms delay so AI runs 2-by-2 smoothly without rate-limit burst
-    const councilResults: AgentOpinion[] = [];
-    const slotsToRun = effectiveSlots.slice(1);
-    const batchSize = 2;
-
-    for (let i = 0; i < slotsToRun.length; i += batchSize) {
-      const batch = slotsToRun.slice(i, i + batchSize);
-      const batchRes = await Promise.all(
-        batch.map((s, bIdx) => runSlotTask(s, i + bIdx + 1))
+    if (!Object.keys(mtfMatrix).length) {
+      warnings.push(
+        mtfDriftPct != null
+          ? `Feed Binance ${normalizeBinanceSymbol(symbol)} ($${round(
+              referenceClose as number,
+            )}) menyimpang ${(mtfDriftPct * 100).toFixed(1)}% dari harga broker $${price}; confluence MTF diabaikan agar tidak menyesatkan.`
+          : "Matrix multi-timeframe gagal di-sync, confluence hanya dari timeframe aktif.",
       );
-      councilResults.push(...batchRes);
-      if (i + batchSize < slotsToRun.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    const impulseLeg: ImpulseLeg | undefined = findImpulseLeg(pivots, atrValue, spec);
+    const fib = impulseLeg ? buildFibonacci({ leg: impulseLeg, price, spec }) : undefined;
+    const harmonic = candles.length >= 30 ? detectHarmonic(candles, pivots, price) : undefined;
+
+    const baselineDirectionValue = baselineDirection(confluence, structure.bias);
+
+    // Provisional plan is only used to give agents concrete numbers to reason
+    // about; the final plan is recomputed once the weighted vote picks a side.
+    const provisionalRisk = planRisk({
+      price,
+      direction: baselineDirectionValue,
+      atrValue,
+      volatility,
+      mtfVerdict: confluence.verdict,
+      structuralSlPips: structuralStopPips(pivots, price, baselineDirectionValue, atrValue, spec.pipValue),
+      spec,
+      targetRr,
+    });
+
+    const activeRsi = closes.length >= 5 ? calcRsi(closes) : 50;
+    const atrPips = Math.round(toPips(atrValue, spec));
+    const mtfSummaryText = formatMtfText(mtfMatrix, confluence);
+
+    const fibText = fib
+      ? `anchor high $${fib.high.price} dan low $${fib.low.price}, Golden Pocket $${fib.goldenPocket.zoneLow} - $${fib.goldenPocket.zoneHigh} (${
+          fib.goldenPocket.priceInside ? "harga sudah di dalam zona" : "harga di luar zona"
+        })`
+      : "belum ada impulse leg yang cukup untuk Fibonacci";
+    const harmonicText = harmonic
+      ? `${harmonic.name} ${harmonic.type}, D diproyeksikan di $${harmonic.points[4]?.price ?? "-"} (B retrace ${
+          harmonic.ratios?.bRetrace ?? "-"
+        }, C projection ${harmonic.ratios?.cProjection ?? "-"}, quality ${harmonic.quality ?? "-"})`
+      : "tidak ada pola harmonik valid saat ini";
+
+    const slots = keySlots.length ? keySlots : defaultSlots(request);
+
+    const runSlot = async (slot: KeySlotPayload, index: number): Promise<AgentOpinion> => {
+      const profile = roleAt(index);
+      if (!slot.apiKey.trim()) {
+        return offlineAgent(slot, profile, "API Key tidak terpasang di /owner/key.");
+      }
+
+      const prompt = buildAgentPrompt({
+        agentName: slot.label,
+        role: profile,
+        symbol,
+        price,
+        timeframe,
+        isGold: spec.isGold,
+        mtfSummaryText,
+        mtfConfluenceText: `${confluence.verdict} ${confluence.score}/100, bias ${confluence.bias}`,
+        atrPips,
+        volatilityText: volatility.label,
+        structureText: structure.label,
+        slPips: provisionalRisk.slPips,
+        tpPips: provisionalRisk.tpPips,
+        rr: `1:${provisionalRisk.rr}`,
+        directionHint: `${baselineDirectionValue} dari confluence dan struktur`,
+        fibText,
+        harmonicText,
+        checklistMet,
+      });
+
+      try {
+        const raw = await callProviderWithRetry(slot, prompt, { timeoutMs: AGENT_TIMEOUT_MS });
+        return buildAgentOpinion({
+          slot,
+          profile,
+          raw,
+          ctx: {
+            regime: volatility.regime,
+            mtfVerdict: confluence.verdict,
+            structure: structure.label,
+            slPips: provisionalRisk.slPips,
+            tpPips: provisionalRisk.tpPips,
+            atrPips,
+          },
+        });
+      } catch (err) {
+        const message = String((err as Error)?.message || "Offline").slice(0, 160);
+        const opinion = offlineAgent(slot, profile, `Request gagal: ${message}`);
+        opinion.errorMessage = message;
+        return opinion;
+      }
+    };
+
+    // Staggered batches keep free-tier rate limits happy without killing latency.
+    const councilResults: AgentOpinion[] = [];
+    const slotsToRun = slots.slice(1);
+    for (let i = 0; i < slotsToRun.length; i += BATCH_SIZE) {
+      const batch = slotsToRun.slice(i, i + BATCH_SIZE);
+      const settled = await Promise.all(batch.map((slot, offset) => runSlot(slot, i + offset + 1)));
+      councilResults.push(...settled);
+      if (i + BATCH_SIZE < slotsToRun.length) {
+        await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
       }
     }
 
     const activeAgents = councilResults.filter((a) => a.status === "active");
-
-    let votesBullish = activeAgents.filter((a) => a.bias === "BULLISH").length;
-    let votesBearish = activeAgents.filter((a) => a.bias === "BEARISH").length;
-
-    if (activeAgents.length === 0) {
-      if (isBullishBaseline) votesBullish = 5;
-      else votesBearish = 5;
-    }
-
-    const consensusBias = votesBullish >= votesBearish ? "BUY" : "SELL";
-    const consensusIsBullish = consensusBias === "BUY";
-
-    const calcEntry = Number(price.toFixed(2));
-    const calcSL = consensusIsBullish
-      ? Number((price - scalpSlPriceDist).toFixed(2))
-      : Number((price + scalpSlPriceDist).toFixed(2));
-    const calcTP = consensusIsBullish
-      ? Number((price + scalpTpPriceDist).toFixed(2))
-      : Number((price - scalpTpPriceDist).toFixed(2));
-
-    const sup = Number((lowestLow - (atr * 0.4)).toFixed(2));
-    const res = Number((highestHigh + (atr * 0.4)).toFixed(2));
-
-    const activeSummary = activeAgents.map((a) => `${a.agentName} [${a.bias}]: ${a.keyObservation}`).join("\n");
     const offlineAgents = councilResults.filter((a) => a.status === "not_contributed");
 
-    const synthPrompt = `Anda adalah Agent 1: Chief Synthesizer & Supreme Arbiter.
-Rangkum hasil evaluasi SCALPING MULTI-TIMEFRAME ${symbol} (Aktif: ${timeframe.toUpperCase()}) @ $${price}:
-Kondisi Multi-Timeframe Riil:
-${mtfSummaryText}
-
-Agen Aktif:
-${activeSummary || (consensusIsBullish ? "Algoritma Quant Bullish (SMC Demand Rebound)" : "Algoritma Quant Bearish (Supply Rejection)")}
-
-Parameter Eksekusi Scalping Presisi:
-- Sinyal: ${consensusBias}
-- Entry: ${calcEntry}
-- SL: ${calcSL} (${scalpSlPips} pips / toleransi $${isGold ? (scalpSlPips / 10).toFixed(2) : scalpSlPips} = ~$3-$5 pada 0.01 lot)
-- TP: ${calcTP} (${scalpTpPips} pips / rasio RR 1:2.5)
-
-Keluarkan JSON murni:
-{
-  "thesis": "Tesis scalping multi-timeframe padat dan berbobot dalam Bahasa Indonesia (2-3 kalimat)",
-  "detailedVerdict": "Kesimpulan komprehensif AI Penyimpul: korelasi arah trend M1, M5, M15, dan H1 dengan setup scalping saat ini, serta rasio pips (Bahasa Indonesia 4-5 kalimat)",
-  "riskInvalidation": "Syarat batalnya setup scalping jika harga berbalik arah (Bahasa Indonesia)",
-  "slReason": "Alasan penetapan SL ketat ${scalpSlPips} pips (Bahasa Indonesia)",
-  "tpReason": "Alasan penetapan target TP ${scalpTpPips} pips (Bahasa Indonesia)",
-  "recommendation": "Instruksi eksekusi scalping cepat (Bahasa Indonesia)",
-  "notes": "Catatan manajemen lot 0.01 dan disiplin multi-timeframe (Bahasa Indonesia)"
-}`;
-
-    let synthesizerResult: any = null;
-    try {
-      if (effectiveSlots[0].apiKey && effectiveSlots[0].apiKey.trim()) {
-        synthesizerResult = await callAIProvider(effectiveSlots[0], synthPrompt);
-      }
-    } catch (e) {
-      console.warn("Chief synthesizer call failed, using algorithm", e);
+    if (activeAgents.length === 0) {
+      warnings.push("Tidak ada agen AI yang merespons. Fallback kuantitatif aktif, arah sepenuhnya dari algoritma.");
+    } else if (activeAgents.length < 5) {
+      warnings.push(`Hanya ${activeAgents.length} agen berkontribusi, konsensus kurang representatif.`);
     }
 
-    const agent1: AgentOpinion = {
-      agentId: effectiveSlots[0].id,
-      agentName: effectiveSlots[0].label,
-      role: "Chief Synthesizer & Scalping Consensus Arbiter",
-      modelUsed: effectiveSlots[0].model,
-      provider: effectiveSlots[0].provider,
-      bias: consensusIsBullish ? "BULLISH" : "BEARISH",
-      confidence: activeAgents.length > 0 ? Math.round(activeAgents.reduce((s, a) => s + a.confidence, 0) / activeAgents.length) : 88,
-      keyObservation: `Keputusan Final Scalping Multi-Timeframe: Konsensus ${consensusBias} (${votesBullish} Bullish vs ${votesBearish} Bearish). Dikonfirmasi Matrix M1-M15-H1. SL ${scalpSlPips} pips dan TP ${scalpTpPips} pips.`,
-      detailedAnalysis: synthesizerResult?.detailedVerdict || (consensusIsBullish
-        ? `Sebagai AI Penyimpul Scalping, analisis multi-timeframe (M1-H1) menunjukkan momentum akumulasi selaras pada ${symbol}. Stop Loss dibatasi ketat pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) setara risiko ~$3-$5 pada akun 0.01 lot, sedangkan Take Profit dipatok pada target ${scalpTpPips} pips untuk memaksimalkan rasio risk-to-reward 1:2.5.`
-        : `Sebagai AI Penyimpul Scalping, struktur multi-timeframe ${symbol} memperlihatkan tekanan distribusi di time horizon lebih tinggi (M15-H1). Stop Loss diposisikan disiplin pada ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) di atas swing high lokal.`),
-      evidence: [
-        `Matrix Multi-TF: ${mtfSummaryText}`,
-        `Konsensus Dewan: ${votesBullish} Suara Bullish / ${votesBearish} Bearish`,
-        `Agen Aktif: ${activeAgents.length} agen berkontribusi (${offlineAgents.length} agen offline / not contributed)`,
-        `Rasio Scalping: SL ${scalpSlPips} pips &bull; TP ${scalpTpPips} pips (RR 1:2.5)`
-      ],
-      suggestedLevel: {
-        entry: calcEntry,
-        sl: calcSL,
-        tp: calcTP,
-        slPips: scalpSlPips,
-        tpPips: scalpTpPips,
+    const consensus = runConsensus({
+      agents: councilResults,
+      ctx: {
+        mtfConfluence: confluence,
+        regime: volatility.regime,
+        rsi: activeRsi,
+        structureBias: structure.bias,
+        roleWeights: deriveRoleWeights({
+          mtfConfluence: confluence,
+          regime: volatility.regime,
+          rsi: activeRsi,
+          structureBias: structure.bias,
+        }),
       },
-      status: "active"
-    };
-
-    const agentOpinions: AgentOpinion[] = [agent1, ...councilResults];
-
-    // Trajectory with directional Arrow
-    const steps = 6;
-    const traj = [];
-    const priceDelta = calcTP - calcEntry;
-    for (let i = 0; i <= steps; i++) {
-      const stepTime = currentUnix + Math.floor((tfSeconds * 12 * i) / steps);
-      const progress = i / steps;
-      const wiggle = i === 1 ? (consensusIsBullish ? -scalpSlPriceDist * 0.15 : scalpSlPriceDist * 0.15) : 0;
-      const stepPrice = Number((calcEntry + priceDelta * progress + wiggle).toFixed(2));
-      traj.push({ time: stepTime, price: stepPrice });
-    }
-
-    // -------------------------------------------------------------
-    // ADAPTIVE CHART TOOL SELECTION & SWING PIVOT DETECTION
-    // Do NOT force arbitrary XABCD on every chart!
-    // Detect market condition:
-    // 1. Trending market -> Dynamic Trendline from genuine swing point to current price
-    // 2. Retracement / Range -> Fibonacci Golden Pocket (0.5 - 0.618)
-    // 3. Genuine Harmonic Pivot -> ONLY if at least 25 candles with distinct swing pivots exist
-    // -------------------------------------------------------------
-    const fibRange = Math.abs(highestHigh - lowestLow) || (atr * 4);
-    // Find genuine swing high and swing low candles for Fibonacci and Trendline
-    let swingHighCandle = candles.length > 0 ? candles[0] : { time: currentUnix - 600, high: highestHigh, low: lowestLow };
-    let swingLowCandle = candles.length > 0 ? candles[0] : { time: currentUnix - 600, high: highestHigh, low: lowestLow };
-
-    if (candles.length >= 5) {
-      for (const c of candles) {
-        if (c.high > swingHighCandle.high) swingHighCandle = c;
-        if (c.low < swingLowCandle.low) swingLowCandle = c;
-      }
-    }
-
-    // Standard Fibonacci Technical Analysis rules:
-    // Downtrend (SELL): Price pulled back down from Swing High to Swing Low.
-    // Retracement levels measure bounce from Low towards High:
-    // Price = SwingLow + (SwingHigh - SwingLow) * ratio
-    // Uptrend (BUY): Price rallied up from Swing Low to Swing High.
-    // Retracement levels measure dip from High towards Low:
-    // Price = SwingHigh - (SwingHigh - SwingLow) * ratio
-    const swingRange = Math.max(0.01, swingHighCandle.high - swingLowCandle.low);
-    const fibRatios = [
-      { ratio: 0.236, label: "0.236" },
-      { ratio: 0.382, label: "0.382" },
-      { ratio: 0.500, label: "0.500 (Eq)" },
-      { ratio: 0.618, label: "0.618 (Golden Pocket)" },
-      { ratio: 0.786, label: "0.786" },
-    ];
-
-    const fibLevels: FibonacciLevel[] = fibRatios.map((item) => {
-      let lvlPrice: number;
-      if (consensusIsBullish) {
-        lvlPrice = swingHighCandle.high - (swingRange * item.ratio);
-      } else {
-        lvlPrice = swingLowCandle.low + (swingRange * item.ratio);
-      }
-      return {
-        ratio: item.ratio,
-        label: item.label,
-        price: Number(lvlPrice.toFixed(2)),
-      };
+      checklistMet,
     });
 
-    let trendlineStart = {
-      time: consensusIsBullish ? swingLowCandle.time : swingHighCandle.time,
-      price: consensusIsBullish ? swingLowCandle.low : swingHighCandle.high,
-    };
+    const direction: Direction = consensus.direction;
+    const decision: Signal = consensus.decision;
 
-    // Determine if condition warrants a real harmonic pattern or dynamic trendline
-    // Harmonic patterns should only appear when there are sufficient genuine swing points
-    let harmonicPattern: HarmonicPattern | undefined = undefined;
+    const riskPlan = planRisk({
+      price,
+      direction,
+      atrValue,
+      volatility,
+      mtfVerdict: confluence.verdict,
+      structuralSlPips: structuralStopPips(pivots, price, direction, atrValue, spec.pipValue),
+      spec,
+      targetRr,
+    });
 
-    // Detect actual swing pivots for harmonic if there are >= 30 candles
-    if (candles.length >= 30) {
-      const segmentSize = Math.floor((candles.length - 1) / 4);
-      if (segmentSize >= 3) {
-        const seg0 = candles.slice(0, segmentSize);
-        const seg1 = candles.slice(segmentSize, segmentSize * 2);
-        const seg2 = candles.slice(segmentSize * 2, segmentSize * 3);
-        const seg3 = candles.slice(segmentSize * 3, candles.length - 1);
+    if (riskPlan.structuralSlPips > spec.maxSlPips) {
+      warnings.push(
+        `Jarak SL struktural ${riskPlan.structuralSlPips} pips melampaui budget ${spec.maxSlPips} pips, risiko tidak sebanding dengan edge.`,
+      );
+    }
+    if (confluence.verdict === "CONFLICT") {
+      warnings.push("Multi-timeframe berkonflik, ambang kesesuaian vote otomatis dinaikkan.");
+    }
+    if (volatility.regime === "CRISIS") {
+      warnings.push("Regime volatilitas kritis, risiko slippage berada di luar kendali model.");
+    }
+    riskPlan.notes.forEach((note) => warnings.push(note));
 
-        const pX = consensusIsBullish
-          ? seg0.reduce((min, c) => (c.low < min.low ? c : min), seg0[0])
-          : seg0.reduce((max, c) => (c.high > max.high ? c : max), seg0[0]);
+    const expectancy = computeExpectancy({
+      confidence: consensus.confidence,
+      slPips: riskPlan.slPips,
+      tpPips: riskPlan.tpPips,
+      mtfConfluence: confluence,
+      regime: volatility.regime,
+      agreement: consensus.agreement,
+    });
 
-        const pA = consensusIsBullish
-          ? seg1.reduce((max, c) => (c.high > max.high ? c : max), seg1[0])
-          : seg1.reduce((min, c) => (c.low < min.low ? c : min), seg1[0]);
-
-        const pB = consensusIsBullish
-          ? seg2.reduce((min, c) => (c.low < min.low ? c : min), seg2[0])
-          : seg2.reduce((max, c) => (c.high > max.high ? c : max), seg2[0]);
-
-        const pC = consensusIsBullish
-          ? seg3.reduce((max, c) => (c.high > max.high ? c : max), seg3[0])
-          : seg3.reduce((min, c) => (c.low < min.low ? c : min), seg3[0]);
-
-        const isValidHarmonicSwings = consensusIsBullish
-          ? pA.high > pX.low && pB.low < pA.high && pB.low > pX.low && pC.high > pB.low
-          : pA.low < pX.high && pB.high > pA.low && pB.high < pX.high && pC.low < pB.high;
-
-        if (isValidHarmonicSwings) {
-          harmonicPattern = {
-            name: consensusIsBullish ? "Gartley Pattern" : "Bat Pattern",
-            type: consensusIsBullish ? "BULLISH" : "BEARISH",
-            points: [
-              { label: "X", time: pX.time, price: consensusIsBullish ? pX.low : pX.high },
-              { label: "A", time: pA.time, price: consensusIsBullish ? pA.high : pA.low },
-              { label: "B", time: pB.time, price: consensusIsBullish ? pB.low : pB.high },
-              { label: "C", time: pC.time, price: consensusIsBullish ? pC.high : pC.low },
-              { label: "D", time: currentUnix, price: calcEntry },
-            ],
-          };
-        }
+    const noTradeReasons: string[] = [];
+    if (decision === "WAIT") {
+      if (consensus.agreement < 0.2) {
+        noTradeReasons.push(`Kesesuaian antar-agen hanya ${Math.round(consensus.agreement * 100)}%.`);
+      }
+      if (consensus.confidence < 55) {
+        noTradeReasons.push(`Confidence gabungan ${consensus.confidence}% masih di bawah ambang 55%.`);
+      }
+      if (!checklistMet) noTradeReasons.push("Checklist disiplin trading belum terpenuhi.");
+      if (confluence.verdict === "CONFLICT") noTradeReasons.push("Timeframe tinggi masih bertentangan.");
+      if (volatility.regime === "CRISIS") noTradeReasons.push("Volatilitas kritis, harga tidak layak dikejar.");
+      if (expectancy.verdict === "NEGATIVE_EDGE") noTradeReasons.push("Expectancy negatif pada konfigurasi ini.");
+      if (riskPlan.structuralSlPips > spec.maxSlPips) {
+        noTradeReasons.push("Swing struktural terlalu jauh untuk risiko 30-50 pips.");
+      }
+      if (consensus.vetoes.length) {
+        noTradeReasons.push(`${consensus.vetoes.length} suara dibatalkan oleh veto psikologis.`);
+      }
+      if (!noTradeReasons.length) {
+        noTradeReasons.push("Gate keputusan tidak terpenuhi, default aman adalah tidak masuk pasar.");
       }
     }
 
-    const calculationsText = `Scalping Model: ${symbol} | Multi-TF Matrix: ${mtfSummaryText} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length + 1} Aktif, ${offlineAgents.length} Not Contributed`;
+    // Chief synthesizer: narrative layer, never allowed to overrule the gate.
+    const chiefSlot = slots[0];
+    const chiefEmotion = decision === "WAIT" ? "DISCIPLINED" : consensus.confidence >= 78 ? "CONFIDENT" : "CAUTIOUS";
+    const chiefMeta = EMOTION_META[chiefEmotion];
 
-    const chartMapping: any = {
-      supportLevel: sup,
-      resistanceLevel: res,
-      trendDirection: consensusIsBullish ? "UPTREND" : "DOWNTREND",
-      trendlineStart: trendlineStart,
-      trendlineEnd: {
-        time: currentUnix,
-        price: calcEntry,
-      },
-      fibonacciRetracement: {
-        high: { time: swingHighCandle.time, price: swingHighCandle.high },
-        low: { time: swingLowCandle.time, price: swingLowCandle.low },
-        levels: fibLevels,
-      },
-    };
-
-    if (harmonicPattern) {
-      chartMapping.harmonicPattern = harmonicPattern;
+    let synthRaw: any = null;
+    if (chiefSlot?.apiKey?.trim()) {
+      try {
+        synthRaw = await callProviderWithRetry(
+          chiefSlot,
+          buildSynthesizerPrompt({
+            symbol,
+            price,
+            timeframe,
+            decision,
+            direction,
+            entry: round(price),
+            sl: riskPlan.slPrice,
+            tp: riskPlan.tpPrice,
+            slPips: riskPlan.slPips,
+            tpPips: riskPlan.tpPips,
+            rr: `1:${riskPlan.rr}`,
+            confluence: `${confluence.verdict} ${confluence.score}/100`,
+            volatility: `${volatility.label}, ATR ${atrPips} pips`,
+            expectancy: expectancy.note,
+            agentLines: councilResults.map(
+              (a) =>
+                `- ${a.agentName} [${a.bias} ${a.confidence}% ${a.emotionIcon}] ${a.keyObservation}${
+                  a.voteVetoed ? " [VETO]" : ""
+                }`,
+            ),
+            noTradeReasons,
+            vetoLines: consensus.vetoes,
+            emotionSummary: "isi blok emotionalState pada response",
+            psychologySummary: "isi profil psikologis Hitung di blok emotionalState response",
+          }),
+          { timeoutMs: SYNTH_TIMEOUT_MS },
+        );
+      } catch {
+        warnings.push("Chief synthesizer tidak merespons, narasi diambil dari algoritma.");
+      }
+    } else {
+      warnings.push("Slot chief synthesizer tanpa API key, narasi diambil dari algoritma.");
     }
 
-    const responseData = {
-      signal: consensusBias,
-      entryPrice: calcEntry,
-      stopLoss: calcSL,
-      takeProfit: calcTP,
-      slPips: scalpSlPips,
-      tpPips: scalpTpPips,
-      riskRewardRatio: "1:2.5",
-      confidence: agent1.confidence,
-      agentOpinions: agentOpinions,
+    const chief: AgentOpinion = {
+      agentId: chiefSlot?.id || "slot_1",
+      agentName: chiefSlot?.label || "Agent 1 (Chief Synthesizer)",
+      role: CHIEF_ROLE,
+      modelUsed: chiefSlot?.model || "-",
+      provider: chiefSlot?.provider || "quant",
+      bias: decision === "WAIT" ? "NEUTRAL" : direction === "BULLISH" ? "BULLISH" : "BEARISH",
+      confidence: consensus.confidence,
+      keyObservation: `Putusan council ${decision}: arah ${direction}, confidence ${consensus.confidence}%, kesesuaian antar-agen ${Math.round(
+        consensus.agreement * 100,
+      )}%. SL ${riskPlan.slPips} pips, TP ${riskPlan.tpPips} pips, RR 1:${riskPlan.rr}.`,
+      detailedAnalysis:
+        (typeof synthRaw?.detailedVerdict === "string" && synthRaw.detailedVerdict.trim().slice(0, 1400)) ||
+        `Dewan ${activeAgents.length + 1} suara aktif. Confluence ${confluence.verdict} ${confluence.score}/100, struktur ${
+          structure.label
+        }, ATR ${atrPips} pips (${volatility.regime}). SL ${riskPlan.slPips} pips berbasis ${riskPlan.slBasis}. ${expectancy.note}`,
+      evidence: [
+        `Weighted vote bullish ${consensus.bullishWeight} vs bearish ${consensus.bearishWeight} dari ${consensus.quorum} agen`,
+        `Confluence M1-H1 ${confluence.verdict} ${confluence.score}/100`,
+        expectancy.note,
+        consensus.vetoes.length
+          ? `Veto psikologis aktif pada ${consensus.vetoes.length} suara`
+          : "Tidak ada veto psikologis pada sesi ini",
+      ],
+      suggestedLevel: {
+        entry: round(price),
+        sl: riskPlan.slPrice,
+        tp: riskPlan.tpPrice,
+        slPips: riskPlan.slPips,
+        tpPips: riskPlan.tpPips,
+      },
+      status: "active",
+      emotion: chiefEmotion,
+      emotionIcon: chiefMeta.icon,
+      emotionLabel: chiefMeta.label,
+      emotionTone: chiefMeta.tone,
+      emotionIntensity: decision === "WAIT" ? 45 : Math.round(clamp(30 + consensus.confidence / 2)),
+      emotionReason:
+        decision === "WAIT"
+          ? "Menahan godaan entry karena evidence belum memenuhi gate."
+          : `Setup lolos seluruh gate dengan confidence ${consensus.confidence}%.`,
+      psychology: {
+        discipline: decision === "WAIT" ? 92 : 78,
+        patience: decision === "WAIT" ? 88 : 70,
+        fomoResistance: decision === "WAIT" ? 90 : 72,
+        executionReadiness: decision === "WAIT" ? 30 : Math.round(clamp(expectancy.winProbability * 110)),
+        riskFlags: decision === "WAIT" ? ["Godaan FOMO masuk sebelum trigger"] : [],
+        read:
+          decision === "WAIT"
+            ? "Tetap wait lebih murah daripada entry tanpa confluence."
+            : "Eksekusi hanya pada trigger yang ditentukan, bukan pada harga saat analisis.",
+      },
+      reasoningQuality: Math.round(
+        clamp(40 + consensus.agreement * 40 + confluence.score * 0.2 + (synthRaw ? 10 : 0)),
+      ),
+      voteWeight: 0,
+      voteVetoed: false,
+    };
+
+    const agentOpinions: AgentOpinion[] = [chief, ...councilResults];
+    const emotionalState = buildEmotionalState(agentOpinions);
+    if (emotionalState.warning) warnings.push(emotionalState.warning);
+
+    const technicalContext: TechnicalContext = {
+      atr: round(atrValue),
+      atrPips,
+      atrPct: volatility.atrPct,
+      rsi: round(activeRsi),
+      smaFast: round(closes.length >= 5 ? sma(closes, 5) : price),
+      smaSlow: round(closes.length >= 15 ? sma(closes, 15) : price),
+      volatility,
+      mtfConfluence: confluence,
+      structure: structure.label,
+      structureBias: structure.bias,
+      pivotQuality: structure.pivotQuality,
+      goldenPocket: fib?.goldenPocket,
+      impulseLeg,
+      structuralSlPips: riskPlan.structuralSlPips || undefined,
+    };
+
+    const evaluation: EvaluationResult = {
+      symbol,
+      timeframe,
+      signal: decision,
+      direction,
+      setupStatus:
+        decision === "WAIT" ? "WAITING_FOR_TRIGGER" : activeAgents.length === 0 ? "DEGRADED_QUANT_FALLBACK" : "ARMED",
+      entryPrice: round(price),
+      stopLoss: riskPlan.slPrice,
+      takeProfit: riskPlan.tpPrice,
+      slPips: riskPlan.slPips,
+      tpPips: riskPlan.tpPips,
+      riskRewardRatio: `1:${riskPlan.rr}`,
+      confidence: consensus.confidence,
+      agentOpinions,
       activeAgentCount: activeAgents.length + 1,
       offlineAgentCount: offlineAgents.length,
-      mtfMatrix: mtfAnalysis,
-      thesis: synthesizerResult?.thesis || (consensusIsBullish
-        ? `Setup scalping ${symbol} pada timeframe ${timeframe} terkonfirmasi bullish selaras dengan matrix multi-timeframe. Pembentukan demand support mikro mendukung ekspansi cepat menuju target likuiditas terdekat dengan toleransi risiko ketat.`
-        : `Setup scalping ${symbol} pada timeframe ${timeframe} menunjukkan dominasi seller di area resistance sesuai tren time horizon yang lebih tinggi. Penolakan harga mengindikasikan distribusi cepat menuju kantong likuiditas bawah.`),
-      detailedVerdict: synthesizerResult?.detailedVerdict || agent1.detailedAnalysis,
-      riskInvalidation: synthesizerResult?.riskInvalidation || (consensusIsBullish
-        ? `Scalp batal jika harga menembus level SL di $${calcSL} (${scalpSlPips} pips ke bawah).`
-        : `Scalp batal jika harga menembus level SL di $${calcSL} (${scalpSlPips} pips ke atas).`),
-      slReason: synthesizerResult?.slReason || `SL dipatok disiplin ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) untuk menjaga risiko per 0.01 lot tetap di kisaran $3 - $5.`,
-      tpReason: synthesizerResult?.tpReason || `TP ditargetkan ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) dengan rasio 1:2.5 guna menghasilkan profit asimetris.`,
-      calculations: calculationsText,
-      chartMapping: chartMapping,
+      mtfMatrix,
+      mtfConfluence: confluence,
+      thesis:
+        (typeof synthRaw?.thesis === "string" && synthRaw.thesis.trim().slice(0, 800)) ||
+        defaultThesis({ direction, consensus, confluence, symbol, timeframe }),
+      detailedVerdict: chief.detailedAnalysis,
+      riskInvalidation:
+        (typeof synthRaw?.riskInvalidation === "string" && synthRaw.riskInvalidation.trim().slice(0, 600)) ||
+        `Setup batal jika harga menembus ${
+          direction === "BULLISH" ? "bawah" : "atas"
+        } $${riskPlan.slPrice} (${riskPlan.slPips} pips), atau jika struktur berubah menjadi ${structure.label}.`,
+      slReason:
+        (typeof synthRaw?.slReason === "string" && synthRaw.slReason.trim().slice(0, 400)) ||
+        `SL ${riskPlan.slPips} pips, ${riskPlan.slBasis}.`,
+      tpReason:
+        (typeof synthRaw?.tpReason === "string" && synthRaw.tpReason.trim().slice(0, 400)) ||
+        `TP ${riskPlan.tpPips} pips dengan RR 1:${riskPlan.rr}, disesuaikan confluence ${confluence.verdict}.`,
+      edge:
+        (typeof synthRaw?.edge === "string" && synthRaw.edge.trim().slice(0, 600)) ||
+        defaultEdge({ confluence, fib, harmonic, ctx: technicalContext, direction }),
+      calculations: buildCalculations({
+        symbol,
+        spec,
+        atrValue,
+        volatility,
+        confluence,
+        structure: structure.label,
+        risk: riskPlan,
+        consensus,
+        activeCount: activeAgents.length + 1,
+        offlineCount: offlineAgents.length,
+        expectancy,
+      }),
+      chartMapping: buildChartMapping({
+        candles,
+        pivots,
+        price,
+        direction,
+        fib,
+        harmonic,
+        currentUnix,
+        atrValue,
+      }),
       positionBox: {
         startTime: currentUnix,
         endTime: currentUnix + tfSeconds * 12,
-        entryPrice: calcEntry,
-        stopLoss: calcSL,
-        takeProfit: calcTP,
+        entryPrice: round(price),
+        stopLoss: riskPlan.slPrice,
+        takeProfit: riskPlan.tpPrice,
       },
-      predictiveTrajectory: traj,
-      recommendation: synthesizerResult?.recommendation || `Buka posisi SCALPING ${consensusBias} di $${calcEntry}. Pasang SL di $${calcSL} (-${scalpSlPips} pips) dan TP di $${calcTP} (+${scalpTpPips} pips).`,
-      notes: synthesizerResult?.notes || "Gunakan volume 0.01 lot per $100-$200 modal. Segera set breakeven (BEP) jika harga sudah running +20 pips."
+      predictiveTrajectory: buildTrajectory({
+        price,
+        direction,
+        slDistance: fromPips(riskPlan.slPips, spec),
+        tpDistance: fromPips(riskPlan.tpPips, spec),
+        currentUnix,
+        tfSeconds,
+      }),
+      recommendation:
+        (typeof synthRaw?.recommendation === "string" && synthRaw.recommendation.trim().slice(0, 800)) ||
+        defaultRecommendation({ consensus, direction, price, risk: riskPlan, spec }),
+      notes:
+        (typeof synthRaw?.notes === "string" && synthRaw.notes.trim().slice(0, 800)) ||
+        (typeof synthRaw?.psychologyWarning === "string" && synthRaw.psychologyWarning.trim().slice(0, 400)) ||
+        defaultNotes({ risk: riskPlan, expectancy, emotional: emotionalState }),
+      emotionalState,
+      consensus,
+      technicalContext,
+      riskPlan,
+      expectancy,
+      executionPlan: buildExecutionPlan({
+        consensus,
+        direction,
+        price,
+        risk: riskPlan,
+        tfSeconds,
+        fib,
+        confluence,
+      }),
+      psychologyCheck: psychologyFlagsFor(agentOpinions),
+      noTradeReasons,
+      warnings,
+      quality: {
+        avgReasoningQuality: activeAgents.length
+          ? Math.round(activeAgents.reduce((sum, a) => sum + a.reasoningQuality, 0) / activeAgents.length)
+          : 0,
+        degraded: activeAgents.length === 0,
+        durationMs: Date.now() - startedAt,
+        modelsUsed: Array.from(
+          new Set(
+            agentOpinions
+              .filter((a) => a.status === "active")
+              .map((a) => `${a.provider}/${a.modelUsed}`),
+          ),
+        ),
+      },
     };
 
-    return NextResponse.json({ evaluation: responseData });
+    return NextResponse.json({ evaluation });
   } catch (error) {
-    console.error('Multi-agent 10-slot evaluation error:', error);
+    console.error("Multi-agent council evaluation error:", error);
     return NextResponse.json(
-      { error: 'Gagal menjalankan evaluasi 10-slot council' },
-      { status: 500 }
+      { error: "Gagal menjalankan evaluasi council AI.", detail: String((error as Error)?.message || error) },
+      { status: 500 },
     );
   }
 }
