@@ -68,15 +68,26 @@ export interface PositionBox {
 
 export interface AISignalOverlay {
   signal?: "BUY" | "SELL" | "WAIT";
+  /**
+   * Structural side of the plan. Required because a WAIT still has a directional
+   * plan, and the chart must draw the box in the correct orientation.
+   */
+  direction?: "BULLISH" | "BEARISH";
   entryPrice?: number;
   stopLoss?: number;
   takeProfit?: number;
   slPips?: number;
   tpPips?: number;
+  riskRewardRatio?: string;
   positionBox?: PositionBox;
   predictiveTrajectory?: Array<{ time: number; price: number }>;
   note?: string;
 }
+
+const resolveSide = (signal?: AISignalOverlay["signal"], direction?: AISignalOverlay["direction"]) => {
+  if (direction) return direction === "BULLISH" ? "BUY" : "SELL";
+  return signal === "SELL" ? "SELL" : "BUY";
+};
 
 interface TradingViewChartProps {
   currentCandle: CandleData | null;
@@ -266,6 +277,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     if (!chartRef.current || !isDataSetRef.current || historicalCandles.length === 0) return;
 
     const lineMap = lineSeriesMap.current;
+    // Clear previous AI mapping and signal lines so fresh prediction redraws at the latest candle!
+    lineMap.forEach((line) => {
+      try {
+        chartRef.current?.removeSeries(line);
+      } catch (e) {}
+    });
+    lineMap.clear();
+
     const activeOverlayIds = new Set<string>();
 
     const lastHistoricalTime =
@@ -276,7 +295,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const trajId = "ai_predictive_trajectory";
       activeOverlayIds.add(trajId);
       if (!lineMap.has(trajId)) {
-        const isBuy = (aiSignal.signal || "BUY") === "BUY";
+        const isBuy = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
         const trajColor = isBuy ? "#38BDF8" : "#F43F5E";
         const line = chartRef.current.addLineSeries({
           color: trajColor,
@@ -311,7 +330,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const trendId = "ai_dynamic_trendline";
       activeOverlayIds.add(trendId);
       if (!lineMap.has(trendId)) {
-        const isUp = (aiSignal?.signal || "BUY") === "BUY";
+        const isUp = resolveSide(aiSignal?.signal, aiSignal?.direction) === "BUY";
         const trendLine = chartRef.current.addLineSeries({
           color: isUp ? "#10B981" : "#EF4444",
           lineWidth: 2,
@@ -416,7 +435,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             fibLine.setMarkers([
               {
                 time: fibStart as any,
-                position: (aiSignal?.signal || "BUY") === "BUY" ? "belowBar" : "aboveBar",
+                position: resolveSide(aiSignal?.signal, aiSignal?.direction) === "BUY" ? "belowBar" : "aboveBar",
                 color: "#F59E0B",
                 shape: "circle",
                 text: lvl.ratio === 0.618 ? "Fib 0.618 Pocket" : "Fib 0.50 Eq",
@@ -476,20 +495,24 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       // Detect candle spacing interval dynamically from historical data for seamless multi-timeframe scaling
       const candleIntervalSec = (prevCandle && lastCandle) ? Math.max(1, lastCandle.time - prevCandle.time) : 60;
       
-      // Keep box bounded to ~4 candles in the past and ~14 candles in the future on ANY timeframe (M1, M5, M15, H1)
-      const startTime = aiSignal.positionBox?.startTime || (lastTime - candleIntervalSec * 4);
-      const endTime = aiSignal.positionBox?.endTime || (startTime + candleIntervalSec * 16);
+      // Bounded Position Box: ALWAYS starts at the current live candle (lastTime)
+      // and projects forward into future time (future forecast), NEVER in the past!
+      const currentCandleTime = currentCandle?.time || lastTime;
+      const startTime = currentCandleTime;
+      const endTime = currentCandleTime + candleIntervalSec * 16;
 
       let x1 = timeScale.timeToCoordinate(startTime as any) as number | null;
       let x2 = timeScale.timeToCoordinate(endTime as any) as number | null;
 
       // Robust fallback if time falls outside visible range on different timeframe
-      const lastCoord = timeScale.timeToCoordinate(lastTime as any) as number | null;
+      const lastCoord = timeScale.timeToCoordinate(currentCandleTime as any) as number | null;
       if (x1 === null && lastCoord !== null) {
-        x1 = Math.max(20, lastCoord - 80);
+        x1 = lastCoord;
       }
-      if (x2 === null && lastCoord !== null) {
-        x2 = Math.min(width - 20, lastCoord + 140);
+      if (x2 === null && x1 !== null) {
+        x2 = x1 + 160;
+      } else if (x2 === null && lastCoord !== null) {
+        x2 = lastCoord + 160;
       }
 
       const yEntry = candleSeries.priceToCoordinate(aiSignal.entryPrice);
@@ -503,7 +526,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       const boxLeft = Math.min(x1, x2);
       const boxWidth = Math.max(Math.abs(x2 - x1), 120);
-      const isLong = (aiSignal.signal || "BUY") === "BUY";
+      const isLong = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
 
       // 1. Draw Target (Green) Profit Box
       const tpTop = Math.min(yEntry, yTP);
@@ -792,6 +815,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           {aiSignal?.slPips && (
             <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
               SL: {aiSignal.slPips} pips &bull; TP: {aiSignal.tpPips} pips
+              {aiSignal.riskRewardRatio ? ` (${aiSignal.riskRewardRatio})` : ""}
+            </span>
+          )}
+
+          {aiSignal?.signal === "WAIT" && (
+            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-900/50">
+              No Trade &middot; plan {resolveSide(aiSignal.signal, aiSignal.direction)}
             </span>
           )}
 
