@@ -9,6 +9,7 @@ import {
   PositionBox,
 } from "@/components/chart/TradingViewChart";
 import { useMarketStream } from "@/hooks/useMarketStream";
+import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -81,61 +82,31 @@ export type StoredEvaluation = Partial<EvaluationResult> & {
   outcome?: EvaluationOutcome;
   resolvedPrice?: number;
   resolvedAt?: number;
+  /** Unix seconds the setup was created — the gate that ignores pre-trade price action. */
+  anchorTime?: number;
+  /** Market price when the setup was produced; equal to entryPrice for market entries. */
+  setupPrice?: number;
+  /** True once price actually traded the entry level. */
+  entryFilled?: boolean;
 };
 
+/** Unix seconds the setup was created; falls back to the archive timestamp. */
+const setupAnchorSec = (log: StoredEvaluation): number =>
+  log.positionBox?.startTime ?? Math.floor((log.timestamp ?? Date.now()) / 1000);
+
 /**
- * Determine trade outcome for a historical log given candles or current price.
+ * Entries archived before the lifecycle fix were judged against candles that
+ * existed BEFORE the setup, so a pullback instantly read as LOSE. Re-open them
+ * and let the corrected resolver decide.
  */
-function resolveOutcome(
-  log: StoredEvaluation,
-  currentPrice?: number,
-  recentCandles?: { high: number; low: number; close: number; time?: number }[]
-): EvaluationOutcome {
-  if (log.outcome && log.outcome !== "ACTIVE") {
-    return log.outcome;
-  }
-  if (!log.signal || log.signal === "WAIT") {
-    return "WAIT";
-  }
-  if (!log.entryPrice || !log.stopLoss || !log.takeProfit) {
-    return "WAIT";
-  }
-
-  const { entryPrice, stopLoss, takeProfit, signal } = log;
-
-  // If we have recent historical candles after the setup timestamp:
-  if (recentCandles && recentCandles.length > 0) {
-    for (const c of recentCandles) {
-      if (signal === "BUY") {
-        if (c.high >= takeProfit && c.low <= stopLoss) {
-          // Both touched in the same candle: conservatively check close or treat as LOSE
-          return c.close >= takeProfit ? "WIN" : "LOSE";
-        }
-        if (c.high >= takeProfit) return "WIN";
-        if (c.low <= stopLoss) return "LOSE";
-      } else if (signal === "SELL") {
-        if (c.low <= takeProfit && c.high >= stopLoss) {
-          return c.close <= takeProfit ? "WIN" : "LOSE";
-        }
-        if (c.low <= takeProfit) return "WIN";
-        if (c.high >= stopLoss) return "LOSE";
-      }
-    }
-  }
-
-  // Fallback to current live price
-  if (currentPrice) {
-    if (signal === "BUY") {
-      if (currentPrice >= takeProfit) return "WIN";
-      if (currentPrice <= stopLoss) return "LOSE";
-    } else if (signal === "SELL") {
-      if (currentPrice <= takeProfit) return "WIN";
-      if (currentPrice >= stopLoss) return "LOSE";
-    }
-  }
-
-  return "ACTIVE";
-}
+const migrateLegacyOutcome = (log: StoredEvaluation): StoredEvaluation => {
+  if (!log || typeof log !== "object") return log;
+  if (log.anchorTime !== undefined) return log;
+  if (!log.signal || log.signal === "WAIT") return log;
+  if (log.outcome !== "WIN" && log.outcome !== "LOSE") return log;
+  const { resolvedPrice, resolvedAt, ...rest } = log;
+  return { ...rest, outcome: "ACTIVE" };
+};
 
 const EMOTION_TONE_CLASS: Record<EmotionTone, string> = {
   constructive: "border-emerald-800/70 bg-emerald-950/30 text-emerald-300",
@@ -241,7 +212,8 @@ export default function DashboardPage() {
       try {
         const savedLogs = localStorage.getItem("ai_evaluation_logs");
         if (savedLogs) {
-          setEvalLogs(JSON.parse(savedLogs));
+          const parsed = JSON.parse(savedLogs);
+          setEvalLogs(Array.isArray(parsed) ? parsed.map(migrateLegacyOutcome) : []);
         }
       } catch (e) {
         console.warn("Failed to load evaluation logs", e);
@@ -266,17 +238,32 @@ export default function DashboardPage() {
         return log;
       }
 
-      const outcome = resolveOutcome(log, currentCandle.close, historicalCandles.slice(-30));
-      if (outcome !== log.outcome) {
-        hasChanges = true;
-        return {
-          ...log,
-          outcome,
-          resolvedPrice: outcome !== "ACTIVE" ? currentCandle.close : undefined,
-          resolvedAt: outcome !== "ACTIVE" ? Date.now() : undefined,
-        };
-      }
-      return log;
+      // Candles only make sense on the timeframe the setup was taken on.
+      const onSameTimeframe = !log.timeframe || log.timeframe === timeframe;
+      const state = resolveTradeOutcome(
+        {
+          signal: log.signal as "BUY" | "SELL",
+          entryPrice: log.entryPrice,
+          stopLoss: log.stopLoss,
+          takeProfit: log.takeProfit,
+          anchorTime: setupAnchorSec(log),
+          setupPrice: log.setupPrice,
+        },
+        onSameTimeframe ? historicalCandles : [],
+        onSameTimeframe ? currentCandle : null,
+      );
+
+      if (state.outcome === log.outcome && state.entryFilled === log.entryFilled) return log;
+
+      hasChanges = true;
+      return {
+        ...log,
+        outcome: state.outcome,
+        anchorTime: setupAnchorSec(log),
+        entryFilled: state.entryFilled,
+        resolvedPrice: state.resolvedPrice,
+        resolvedAt: state.resolvedTime ? state.resolvedTime * 1000 : undefined,
+      };
     });
 
     if (hasChanges) {
@@ -285,7 +272,7 @@ export default function DashboardPage() {
         localStorage.setItem("ai_evaluation_logs", JSON.stringify(updated));
       }
     }
-  }, [currentCandle?.close, activeSymbol, historicalCandles.length]);
+  }, [currentCandle?.close, activeSymbol, timeframe, historicalCandles.length]);
 
   const handleSymbolChange = (sym: string) => {
     setActiveSymbol(sym);
@@ -395,13 +382,15 @@ export default function DashboardPage() {
         const initialOutcome: EvaluationOutcome =
           data.evaluation.signal === "WAIT" ? "WAIT" : "ACTIVE";
 
-        const newRecord: EvaluationResult & { outcome: EvaluationOutcome } = {
+        const newRecord: EvaluationResult & { outcome: EvaluationOutcome } & StoredEvaluation = {
           ...(data.evaluation as EvaluationResult),
           id: `eval_${Date.now()}`,
           timestamp: Date.now(),
           symbol: activeSymbol,
           timeframe: timeframe,
           outcome: initialOutcome,
+          setupPrice: currentCandle.close,
+          anchorTime: setupAnchorSec(data.evaluation as StoredEvaluation),
         };
         setEvaluation(newRecord);
         setExpandedAgentId(newRecord.agentOpinions?.[0]?.agentId || "slot_1");
@@ -1465,6 +1454,11 @@ export default function DashboardPage() {
 
                       const outcomeStatus: EvaluationOutcome =
                         log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
+                      // Armed but price has not traded the entry level yet.
+                      const awaitingEntry =
+                        outcomeStatus === "ACTIVE" &&
+                        log.signal !== "WAIT" &&
+                        log.entryFilled !== true;
 
                       return (
                         <div
@@ -1508,7 +1502,9 @@ export default function DashboardPage() {
                                   : outcomeStatus === "LOSE"
                                   ? "✕ LOSE"
                                   : outcomeStatus === "ACTIVE"
-                                  ? "● ACTIVE"
+                                  ? awaitingEntry
+                                    ? "◦ MENUNGGU ENTRY"
+                                    : "● RUNNING"
                                   : "— WAIT"}
                               </span>
 

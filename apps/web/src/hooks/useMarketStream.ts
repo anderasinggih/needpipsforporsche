@@ -35,6 +35,9 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastTickTimestamp, setLastTickTimestamp] = useState<number>(Date.now());
   const wsRef = useRef<WebSocket | null>(null);
+  // Time of the last bar folded into historicalCandles, so intra-bar kline
+  // updates do not thrash the array on every tick.
+  const streamBarTimeRef = useRef<number | null>(null);
 
   const binanceStream = normalizeBinanceStreamSymbol(activeSymbol);
 
@@ -43,19 +46,44 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     // Clear old candles when switching symbol/timeframe to avoid mismatch glitch
     setHistoricalCandles([]);
     setCurrentCandle(null);
-    try {
-      const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=150`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
-          setHistoricalCandles(data.candles);
-          setCurrentCandle(data.candles[data.candles.length - 1]);
+      try {
+        const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=150`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
+            setHistoricalCandles(data.candles);
+            setCurrentCandle(data.candles[data.candles.length - 1]);
+            streamBarTimeRef.current = data.candles[data.candles.length - 1].time;
+          }
         }
+      } catch (err) {
+        console.warn("Failed to fetch historical candles:", err);
       }
-    } catch (err) {
-      console.warn("Failed to fetch historical candles:", err);
-    }
-  }, [activeSymbol, timeframe]);
+    }, [activeSymbol, timeframe]);
+
+  // 1b. Keep growing the bar series from the stream.
+  // Without this the array stays frozen at the REST snapshot, so a setup can
+  // never be resolved by a later candle — the trade would stay ACTIVE forever
+  // and the chart box would never widen.
+  const foldStreamedBar = useCallback((candle: CandleData) => {
+    const previousTime = streamBarTimeRef.current;
+    streamBarTimeRef.current = candle.time;
+    // Same forming bar and not closed yet: the live candle already covers it.
+    if (previousTime === candle.time && !candle.is_closed) return;
+
+    setHistoricalCandles((prev) => {
+      if (prev.length === 0) return [candle];
+      const last = prev[prev.length - 1];
+      if (candle.time < last.time) return prev; // out-of-order frame
+      if (candle.time === last.time) {
+        if (last.is_closed && !candle.is_closed) return prev;
+        const next = prev.slice(0, -1);
+        next.push(candle);
+        return next;
+      }
+      return [...prev, candle].slice(-150);
+    });
+  }, []);
 
   useEffect(() => {
     fetchHistorical();
@@ -112,6 +140,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
                 is_closed: k.x,
               };
               setCurrentCandle(candle);
+              foldStreamedBar(candle);
               setLastTickTimestamp(Date.now());
             }
             // Handle individual real-time trade tick event (@trade)
@@ -164,6 +193,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
             if (data.candles && data.candles.length > 0) {
               const latest = data.candles[data.candles.length - 1];
               setCurrentCandle(latest);
+              foldStreamedBar(latest);
               setLastTickTimestamp(Date.now());
               setIsConnected(true);
             }
@@ -176,6 +206,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
       isMounted = false;
       clearInterval(pollInterval);
       clearTimeout(reconnectTimeout);
+      streamBarTimeRef.current = null;
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

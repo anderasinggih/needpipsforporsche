@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createChart, IChartApi, ISeriesApi, LineStyle, ColorType, CrosshairMode } from "lightweight-charts";
+import { resolveTradeOutcome } from "@/lib/trade/outcome";
 
 export interface CandleData {
   time: number; // Unix seconds
@@ -460,6 +461,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const [isBoxSelected, setIsBoxSelected] = useState(true);
   const positionBoxBoundsRef = useRef<{ left: number; right: number; top: number; bottom: number } | null>(null);
 
+  // Live feed mirrored into refs: the position box runs on requestAnimationFrame
+  // and must read the newest bar every frame. Closing over props instead froze
+  // the box at the values it had when the effect was created, so it never grew
+  // with the candles.
+  const liveCandleRef = useRef<CandleData | null>(null);
+  const candlesRef = useRef<CandleData[]>([]);
+  useEffect(() => {
+    liveCandleRef.current = currentCandle;
+    candlesRef.current = historicalCandles;
+  });
+
   // Synchronize TradingView Long/Short Position Box canvas overlay with chart coordinate space
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
@@ -488,8 +500,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
 
       const timeScale = chart.timeScale();
-      const lastCandle = historicalCandles[historicalCandles.length - 1];
-      const prevCandle = historicalCandles.length > 1 ? historicalCandles[historicalCandles.length - 2] : null;
+      const liveCandle = liveCandleRef.current;
+      const candles = candlesRef.current;
+      const lastCandle = candles[candles.length - 1];
+      const prevCandle = candles.length > 1 ? candles[candles.length - 2] : null;
       const lastTime = lastCandle?.time || Math.floor(Date.now() / 1000);
 
       // Detect candle spacing interval dynamically from historical data for seamless multi-timeframe scaling
@@ -499,50 +513,34 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       // Match the exact entry anchor candle where the AI made the evaluation!
       // If predictiveTrajectory exists, its first point is the exact setup entry time.
       // Otherwise fall back to positionBox.startTime.
-      const currentCandleTime = currentCandle?.time || lastTime;
+      const currentCandleTime = liveCandle?.time || lastTime;
       const trajStartTime = aiSignal.predictiveTrajectory && aiSignal.predictiveTrajectory.length > 0
         ? Math.min(...aiSignal.predictiveTrajectory.map((p) => p.time))
         : null;
       const startTime = trajStartTime || aiSignal.positionBox?.startTime || currentCandleTime;
 
-      // Check if price already touched TP or SL in subsequent candles after setup startTime
       const isLong = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
-      let resolutionTime: number | null = null;
 
-      // Scan historical candles from setup startTime onwards to see if TP/SL was hit
-      for (const c of historicalCandles) {
-        if (c.time >= startTime) {
-          if (isLong) {
-            if (c.high >= aiSignal.takeProfit || c.low <= aiSignal.stopLoss) {
-              resolutionTime = c.time;
-              break;
-            }
-          } else {
-            if (c.low <= aiSignal.takeProfit || c.high >= aiSignal.stopLoss) {
-              resolutionTime = c.time;
-              break;
-            }
-          }
-        }
-      }
-
-      // Check current live candle as well
-      if (!resolutionTime && currentCandle && currentCandle.time >= startTime) {
-        if (isLong) {
-          if (currentCandle.high >= aiSignal.takeProfit || currentCandle.low <= aiSignal.stopLoss) {
-            resolutionTime = currentCandle.time;
-          }
-        } else {
-          if (currentCandle.low <= aiSignal.takeProfit || currentCandle.high >= aiSignal.stopLoss) {
-            resolutionTime = currentCandle.time;
-          }
-        }
-      }
+      // Same lifecycle the history log uses: price action before the setup
+      // cannot resolve it, and the box only closes once TP/SL is really hit.
+      const tradeState = resolveTradeOutcome(
+        {
+          signal: isLong ? "BUY" : "SELL",
+          entryPrice: aiSignal.entryPrice,
+          stopLoss: aiSignal.stopLoss,
+          takeProfit: aiSignal.takeProfit,
+          anchorTime: startTime,
+          setupPrice: aiSignal.positionBox?.entryPrice,
+        },
+        candles,
+        liveCandle,
+      );
+      const resolutionTime = tradeState.resolvedTime ?? null;
 
       // Dynamic End Time:
-      // If position is still ACTIVE (hasn't touched TP/SL):
-      // Expand box forward to currentCandleTime + buffer (e.g. 10 forward candles) so it tracks live price continuously.
-      // If TP/SL was touched: fix the box width at the exact candle where TP/SL was hit!
+      // If the setup is still running: the box keeps stretching one candle per
+      // new bar so it tracks the trade as it breathes.
+      // If TP/SL was really touched: freeze the width at that exact candle.
       const endTime = resolutionTime
         ? resolutionTime + candleIntervalSec
         : Math.max(startTime + candleIntervalSec * 16, currentCandleTime + candleIntervalSec * 10);
@@ -788,7 +786,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       cancelAnimationFrame(animId);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(renderPositionBox);
     };
-  }, [aiSignal, historicalCandles, isBoxSelected]);
+  }, [aiSignal, isBoxSelected]);
 
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
