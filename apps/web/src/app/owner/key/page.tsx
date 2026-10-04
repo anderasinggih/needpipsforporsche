@@ -17,17 +17,65 @@ export interface KeySlot {
   apiKey: string;
 }
 
+interface ModelOption {
+  value: string;
+  label: string;
+  recommended?: boolean;
+}
+
+const PROVIDER_MODELS: Record<string, ModelOption[]> = {
+  gemini: [
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Super Fast Scalp)", recommended: true },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Deep Technical Reasoner)" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Stable)" },
+    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (High Throughput)" },
+    { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (Legacy)" },
+    { value: "custom", label: "Custom Model..." },
+  ],
+  groq: [
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Flagship Ultra Fast)", recommended: true },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Sub-second Latency)" },
+    { value: "llama3-70b-8192", label: "Llama 3 70B (8k Context)" },
+    { value: "llama3-8b-8192", label: "Llama 3 8B (Fast)" },
+    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B (MoE)" },
+    { value: "custom", label: "Custom Model..." },
+  ],
+  openai: [
+    { value: "gpt-4o-mini", label: "GPT-4o Mini (Optimal Scalp & Microstructure)", recommended: true },
+    { value: "gpt-4o", label: "GPT-4o (Full Omni Reasoner)" },
+    { value: "o3-mini", label: "o3-mini (High-End Reasoning)" },
+    { value: "o1-mini", label: "o1-mini (Specialized Logic)" },
+    { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+    { value: "custom", label: "Custom Model..." },
+  ],
+  deepseek: [
+    { value: "deepseek-chat", label: "DeepSeek Chat (V3 / V3.1 General)", recommended: true },
+    { value: "deepseek-reasoner", label: "DeepSeek Reasoner (R1 Chain-of-Thought)" },
+    { value: "deepseek-flash", label: "DeepSeek Flash (High Speed)" },
+    { value: "custom", label: "Custom Model..." },
+  ],
+  openrouter: [
+    { value: "deepseek/deepseek-chat", label: "DeepSeek V3 (via OpenRouter)", recommended: true },
+    { value: "deepseek/deepseek-r1", label: "DeepSeek R1 (via OpenRouter)" },
+    { value: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (Free Tier)" },
+    { value: "meta-llama/llama-3.3-70b-instruct", label: "Meta Llama 3.3 70B Instruct" },
+    { value: "anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
+    { value: "auto", label: "Auto (Best Available)" },
+    { value: "custom", label: "Custom Model..." },
+  ],
+};
+
 const DEFAULT_SLOTS: KeySlot[] = [
   { id: "slot_1", label: "Agent 1 (Chief Synthesizer)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
   { id: "slot_2", label: "Agent 2 (Market Structure)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
   { id: "slot_3", label: "Agent 3 (Liquidity Hunter)", provider: "openai", model: "gpt-4o-mini", apiKey: "" },
   { id: "slot_4", label: "Agent 4 (Momentum & Trend)", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: "" },
   { id: "slot_5", label: "Agent 5 (Volatility & Risk)", provider: "gemini", model: "gemini-2.5-pro", apiKey: "" },
-  { id: "slot_6", label: "Agent 6 (Order Flow Scout)", provider: "groq", model: "llama3-8b-8192", apiKey: "" },
+  { id: "slot_6", label: "Agent 6 (Order Flow Scout)", provider: "groq", model: "llama-3.1-8b-instant", apiKey: "" },
   { id: "slot_7", label: "Agent 7 (Scalp Microstructure)", provider: "openai", model: "gpt-4o-mini", apiKey: "" },
   { id: "slot_8", label: "Agent 8 (Multi-TF Confirmation)", provider: "deepseek", model: "deepseek-chat", apiKey: "" },
-  { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "auto", apiKey: "" },
-  { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.0-flash", apiKey: "" },
+  { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "deepseek/deepseek-chat", apiKey: "" },
+  { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.5-flash", apiKey: "" },
 ];
 
 export default function OwnerKeyPage() {
@@ -208,24 +256,58 @@ export default function OwnerKeyPage() {
                       <Label className="text-[10px] text-zinc-500 font-mono">PROVIDER</Label>
                       <select
                         value={slot.provider}
-                        onChange={(e) => updateSlot(slot.id, "provider", e.target.value as any)}
+                        onChange={(e) => {
+                          const newProvider = e.target.value as any;
+                          const defaultModel = PROVIDER_MODELS[newProvider]?.[0]?.value || "";
+                          updateSlot(slot.id, "provider", newProvider);
+                          updateSlot(slot.id, "model", defaultModel);
+                        }}
                         className="mt-1 w-full rounded border border-zinc-800 bg-black px-2 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none"
                       >
                         <option value="gemini">Google Gemini</option>
-                        <option value="groq">Groq Llama</option>
+                        <option value="groq">Groq (Llama / Mistral)</option>
                         <option value="openai">OpenAI GPT</option>
                         <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
+                        <option value="openrouter">OpenRouter (Multi-Model)</option>
                       </select>
                     </div>
                     <div>
-                      <Label className="text-[10px] text-zinc-500 font-mono">MODEL</Label>
-                      <Input
-                        value={slot.model}
-                        onChange={(e) => updateSlot(slot.id, "model", e.target.value)}
-                        placeholder="e.g. gemini-2.5-flash"
-                        className="mt-1 h-7 text-[11px] font-mono bg-black border-zinc-800"
-                      />
+                      <Label className="text-[10px] text-zinc-500 font-mono">MODEL PRESET</Label>
+                      {(() => {
+                        const models = PROVIDER_MODELS[slot.provider] || [];
+                        const isPreset = models.some((m) => m.value === slot.model && m.value !== "custom");
+                        const selectedSelectValue = isPreset ? slot.model : "custom";
+
+                        return (
+                          <div className="space-y-1">
+                            <select
+                              value={selectedSelectValue}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val !== "custom") {
+                                  updateSlot(slot.id, "model", val);
+                                }
+                              }}
+                              className="mt-1 w-full rounded border border-zinc-800 bg-black px-2 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none"
+                            >
+                              {models.map((m) => (
+                                <option key={m.value} value={m.value}>
+                                  {m.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            {selectedSelectValue === "custom" && (
+                              <Input
+                                value={slot.model}
+                                onChange={(e) => updateSlot(slot.id, "model", e.target.value)}
+                                placeholder="Tulis nama model manual..."
+                                className="h-6 text-[10px] font-mono bg-zinc-950 border-zinc-800"
+                              />
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
