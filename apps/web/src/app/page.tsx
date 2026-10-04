@@ -28,11 +28,15 @@ import {
   TrendingUp,
   Calculator,
   ChevronRight,
+  ChevronDown,
   Clock,
   Users,
   Bot,
   BrainCircuit,
   MessageSquare,
+  Scale,
+  FileText,
+  CheckCircle,
 } from "lucide-react";
 
 export interface AgentOpinion {
@@ -43,6 +47,8 @@ export interface AgentOpinion {
   bias: "BULLISH" | "BEARISH" | "NEUTRAL";
   confidence: number;
   keyObservation: string;
+  detailedAnalysis?: string;
+  evidence?: string[];
   suggestedLevel?: { entry: number; sl: number; tp: number };
   status: "active" | "offline";
 }
@@ -59,6 +65,7 @@ export interface EvaluationResult {
   riskRewardRatio?: string;
   confidence: number;
   thesis: string;
+  detailedVerdict?: string;
   riskInvalidation: string;
   slReason?: string;
   tpReason?: string;
@@ -86,6 +93,10 @@ export default function DashboardPage() {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Expanded collapse states for agents
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>("agent_arbiter");
+  const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
 
   // Persistent AI Evaluation History Log
   const [evalLogs, setEvalLogs] = useState<EvaluationResult[]>([]);
@@ -148,6 +159,10 @@ export default function DashboardPage() {
     showToast(`Strategy selected: ${skill.title}`);
   };
 
+  const toggleAgentCollapse = (id: string) => {
+    setExpandedAgentId((prev) => (prev === id ? null : id));
+  };
+
   const handleEvaluate = async () => {
     if (!currentCandle) {
       showToast("Waiting for live market data feed...");
@@ -193,6 +208,7 @@ export default function DashboardPage() {
           timeframe: timeframe,
         };
         setEvaluation(newRecord);
+        setExpandedAgentId("agent_arbiter");
 
         const updatedLogs = [newRecord, ...evalLogs.slice(0, 49)];
         setEvalLogs(updatedLogs);
@@ -329,59 +345,156 @@ export default function DashboardPage() {
           />
         </Card>
 
-        {/* 5-Agent Council Discussion Strip (Live Mind Outputs) */}
+        {/* 5-Agent Council Discussion Strip with Individual Collapse Bars */}
         {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
-          <Card className="border-zinc-800 bg-zinc-950 p-3 shadow-none">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
+          <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-emerald-400" />
                 <span className="text-xs font-semibold font-mono tracking-wider uppercase text-zinc-200">
                   5-Agent Quantitative Council Debating &amp; Deliberation
                 </span>
+                <span className="text-[11px] text-zinc-500 font-mono">(Klik tiap agent untuk expand detail)</span>
               </div>
-              <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                5 Independent Minds &bull; Consensus {evaluation.signal} ({evaluation.confidence}%)
-              </Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
-              {evaluation.agentOpinions.map((agent) => (
-                <div
-                  key={agent.agentId}
-                  className={`rounded border p-2.5 text-xs transition-colors ${
-                    agent.agentId === "agent_arbiter"
-                      ? "border-emerald-900/50 bg-emerald-950/15"
-                      : "border-zinc-800/80 bg-black"
-                  }`}
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
+                  Consensus {evaluation.signal} ({evaluation.confidence}%)
+                </Badge>
+                <button
+                  type="button"
+                  onClick={() => setIsCouncilStripOpen(!isCouncilStripOpen)}
+                  className="text-zinc-500 hover:text-zinc-300 text-xs font-mono flex items-center gap-1"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] font-semibold text-zinc-300 truncate">
-                      {agent.agentName}
-                    </span>
-                    <span
-                      className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded ${
-                        agent.bias === "BULLISH"
-                          ? "bg-emerald-950/40 text-emerald-400"
-                          : agent.bias === "BEARISH"
-                          ? "bg-red-950/40 text-red-400"
-                          : "bg-zinc-800 text-zinc-400"
-                      }`}
-                    >
-                      {agent.bias}
-                    </span>
-                  </div>
-
-                  <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center justify-between">
-                    <span>{agent.role.split(" ")[0]}</span>
-                    <span>{agent.modelUsed}</span>
-                  </div>
-
-                  <p className="mt-1.5 text-[11px] text-zinc-300 leading-snug line-clamp-3">
-                    {agent.keyObservation}
-                  </p>
-                </div>
-              ))}
+                  {isCouncilStripOpen ? "Minimize" : "Expand All"}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCouncilStripOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
             </div>
+
+            {isCouncilStripOpen && (
+              <div className="space-y-2.5">
+                {/* 5-Agent Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+                  {evaluation.agentOpinions.map((agent) => {
+                    const isExpanded = expandedAgentId === agent.agentId;
+                    const isArbiter = agent.agentId === "agent_arbiter";
+
+                    return (
+                      <div
+                        key={agent.agentId}
+                        onClick={() => toggleAgentCollapse(agent.agentId)}
+                        className={`cursor-pointer rounded border p-2.5 text-xs transition-all select-none ${
+                          isArbiter
+                            ? isExpanded
+                              ? "border-emerald-700 bg-emerald-950/25 ring-1 ring-emerald-600/40"
+                              : "border-emerald-900/60 bg-emerald-950/10 hover:border-emerald-700"
+                            : isExpanded
+                            ? "border-zinc-600 bg-zinc-900 ring-1 ring-zinc-500/30"
+                            : "border-zinc-800/90 bg-black hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] font-semibold text-zinc-200 truncate pr-1">
+                            {agent.agentName}
+                          </span>
+                          <span
+                            className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              agent.bias === "BULLISH"
+                                ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
+                                : agent.bias === "BEARISH"
+                                ? "bg-red-950/60 text-red-400 border border-red-900/50"
+                                : "bg-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {agent.bias}
+                          </span>
+                        </div>
+
+                        <div className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
+                          <span className="truncate">{agent.role.split(" ")[0]}</span>
+                          <span className="text-[9px]">{agent.modelUsed}</span>
+                        </div>
+
+                        <p className="mt-1.5 text-[11px] text-zinc-300 leading-snug line-clamp-2">
+                          {agent.keyObservation}
+                        </p>
+
+                        <div className="mt-2 pt-1.5 border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                          <span>{isExpanded ? "Collapse" : "Lihat Detail"}</span>
+                          <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180 text-emerald-400" : ""}`} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Expanded Detail Drawer for Selected Agent */}
+                {expandedAgentId && (() => {
+                  const selectedAgent = evaluation.agentOpinions?.find((a) => a.agentId === expandedAgentId);
+                  if (!selectedAgent) return null;
+                  const isArbiter = selectedAgent.agentId === "agent_arbiter";
+
+                  return (
+                    <div className={`rounded-lg border p-3.5 transition-all text-xs font-sans ${
+                      isArbiter
+                        ? "border-emerald-800/80 bg-black/90"
+                        : "border-zinc-800 bg-black/90"
+                    }`}>
+                      <div className="flex flex-wrap items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <Bot className={`h-4 w-4 ${isArbiter ? "text-emerald-400" : "text-zinc-400"}`} />
+                          <span className="font-semibold text-zinc-100 font-mono text-xs">
+                            {selectedAgent.agentName}
+                          </span>
+                          <span className="text-zinc-500 font-mono text-[11px]">&bull; {selectedAgent.role}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
+                            Engine: {selectedAgent.modelUsed}
+                          </Badge>
+                          <Badge className={`text-[10px] font-mono font-bold ${
+                            selectedAgent.bias === "BULLISH"
+                              ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
+                              : selectedAgent.bias === "BEARISH"
+                              ? "bg-red-950/60 text-red-400 border border-red-800"
+                              : "bg-zinc-900 text-zinc-300"
+                          }`}>
+                            Bias: {selectedAgent.bias} ({selectedAgent.confidence}%)
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
+                            Analisis Mendalam &amp; Observasi Pasar:
+                          </div>
+                          <p className="text-zinc-200 text-xs leading-relaxed">
+                            {selectedAgent.detailedAnalysis || selectedAgent.keyObservation}
+                          </p>
+                        </div>
+
+                        {selectedAgent.evidence && selectedAgent.evidence.length > 0 && (
+                          <div className="pt-2 border-t border-zinc-900">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
+                              Bukti &amp; Dasar Pertimbangan:
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              {selectedAgent.evidence.map((ev, i) => (
+                                <div key={i} className="flex items-start gap-2 rounded bg-zinc-950 border border-zinc-900 p-2 text-[11px] text-zinc-300">
+                                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                  <span>{ev}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </Card>
         )}
 
@@ -476,6 +589,19 @@ export default function DashboardPage() {
                         </div>
                         <p className="mt-1 font-mono text-zinc-300 text-[11px] leading-relaxed">
                           {evaluation.calculations}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* KESIMPULAN MENDALAM DARI AI PENYIMPUL */}
+                    {evaluation.detailedVerdict && (
+                      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-3.5">
+                        <div className="font-semibold text-emerald-400 font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-emerald-900/40">
+                          <Scale className="h-3.5 w-3.5 text-emerald-400" />
+                          Kesimpulan Akhir &amp; Putusan AI Penyimpul (Supreme Arbiter)
+                        </div>
+                        <p className="mt-2 text-zinc-200 text-xs leading-relaxed font-sans">
+                          {evaluation.detailedVerdict}
                         </p>
                       </div>
                     )}
