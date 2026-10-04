@@ -26,12 +26,36 @@ export interface Position {
   time: number;
 }
 
+export interface FibonacciLevel {
+  ratio: number;
+  label: string;
+  price: number;
+}
+
+export interface HarmonicPoint {
+  label: "X" | "A" | "B" | "C" | "D";
+  time: number;
+  price: number;
+}
+
+export interface HarmonicPattern {
+  name: string; // e.g. "Gartley", "Bat", "Butterfly", "Cypher"
+  type: "BULLISH" | "BEARISH";
+  points: HarmonicPoint[]; // X, A, B, C, D
+}
+
 export interface AIMapping {
   supportLevel?: number;
   resistanceLevel?: number;
   trendDirection?: string;
   trendlineStart?: { time: number; price: number };
   trendlineEnd?: { time: number; price: number };
+  fibonacciRetracement?: {
+    high: { time: number; price: number };
+    low: { time: number; price: number };
+    levels: FibonacciLevel[];
+  };
+  harmonicPattern?: HarmonicPattern;
 }
 
 export interface PositionBox {
@@ -107,6 +131,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   }, [lastTickTimestamp, currentCandle?.close]);
 
   // Inisialisasi Chart: Pure Dark TradingView Standard (#089981 & #f23645)
+  // BORDER MERAH KINI 100% MERAH (#f23645), TIDAK ADA LAGI BORDER IJO PADA CANDLE MERAH
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -145,11 +170,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       height: 640,
     });
 
+    // CANDLESTICK MURNI ASLI TRADINGVIEW:
+    // UP: upColor #089981, borderUpColor #089981, wickUpColor #089981
+    // DOWN: downColor #f23645, borderDownColor #f23645, wickDownColor #f23645
+    // TIDAK ADA BORDER HIJAU PADA CANDLE MERAH
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#089981",
       downColor: "#f23645",
       borderVisible: true,
-      borderColor: "#089981",
       borderUpColor: "#089981",
       borderDownColor: "#f23645",
       wickUpColor: "#089981",
@@ -218,9 +246,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [currentCandle]);
 
-  // Scalping Bounded Overlays:
-  // JANGAN gunakan horizontal line panjang!
-  // Hanya gunakan bounded line segment terikat persis dari start bar hingga end bar proyeksi (Gambar 2).
+  // Scalping Bounded Overlays & Advanced AI Chart Tools:
+  // - Bounded Position Box (Entry, SL, TP tanpa infinite horizontal line)
+  // - XABCD Harmonic Pattern Mapping (XA, AB, BC, CD lines with labeled points)
+  // - Fibonacci Retracement Levels (Bounded 0.236, 0.382, 0.5, 0.618, 0.786)
+  // - Predictive Trajectory Line with Arrow
   useEffect(() => {
     if (!chartRef.current || !isDataSetRef.current || historicalCandles.length === 0) return;
 
@@ -235,7 +265,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const boxStart = aiSignal.positionBox?.startTime || lastHistoricalTime;
       const boxEnd = aiSignal.positionBox?.endTime || boxStart + 60 * 12;
 
-      // 1a. Bounded TP Level Line (Green Soft Segment, exactly boxStart to boxEnd)
+      // 1a. Bounded TP Level Line
       const tpLineId = "ai_box_tp_line";
       activeOverlayIds.add(tpLineId);
       if (!lineMap.has(tpLineId)) {
@@ -252,7 +282,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         lineMap.set(tpLineId, line);
       }
 
-      // 1b. Bounded Entry Level Line (Clean White Dotted Segment)
+      // 1b. Bounded Entry Level Line
       const entryLineId = "ai_box_entry_line";
       activeOverlayIds.add(entryLineId);
       if (!lineMap.has(entryLineId)) {
@@ -269,7 +299,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         lineMap.set(entryLineId, line);
       }
 
-      // 1c. Bounded SL Level Line (Red Soft Segment, exactly boxStart to boxEnd)
+      // 1c. Bounded SL Level Line
       const slLineId = "ai_box_sl_line";
       activeOverlayIds.add(slLineId);
       if (!lineMap.has(slLineId)) {
@@ -336,7 +366,6 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         const uniqueTraj = sortedTraj.filter((pt, idx, arr) => idx === 0 || pt.time > arr[idx - 1].time);
         line.setData(uniqueTraj.map((pt) => ({ time: pt.time as any, value: pt.price })));
 
-        // Arrow Marker at target point
         if (uniqueTraj.length > 0) {
           const lastPoint = uniqueTraj[uniqueTraj.length - 1];
           line.setMarkers([
@@ -349,9 +378,84 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             },
           ]);
         }
-
         lineMap.set(trajId, line);
       }
+    }
+
+    // 3. XABCD Harmonic Pattern Mapping Tool
+    if (aiMapping?.harmonicPattern?.points && aiMapping.harmonicPattern.points.length >= 5) {
+      const pts = aiMapping.harmonicPattern.points;
+      const patternName = aiMapping.harmonicPattern.name || "Harmonic";
+      const isHarmonicBullish = aiMapping.harmonicPattern.type === "BULLISH";
+
+      // Draw legs: X-A, A-B, B-C, C-D
+      for (let i = 0; i < 4; i++) {
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const legId = `ai_harmonic_leg_${p1.label}_${p2.label}`;
+        activeOverlayIds.add(legId);
+
+        if (!lineMap.has(legId)) {
+          const legLine = chartRef.current.addLineSeries({
+            color: isHarmonicBullish ? "#10B981" : "#F59E0B",
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            title: `${patternName} (${p1.label}-${p2.label})`,
+          });
+          legLine.setData([
+            { time: p1.time as any, value: p1.price },
+            { time: p2.time as any, value: p2.price },
+          ]);
+
+          // Set markers on each node point
+          legLine.setMarkers([
+            {
+              time: p1.time as any,
+              position: isHarmonicBullish ? "belowBar" : "aboveBar",
+              color: isHarmonicBullish ? "#10B981" : "#F59E0B",
+              shape: "circle",
+              text: p1.label,
+            },
+            {
+              time: p2.time as any,
+              position: isHarmonicBullish ? "belowBar" : "aboveBar",
+              color: isHarmonicBullish ? "#10B981" : "#F59E0B",
+              shape: "circle",
+              text: p2.label,
+            },
+          ]);
+
+          lineMap.set(legId, legLine);
+        }
+      }
+    }
+
+    // 4. Fibonacci Retracement Levels (Bounded segments, clean without cluttering)
+    if (aiMapping?.fibonacciRetracement?.levels && aiMapping.fibonacciRetracement.levels.length > 0) {
+      const fib = aiMapping.fibonacciRetracement;
+      const fibStart = fib.high.time < fib.low.time ? fib.high.time : fib.low.time;
+      const fibEnd = lastHistoricalTime + 60 * 10;
+
+      fib.levels.forEach((lvl, idx) => {
+        const fibId = `ai_fib_level_${lvl.ratio}`;
+        activeOverlayIds.add(fibId);
+
+        if (!lineMap.has(fibId)) {
+          // Color based on key fib ratios (0.5 and 0.618 golden pocket are gold/amber)
+          const isGolden = lvl.ratio === 0.618 || lvl.ratio === 0.5;
+          const fibLine = chartRef.current.addLineSeries({
+            color: isGolden ? "#F59E0B" : "#A1A1AA",
+            lineWidth: isGolden ? 2 : 1,
+            lineStyle: isGolden ? LineStyle.Solid : LineStyle.Dashed,
+            title: `Fib ${lvl.label} ($${lvl.price})`,
+          });
+          fibLine.setData([
+            { time: fibStart as any, value: lvl.price },
+            { time: fibEnd as any, value: lvl.price },
+          ]);
+          lineMap.set(fibId, fibLine);
+        }
+      });
     }
 
     // Clean up inactive lines
@@ -361,12 +465,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         lineMap.delete(id);
       }
     });
-  }, [aiSignal, historicalCandles]);
+  }, [aiMapping, aiSignal, historicalCandles]);
 
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
   return (
-    <div className="relative w-full rounded-md bg-black overflow-hidden border border-zinc-800">
+    <div className="relative w-full rounded-md bg-black overflow-hidden border border-zinc-800 font-sans">
       {/* Top Chart Toolbar */}
       <div className="flex flex-wrap items-center justify-between border-b border-zinc-800 px-4 py-2 bg-zinc-950">
         <div className="flex items-center gap-3">
@@ -374,7 +478,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <button
               type="button"
               onClick={() => onSymbolChange?.("BTCUSD")}
-              className={`px-3 py-1 text-xs font-mono font-medium rounded transition-colors ${
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
                 symbol.toUpperCase().startsWith("BTC")
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-white"
@@ -385,7 +489,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <button
               type="button"
               onClick={() => onSymbolChange?.("XAUUSD")}
-              className={`px-3 py-1 text-xs font-mono font-medium rounded transition-colors ${
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
                 symbol.toUpperCase().startsWith("XAU") || symbol.toUpperCase().startsWith("PAXG")
                   ? "bg-zinc-800 text-white"
                   : "text-zinc-400 hover:text-white"
@@ -399,17 +503,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <select
               value={timeframe}
               onChange={(e) => onTimeframeChange?.(e.target.value)}
-              className="bg-black border border-zinc-800 text-zinc-300 text-xs font-mono font-medium rounded px-2.5 py-1 focus:outline-none focus:border-zinc-600 cursor-pointer hover:bg-zinc-900 transition-colors"
+              className="bg-black border border-zinc-800 text-zinc-300 text-xs font-medium rounded px-2.5 py-1 focus:outline-none focus:border-zinc-600 cursor-pointer hover:bg-zinc-900 transition-colors"
             >
               {TIMEFRAMES.map((tf) => (
-                <option key={tf.value} value={tf.value} className="bg-black text-zinc-200 font-mono">
+                <option key={tf.value} value={tf.value} className="bg-black text-zinc-200">
                   {tf.label}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[10px] font-mono text-zinc-400">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[10px] text-zinc-400">
             <span
               className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-600"} transition-colors duration-150`}
             />
@@ -418,7 +522,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
           {aiSignal?.signal && (
             <span
-              className={`rounded px-2.5 py-0.5 text-[10px] font-mono font-semibold border ${
+              className={`rounded px-2.5 py-0.5 text-[10px] font-semibold border ${
                 aiSignal.signal === "BUY"
                   ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
                   : aiSignal.signal === "SELL"
@@ -431,29 +535,41 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           )}
 
           {aiSignal?.slPips && (
-            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] font-mono text-zinc-400 border border-zinc-800">
+            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
               SL: {aiSignal.slPips} pips &bull; TP: {aiSignal.tpPips} pips
+            </span>
+          )}
+
+          {aiMapping?.harmonicPattern?.name && (
+            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-900/50">
+              {aiMapping.harmonicPattern.name} (XABCD)
+            </span>
+          )}
+
+          {aiMapping?.fibonacciRetracement && (
+            <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
+              Fib 0.618 Pocket
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-[10px] font-mono text-zinc-500 uppercase flex items-center justify-end gap-1.5">
+            <div className="text-[10px] text-zinc-500 uppercase flex items-center justify-end gap-1.5">
               <span>MARKET PRICE</span>
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-700"} transition-colors`}
               />
             </div>
-            <div className={`text-sm font-mono font-semibold transition-colors duration-150 ${pulse ? "text-white" : "text-zinc-200"}`}>
+            <div className={`text-sm font-semibold transition-colors duration-150 ${pulse ? "text-white" : "text-zinc-200"}`}>
               {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "---.--"}
             </div>
           </div>
           {positions.length > 0 && (
             <div className="text-right">
-              <div className="text-[10px] font-mono text-zinc-500 uppercase">PnL</div>
+              <div className="text-[10px] text-zinc-500 uppercase">PnL</div>
               <div
-                className={`text-sm font-mono font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}
               >
                 ${totalPnL.toFixed(2)}
               </div>
@@ -466,7 +582,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       {/* Floating Scalping Box Overlay Info on Chart */}
       {aiSignal && (aiSignal.stopLoss || aiSignal.takeProfit) && (
-        <div className="absolute top-14 left-4 z-10 max-w-sm rounded border border-zinc-800 bg-zinc-950/90 p-2.5 backdrop-blur shadow-lg text-[11px] font-mono space-y-1.5 pointer-events-none">
+        <div className="absolute top-14 left-4 z-10 max-w-sm rounded border border-zinc-800 bg-zinc-950/90 p-2.5 backdrop-blur shadow-lg text-[11px] space-y-1.5 pointer-events-none">
           <div className="flex items-center justify-between text-zinc-400 border-b border-zinc-800/80 pb-1">
             <span className="text-zinc-300 font-semibold">SCALPING POSITION OVERLAY</span>
             <span className="text-[10px] text-emerald-400 font-semibold">RR 1:2.5</span>

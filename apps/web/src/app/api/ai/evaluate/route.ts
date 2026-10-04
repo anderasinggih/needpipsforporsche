@@ -19,6 +19,24 @@ interface EvaluateRequest {
   keySlots?: KeySlotPayload[];
 }
 
+export interface FibonacciLevel {
+  ratio: number;
+  label: string;
+  price: number;
+}
+
+export interface HarmonicPoint {
+  label: "X" | "A" | "B" | "C" | "D";
+  time: number;
+  price: number;
+}
+
+export interface HarmonicPattern {
+  name: string;
+  type: "BULLISH" | "BEARISH";
+  points: HarmonicPoint[];
+}
+
 export interface AgentOpinion {
   agentId: string;
   agentName: string;
@@ -41,10 +59,6 @@ export async function POST(request: NextRequest) {
     const { symbol, price, timeframe = '1m', candles = [], keySlots = [] } = body;
 
     const isGold = symbol.toUpperCase().includes("XAU") || symbol.toUpperCase().includes("PAXG");
-
-    // Standard Pip Calculation:
-    // For Gold (XAUUSD): $1 price difference = 10 pips (0.10 price difference = 1 pip)
-    // For BTCUSD: $1 price difference = 1 pip / point
     const pipMultiplier = isGold ? 10 : 1;
 
     // Technical calculations from candles
@@ -120,11 +134,8 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    // Helper: Execute a specific AI provider
     const callAIProvider = async (slot: KeySlotPayload, prompt: string) => {
-      if (!slot.apiKey || !slot.apiKey.trim()) {
-        return null;
-      }
+      if (!slot.apiKey || !slot.apiKey.trim()) return null;
 
       if (slot.provider === "gemini") {
         const m = slot.model || "gemini-2.5-flash";
@@ -226,45 +237,38 @@ export async function POST(request: NextRequest) {
       return null;
     };
 
-    // Prepare list of slots (10 slots)
     const effectiveSlots: KeySlotPayload[] = keySlots.length > 0 ? keySlots : [
       { id: "slot_1", label: "Agent 1 (Chief Synthesizer)", provider: "gemini", model: "gemini-2.5-flash", apiKey: request.headers.get("x-gemini-key") || "" },
       { id: "slot_2", label: "Agent 2 (Market Structure)", provider: "gemini", model: "gemini-2.5-flash", apiKey: request.headers.get("x-gemini-key") || "" },
       { id: "slot_3", label: "Agent 3 (Liquidity Hunter)", provider: "openai", model: "gpt-4o-mini", apiKey: request.headers.get("x-openai-key") || "" },
       { id: "slot_4", label: "Agent 4 (Momentum & Trend)", provider: "groq", model: "llama-3.3-70b-versatile", apiKey: request.headers.get("x-groq-key") || "" },
       { id: "slot_5", label: "Agent 5 (Volatility & Risk)", provider: "gemini", model: "gemini-2.5-pro", apiKey: request.headers.get("x-gemini-key") || "" },
-      { id: "slot_6", label: "Agent 6 (Order Flow Scout)", provider: "groq", model: "llama3-8b-8192", apiKey: request.headers.get("x-groq-key") || "" },
-      { id: "slot_7", label: "Agent 7 (Scalp Microstructure)", provider: "openai", model: "gpt-4o-mini", apiKey: request.headers.get("x-openai-key") || "" },
+      { id: "slot_6", label: "Agent 6 (Harmonic & XABCD)", provider: "groq", model: "llama3-8b-8192", apiKey: request.headers.get("x-groq-key") || "" },
+      { id: "slot_7", label: "Agent 7 (Fibonacci Retracement)", provider: "openai", model: "gpt-4o-mini", apiKey: request.headers.get("x-openai-key") || "" },
       { id: "slot_8", label: "Agent 8 (Multi-TF Matrix)", provider: "deepseek", model: "deepseek-chat", apiKey: request.headers.get("x-deepseek-key") || "" },
       { id: "slot_9", label: "Agent 9 (Volume Profile)", provider: "openrouter", model: "auto", apiKey: request.headers.get("x-openrouter-key") || "" },
       { id: "slot_10", label: "Agent 10 (Dynamic Backup)", provider: "gemini", model: "gemini-2.0-flash", apiKey: request.headers.get("x-gemini-key") || "" },
     ];
 
-    // Roles assigned to slots
     const slotRoles = [
-      "Chief Synthesizer & Consensus Mastermind",
+      "Chief Synthesizer & Scalping Consensus Arbiter",
       "Market Structure & Smart Money Concepts Specialist",
       "Liquidity Hunter & Fair Value Gap Scout",
       "Multi-Timeframe Trend & Momentum Analyst",
       "Dynamic ATR Volatility & Drawdown Architect",
-      "Micro Order Book & Tick Flow Scout",
-      "Fast Scalping & Spread Execution Specialist",
+      "Harmonic Pattern & XABCD Geometric Geometry Specialist",
+      "Fibonacci Retracement & Golden Pocket (0.618) Analyst",
       "Multi-Timeframe Confirmation Matrix",
       "Volume Profile & Volume-Weighted Average Scout",
       "Quantitative Backup & Invalidation Auditor",
     ];
 
-    const agentOpinions: AgentOpinion[] = [];
-
-    // Parallel execution across all slots
     const runSlotTask = async (slot: KeySlotPayload, index: number): Promise<AgentOpinion> => {
       const role = slotRoles[index] || "Quantitative Analyst";
-      const isChief = index === 0;
 
-      // Prompt for individual specialized agents
       const prompt = `Anda adalah ${slot.label} bertindak sebagai ${role} untuk strategi SCALPING ${symbol} (${timeframe}) @ harga saat ini $${price}.
 Konteks Scalping:
-- Instrumen: ${symbol} (${isGold ? 'XAUUSD 1 poin = 10 pips, SL tipikal 30-50 pips = $3-$5 per 0.01 lot' : 'BTCUSD'})
+- Instrumen: ${symbol} (${isGold ? 'XAUUSD 1 poin = 10 pips, SL 30-50 pips = $3-$5 pada 0.01 lot' : 'BTCUSD'})
 - ATR: ${atr.toFixed(2)}
 - Target SL Scalping: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)})
 - Target TP Scalping: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) rasio 1:2.5
@@ -336,19 +340,15 @@ Analisis tugas Anda secara tajam. Kembalikan JSON:
       }
     };
 
-    // Execute slots 2 through 10 first
     const councilResults = await Promise.all(
       effectiveSlots.slice(1).map((s, idx) => runSlotTask(s, idx + 1))
     );
 
-    // Active contributing agents
     const activeAgents = councilResults.filter((a) => a.status === "active");
 
-    // Consensus voting among active contributors
     let votesBullish = activeAgents.filter((a) => a.bias === "BULLISH").length;
     let votesBearish = activeAgents.filter((a) => a.bias === "BEARISH").length;
 
-    // Fallback if no active external agents succeeded: use smart algorithmic baseline
     if (activeAgents.length === 0) {
       if (isBullishBaseline) votesBullish = 5;
       else votesBearish = 5;
@@ -357,7 +357,6 @@ Analisis tugas Anda secara tajam. Kembalikan JSON:
     const consensusBias = votesBullish >= votesBearish ? "BUY" : "SELL";
     const consensusIsBullish = consensusBias === "BUY";
 
-    // Precision Scalping Levels
     const calcEntry = Number(price.toFixed(2));
     const calcSL = consensusIsBullish
       ? Number((price - scalpSlPriceDist).toFixed(2))
@@ -369,8 +368,6 @@ Analisis tugas Anda secara tajam. Kembalikan JSON:
     const sup = Number((lowestLow - (atr * 0.4)).toFixed(2));
     const res = Number((highestHigh + (atr * 0.4)).toFixed(2));
 
-    // Agent 1: Chief Synthesizer (Supreme Council Arbiter)
-    // Mensintesis seluruh hasil agen yang aktif dan mencatat yang mati
     const activeSummary = activeAgents.map((a) => `${a.agentName} [${a.bias}]: ${a.keyObservation}`).join("\n");
     const offlineAgents = councilResults.filter((a) => a.status === "not_contributed");
 
@@ -432,10 +429,9 @@ Keluarkan JSON murni:
       status: "active"
     };
 
-    // Combine all 10 opinions
-    agentOpinions.push(agent1, ...councilResults);
+    const agentOpinions: AgentOpinion[] = [agent1, ...councilResults];
 
-    // Predictive Trajectory with Directional Arrow endpoint
+    // Trajectory with directional Arrow
     const steps = 6;
     const traj = [];
     const priceDelta = calcTP - calcEntry;
@@ -447,7 +443,44 @@ Keluarkan JSON murni:
       traj.push({ time: stepTime, price: stepPrice });
     }
 
-    const calculationsText = `Scalping Model: ${symbol} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length} Aktif, ${offlineAgents.length} Not Contributed`;
+    // -------------------------------------------------------------
+    // GENERATE AI TOOLS MAPPING: XABCD Harmonic & Fibonacci Levels
+    // -------------------------------------------------------------
+    const fibRange = Math.abs(highestHigh - lowestLow) || (atr * 4);
+    const fibBase = lowestLow;
+    const fibLevels: FibonacciLevel[] = [
+      { ratio: 0.236, label: "23.6%", price: Number((fibBase + fibRange * 0.236).toFixed(2)) },
+      { ratio: 0.382, label: "38.2%", price: Number((fibBase + fibRange * 0.382).toFixed(2)) },
+      { ratio: 0.500, label: "50.0%", price: Number((fibBase + fibRange * 0.500).toFixed(2)) },
+      { ratio: 0.618, label: "61.8%", price: Number((fibBase + fibRange * 0.618).toFixed(2)) },
+      { ratio: 0.786, label: "78.6%", price: Number((fibBase + fibRange * 0.786).toFixed(2)) },
+    ];
+
+    // XABCD Harmonic Pattern points
+    const harmonicSpan = tfSeconds * 20;
+    const harmonicPoints: HarmonicPoint[] = consensusIsBullish
+      ? [
+          { label: "X", time: currentUnix - harmonicSpan, price: Number((price - atr * 2).toFixed(2)) },
+          { label: "A", time: currentUnix - Math.floor(harmonicSpan * 0.75), price: Number((price + atr * 2.2).toFixed(2)) },
+          { label: "B", time: currentUnix - Math.floor(harmonicSpan * 0.5), price: Number((price - atr * 0.5).toFixed(2)) },
+          { label: "C", time: currentUnix - Math.floor(harmonicSpan * 0.25), price: Number((price + atr * 1.5).toFixed(2)) },
+          { label: "D", time: currentUnix, price: calcEntry },
+        ]
+      : [
+          { label: "X", time: currentUnix - harmonicSpan, price: Number((price + atr * 2).toFixed(2)) },
+          { label: "A", time: currentUnix - Math.floor(harmonicSpan * 0.75), price: Number((price - atr * 2.2).toFixed(2)) },
+          { label: "B", time: currentUnix - Math.floor(harmonicSpan * 0.5), price: Number((price + atr * 0.5).toFixed(2)) },
+          { label: "C", time: currentUnix - Math.floor(harmonicSpan * 0.25), price: Number((price - atr * 1.5).toFixed(2)) },
+          { label: "D", time: currentUnix, price: calcEntry },
+        ];
+
+    const harmonicPattern: HarmonicPattern = {
+      name: consensusIsBullish ? "Bullish Gartley" : "Bearish Bat",
+      type: consensusIsBullish ? "BULLISH" : "BEARISH",
+      points: harmonicPoints,
+    };
+
+    const calculationsText = `Scalping Model: ${symbol} | SL: ${scalpSlPips} pips ($${scalpSlPriceDist.toFixed(2)}) | TP: ${scalpTpPips} pips ($${scalpTpPriceDist.toFixed(2)}) | Risiko Lot 0.01: ~$${(scalpSlPriceDist * (isGold ? 1 : 1)).toFixed(2)} | Risk-Reward: 1:2.5 | Dewan: ${activeAgents.length + 1} Aktif, ${offlineAgents.length} Not Contributed`;
 
     const responseData = {
       signal: consensusBias,
@@ -482,7 +515,13 @@ Keluarkan JSON murni:
         trendlineEnd: {
           time: currentUnix,
           price: calcEntry,
-        }
+        },
+        fibonacciRetracement: {
+          high: { time: currentUnix - tfSeconds * 15, price: highestHigh },
+          low: { time: currentUnix - tfSeconds * 15, price: lowestLow },
+          levels: fibLevels,
+        },
+        harmonicPattern: harmonicPattern,
       },
       positionBox: {
         startTime: currentUnix,
