@@ -205,55 +205,44 @@ export async function POST(request: NextRequest) {
 
       if (slot.provider === "gemini") {
         const key = slot.apiKey.trim();
-        // Fallback models if a specific experimental/frontier model 404s or 503s under burst
-        const primaryModel = slot.model || "gemini-2.5-flash";
-        const candidateModels = Array.from(new Set([
-          primaryModel,
-          "gemini-2.5-flash",
-          "gemini-2.0-flash",
-          "gemini-1.5-flash"
-        ]));
-
-        let lastErr: any = null;
-        for (const m of candidateModels) {
-          try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
-            const res = await fetchWithTimeout(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nKEMBALIKAN HANYA JSON VALID MURNI (RAW JSON TANPA KATA PENGANTAR):` }] }],
-                generationConfig: {
-                  temperature: 0.2,
-                  maxOutputTokens: 1000,
-                  responseMimeType: "application/json"
-                }
-              })
-            }, 12000);
-
-            if (!res.ok) {
-              const errBody = await res.text();
-              throw new Error(`Gemini ${m} HTTP ${res.status}: ${errBody.slice(0, 100)}`);
-            }
-
-            const data = await res.json();
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-            const cleaned = rawText
-              .replace(/```json/gi, "")
-              .replace(/```/g, "")
-              .trim();
-            const parsed = JSON.parse(cleaned);
-            return parsed;
-          } catch (err: any) {
-            lastErr = err;
-            // If it's a 404 (model not found) or 503 (service overload), try next candidate model
-            const isRecoverable = err?.message?.includes("404") || err?.message?.includes("503") || err?.message?.includes("429");
-            if (!isRecoverable && candidateModels.indexOf(m) === 0) {
-              break;
-            }
-          }
+        let m = slot.model || "gemini-2.5-flash";
+        // Strip leading 'models/' if user pasted it
+        if (m.startsWith("models/")) {
+          m = m.replace("models/", "");
         }
-        throw lastErr || new Error("Semua model Gemini gagal terhubung");
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
+        const res = await fetchWithTimeout(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nKEMBALIKAN HANYA JSON VALID MURNI (RAW JSON TANPA KATA PENGANTAR):` }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 1000,
+              responseMimeType: "application/json"
+            }
+          })
+        }, 15000);
+
+        if (!res.ok) {
+          const errBody = await res.text();
+          let parsedMsg = errBody.slice(0, 150);
+          try {
+            const errJson = JSON.parse(errBody);
+            parsedMsg = errJson.error?.message || parsedMsg;
+          } catch {}
+          throw new Error(`Gemini ${m} (${res.status}): ${parsedMsg}`);
+        }
+
+        const data = await res.json();
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const cleaned = rawText
+          .replace(/```json/gi, "")
+          .replace(/```/g, "")
+          .trim();
+        const parsed = JSON.parse(cleaned);
+        return parsed;
       }
 
       if (slot.provider === "openai") {
