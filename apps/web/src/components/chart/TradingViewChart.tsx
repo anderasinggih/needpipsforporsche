@@ -246,11 +246,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [currentCandle]);
 
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   // Scalping Bounded Overlays & Advanced AI Chart Tools:
-  // - Bounded Position Box (Entry, SL, TP tanpa infinite horizontal line)
-  // - XABCD Harmonic Pattern Mapping (XA, AB, BC, CD lines with labeled points)
-  // - Fibonacci Retracement Levels (Bounded 0.236, 0.382, 0.5, 0.618, 0.786)
-  // - Predictive Trajectory Line with Arrow
+  // - Render Position Box (TradingView Component Style: Green Target Area, Red Stop Area, Middle Ratio Badge, Corner Grips)
+  // - Predictive Trajectory Line with directional Arrow
+  // - XABCD Harmonic Pattern Multi-Leg Segments
+  // - Clean bounded Fibonacci lines without horizontal overflow
   useEffect(() => {
     if (!chartRef.current || !isDataSetRef.current || historicalCandles.length === 0) return;
 
@@ -260,96 +262,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     const lastHistoricalTime =
       historicalCandles[historicalCandles.length - 1]?.time || Math.floor(Date.now() / 1000);
 
-    // 1. TradingView Bounded Position Box (Segment terikat tidak memenuhi layar)
-    if (aiSignal?.entryPrice && aiSignal?.stopLoss && aiSignal?.takeProfit) {
-      const boxStart = aiSignal.positionBox?.startTime || lastHistoricalTime;
-      const boxEnd = aiSignal.positionBox?.endTime || boxStart + 60 * 12;
-
-      // 1a. Bounded TP Level Line
-      const tpLineId = "ai_box_tp_line";
-      activeOverlayIds.add(tpLineId);
-      if (!lineMap.has(tpLineId)) {
-        const line = chartRef.current.addLineSeries({
-          color: "#089981",
-          lineWidth: 2,
-          lineStyle: LineStyle.Solid,
-          title: `TP: $${aiSignal.takeProfit} (${aiSignal.tpPips ? `+${aiSignal.tpPips} pips` : ""})`,
-        });
-        line.setData([
-          { time: boxStart as any, value: aiSignal.takeProfit },
-          { time: boxEnd as any, value: aiSignal.takeProfit },
-        ]);
-        lineMap.set(tpLineId, line);
-      }
-
-      // 1b. Bounded Entry Level Line
-      const entryLineId = "ai_box_entry_line";
-      activeOverlayIds.add(entryLineId);
-      if (!lineMap.has(entryLineId)) {
-        const line = chartRef.current.addLineSeries({
-          color: "#E4E4E7",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
-          title: `Entry: $${aiSignal.entryPrice}`,
-        });
-        line.setData([
-          { time: boxStart as any, value: aiSignal.entryPrice },
-          { time: boxEnd as any, value: aiSignal.entryPrice },
-        ]);
-        lineMap.set(entryLineId, line);
-      }
-
-      // 1c. Bounded SL Level Line
-      const slLineId = "ai_box_sl_line";
-      activeOverlayIds.add(slLineId);
-      if (!lineMap.has(slLineId)) {
-        const line = chartRef.current.addLineSeries({
-          color: "#f23645",
-          lineWidth: 2,
-          lineStyle: LineStyle.Solid,
-          title: `SL: $${aiSignal.stopLoss} (${aiSignal.slPips ? `-${aiSignal.slPips} pips` : ""})`,
-        });
-        line.setData([
-          { time: boxStart as any, value: aiSignal.stopLoss },
-          { time: boxEnd as any, value: aiSignal.stopLoss },
-        ]);
-        lineMap.set(slLineId, line);
-      }
-
-      // 1d. Anchor vertical bracket kiri
-      const startBracketId = "ai_box_start_bracket";
-      activeOverlayIds.add(startBracketId);
-      if (!lineMap.has(startBracketId)) {
-        const line = chartRef.current.addLineSeries({
-          color: "#3F3F46",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-        });
-        line.setData([
-          { time: boxStart as any, value: aiSignal.stopLoss },
-          { time: boxStart as any, value: aiSignal.takeProfit },
-        ]);
-        lineMap.set(startBracketId, line);
-      }
-
-      // 1e. Anchor vertical bracket kanan
-      const endBracketId = "ai_box_end_bracket";
-      activeOverlayIds.add(endBracketId);
-      if (!lineMap.has(endBracketId)) {
-        const line = chartRef.current.addLineSeries({
-          color: "#3F3F46",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-        });
-        line.setData([
-          { time: boxEnd as any, value: aiSignal.stopLoss },
-          { time: boxEnd as any, value: aiSignal.takeProfit },
-        ]);
-        lineMap.set(endBracketId, line);
-      }
-    }
-
-    // 2. Predictive Trajectory Line with Directional Arrow Markers
+    // 1. Predictive Trajectory Line with Directional Arrow Markers
     if (aiSignal?.predictiveTrajectory && aiSignal.predictiveTrajectory.length > 0) {
       const trajId = "ai_predictive_trajectory";
       activeOverlayIds.add(trajId);
@@ -360,7 +273,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           color: trajColor,
           lineWidth: 2,
           lineStyle: LineStyle.Dotted,
-          title: `Trajectory Prediction &rarr;`,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
         });
         const sortedTraj = [...aiSignal.predictiveTrajectory].sort((a, b) => a.time - b.time);
         const uniqueTraj = sortedTraj.filter((pt, idx, arr) => idx === 0 || pt.time > arr[idx - 1].time);
@@ -374,7 +289,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
               position: isBuy ? "aboveBar" : "belowBar",
               color: trajColor,
               shape: isBuy ? "arrowUp" : "arrowDown",
-              text: isBuy ? "TARGET &uarr;" : "TARGET &darr;",
+              text: isBuy ? "Target" : "Target",
             },
           ]);
         }
@@ -382,13 +297,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 3. XABCD Harmonic Pattern Mapping Tool
+    // 2. XABCD Harmonic Pattern Mapping Tool
     if (aiMapping?.harmonicPattern?.points && aiMapping.harmonicPattern.points.length >= 5) {
       const pts = aiMapping.harmonicPattern.points;
-      const patternName = aiMapping.harmonicPattern.name || "Harmonic";
       const isHarmonicBullish = aiMapping.harmonicPattern.type === "BULLISH";
 
-      // Draw legs: X-A, A-B, B-C, C-D
       for (let i = 0; i < 4; i++) {
         const p1 = pts[i];
         const p2 = pts[i + 1];
@@ -400,14 +313,15 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             color: isHarmonicBullish ? "#10B981" : "#F59E0B",
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
-            title: `${patternName} (${p1.label}-${p2.label})`,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
           });
           legLine.setData([
             { time: p1.time as any, value: p1.price },
             { time: p2.time as any, value: p2.price },
           ]);
 
-          // Set markers on each node point
           legLine.setMarkers([
             {
               time: p1.time as any,
@@ -430,24 +344,25 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 4. Fibonacci Retracement Levels (Bounded segments, clean without cluttering)
+    // 3. Fibonacci Retracement Levels (Bounded short horizontal lines around recent candles)
     if (aiMapping?.fibonacciRetracement?.levels && aiMapping.fibonacciRetracement.levels.length > 0) {
       const fib = aiMapping.fibonacciRetracement;
-      const fibStart = fib.high.time < fib.low.time ? fib.high.time : fib.low.time;
-      const fibEnd = lastHistoricalTime + 60 * 10;
+      const fibStart = Math.min(fib.high.time, fib.low.time);
+      const fibEnd = lastHistoricalTime + 60 * 6;
 
-      fib.levels.forEach((lvl, idx) => {
+      fib.levels.forEach((lvl) => {
         const fibId = `ai_fib_level_${lvl.ratio}`;
         activeOverlayIds.add(fibId);
 
         if (!lineMap.has(fibId)) {
-          // Color based on key fib ratios (0.5 and 0.618 golden pocket are gold/amber)
           const isGolden = lvl.ratio === 0.618 || lvl.ratio === 0.5;
           const fibLine = chartRef.current.addLineSeries({
-            color: isGolden ? "#F59E0B" : "#A1A1AA",
+            color: isGolden ? "#F59E0B" : "#52525B",
             lineWidth: isGolden ? 2 : 1,
             lineStyle: isGolden ? LineStyle.Solid : LineStyle.Dashed,
-            title: `Fib ${lvl.label} ($${lvl.price})`,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
           });
           fibLine.setData([
             { time: fibStart as any, value: lvl.price },
@@ -466,6 +381,150 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     });
   }, [aiMapping, aiSignal, historicalCandles]);
+
+  // Synchronize TradingView Long/Short Position Box canvas overlay with chart coordinate space
+  useEffect(() => {
+    const canvas = overlayCanvasRef.current;
+    const chart = chartRef.current;
+    const candleSeries = candleSeriesRef.current;
+    if (!canvas || !chart || !candleSeries) return;
+
+    let animId: number;
+
+    const renderPositionBox = () => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (!aiSignal?.entryPrice || !aiSignal?.stopLoss || !aiSignal?.takeProfit) {
+        return;
+      }
+
+      const timeScale = chart.timeScale();
+      const lastTime = historicalCandles[historicalCandles.length - 1]?.time || Math.floor(Date.now() / 1000);
+      const startTime = aiSignal.positionBox?.startTime || (lastTime - 60 * 4);
+      const endTime = aiSignal.positionBox?.endTime || (startTime + 60 * 18);
+
+      const x1 = timeScale.timeToCoordinate(startTime as any);
+      const x2 = timeScale.timeToCoordinate(endTime as any);
+
+      const yEntry = candleSeries.priceToCoordinate(aiSignal.entryPrice);
+      const yTP = candleSeries.priceToCoordinate(aiSignal.takeProfit);
+      const ySL = candleSeries.priceToCoordinate(aiSignal.stopLoss);
+
+      if (x1 === null || x2 === null || yEntry === null || yTP === null || ySL === null) {
+        return;
+      }
+
+      const boxLeft = Math.min(x1, x2);
+      const boxWidth = Math.max(Math.abs(x2 - x1), 100);
+      const isLong = (aiSignal.signal || "BUY") === "BUY";
+
+      // 1. Draw Target (Green) Profit Box
+      const tpTop = Math.min(yEntry, yTP);
+      const tpHeight = Math.abs(yTP - yEntry);
+      ctx.fillStyle = "rgba(8, 153, 129, 0.22)"; // Pure TradingView green fill
+      ctx.fillRect(boxLeft, tpTop, boxWidth, tpHeight);
+
+      // Target area border
+      ctx.strokeStyle = "rgba(8, 153, 129, 0.85)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boxLeft, tpTop, boxWidth, tpHeight);
+
+      // 2. Draw Stop Loss (Red) Risk Box
+      const slTop = Math.min(yEntry, ySL);
+      const slHeight = Math.abs(ySL - yEntry);
+      ctx.fillStyle = "rgba(242, 54, 69, 0.25)"; // Pure TradingView red fill
+      ctx.fillRect(boxLeft, slTop, boxWidth, slHeight);
+
+      // Stop area border
+      ctx.strokeStyle = "rgba(242, 54, 69, 0.85)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(boxLeft, slTop, boxWidth, slHeight);
+
+      // 3. Middle Entry Separator Line
+      ctx.beginPath();
+      ctx.moveTo(boxLeft, yEntry);
+      ctx.lineTo(boxLeft + boxWidth, yEntry);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 4. Corner Drag / Grip Handles (Blue square grips like TradingView screenshot 2)
+      const handleSize = 7;
+      const drawGrip = (x: number, y: number) => {
+        ctx.fillStyle = "#2962FF";
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+        ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+      };
+
+      // Grips on corners: top left, top right, entry left, entry right, bottom left, bottom right
+      drawGrip(boxLeft, yTP);
+      drawGrip(boxLeft + boxWidth, yTP);
+      drawGrip(boxLeft, yEntry);
+      drawGrip(boxLeft + boxWidth, yEntry);
+      drawGrip(boxLeft, ySL);
+      drawGrip(boxLeft + boxWidth, ySL);
+
+      // 5. Middle Floating TradingView PnL & Risk/Reward Badge (Exactly like screenshot 2)
+      const rewardDist = Math.abs(aiSignal.takeProfit - aiSignal.entryPrice);
+      const riskDist = Math.max(0.01, Math.abs(aiSignal.entryPrice - aiSignal.stopLoss));
+      const rrRatio = (rewardDist / riskDist).toFixed(2);
+      const tpPipsText = aiSignal.tpPips ? `${aiSignal.tpPips} pips` : `${(rewardDist * 10).toFixed(0)} pips`;
+      const slPipsText = aiSignal.slPips ? `${aiSignal.slPips} pips` : `${(riskDist * 10).toFixed(0)} pips`;
+
+      // Badge Container at Middle Entry Line
+      const badgeText1 = `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
+      const badgeText2 = `Rasio Risk/Reward: 1:${rrRatio}`;
+
+      ctx.font = "bold 11px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+      const w1 = ctx.measureText(badgeText1).width;
+      const w2 = ctx.measureText(badgeText2).width;
+      const badgeW = Math.max(w1, w2) + 24;
+      const badgeH = 38;
+      const badgeX = boxLeft + (boxWidth - badgeW) / 2;
+      const badgeY = yEntry - badgeH / 2;
+
+      // Rounded background pill
+      ctx.fillStyle = isLong ? "rgba(8, 153, 129, 0.95)" : "rgba(242, 54, 69, 0.95)";
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6) : ctx.rect(badgeX, badgeY, badgeW, badgeH);
+      ctx.fill();
+      ctx.stroke();
+
+      // Text labels
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(badgeText1, badgeX + badgeW / 2, badgeY + 12);
+      ctx.fillText(badgeText2, badgeX + badgeW / 2, badgeY + 26);
+    };
+
+    const loop = () => {
+      renderPositionBox();
+      animId = requestAnimationFrame(loop);
+    };
+
+    animId = requestAnimationFrame(loop);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(renderPositionBox);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(renderPositionBox);
+    };
+  }, [aiSignal, historicalCandles]);
 
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
@@ -578,37 +637,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         </div>
       </div>
 
-      <div ref={chartContainerRef} className="w-full h-[640px]" />
-
-      {/* Floating Scalping Box Overlay Info on Chart */}
-      {aiSignal && (aiSignal.stopLoss || aiSignal.takeProfit) && (
-        <div className="absolute top-14 left-4 z-10 max-w-sm rounded border border-zinc-800 bg-zinc-950/90 p-2.5 backdrop-blur shadow-lg text-[11px] space-y-1.5 pointer-events-none">
-          <div className="flex items-center justify-between text-zinc-400 border-b border-zinc-800/80 pb-1">
-            <span className="text-zinc-300 font-medium">Scalping Position Overlay</span>
-            <span className="text-[10px] text-emerald-400 font-medium">RR 1:2.5</span>
-          </div>
-          <div className="grid grid-cols-3 gap-1 pt-0.5">
-            <div>
-              <span className="text-[10px] text-zinc-500 block">Entry</span>
-              <span className="text-zinc-200 font-medium">${aiSignal.entryPrice?.toFixed(2)}</span>
-            </div>
-            <div>
-              <span className="text-[10px] text-red-400 block">Stop Loss</span>
-              <span className="text-red-400 font-medium">
-                ${aiSignal.stopLoss?.toFixed(2)}
-                {aiSignal.slPips ? <span className="text-[9px] block text-red-500">(-{aiSignal.slPips} pips)</span> : null}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-emerald-400 block">Take Profit</span>
-              <span className="text-emerald-400 font-medium">
-                ${aiSignal.takeProfit?.toFixed(2)}
-                {aiSignal.tpPips ? <span className="text-[9px] block text-emerald-500">(+{aiSignal.tpPips} pips)</span> : null}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="relative w-full h-[640px]">
+        <div ref={chartContainerRef} className="w-full h-full" />
+        <canvas
+          ref={overlayCanvasRef}
+          className="absolute inset-0 pointer-events-none w-full h-full z-10"
+        />
+      </div>
     </div>
   );
 };
