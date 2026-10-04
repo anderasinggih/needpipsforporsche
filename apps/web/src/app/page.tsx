@@ -91,30 +91,35 @@ export type StoredEvaluation = Partial<EvaluationResult> & {
   entryFilled?: boolean;
 };
 
-/** Unix seconds the setup was created; falls back to the archive timestamp. */
-const setupAnchorSec = (log: StoredEvaluation): number =>
-  log.positionBox?.startTime ?? Math.floor((log.timestamp ?? Date.now()) / 1000);
+/** Unix seconds the setup was created; falls back to predictiveTrajectory or positionBox or archive timestamp. */
+const setupAnchorSec = (log: StoredEvaluation): number => {
+  if (log.anchorTime && Number.isFinite(log.anchorTime)) return log.anchorTime;
+  if (log.positionBox?.startTime && Number.isFinite(log.positionBox.startTime)) return log.positionBox.startTime;
+  if (log.predictiveTrajectory && log.predictiveTrajectory.length > 0) {
+    const minTraj = Math.min(...log.predictiveTrajectory.map((p) => p.time));
+    if (Number.isFinite(minTraj)) return minTraj;
+  }
+  return Math.floor((log.timestamp ?? Date.now()) / 1000);
+};
 
 /**
- * Re-open archived logs whose outcome was marked LOSE or WIN prematurely
- * (e.g. from the anchor candle wick bug). If price never actually reached SL or TP,
- * reset outcome to "ACTIVE" so resolveTradeOutcome can evaluate it honestly.
+ * Re-open archived logs whose outcome was marked LOSE prematurely.
+ * If price never truly pierced or touched stopLoss, recover it to "ACTIVE"
+ * so resolveTradeOutcome can track it honestly while the trade is breathing.
  */
 const migrateLegacyOutcome = (log: StoredEvaluation): StoredEvaluation => {
   if (!log || typeof log !== "object") return log;
   if (!log.signal || log.signal === "WAIT") return log;
   if (!log.entryPrice || !log.stopLoss || !log.takeProfit) return log;
 
-  // If a trade was closed as LOSE, check if the resolvedPrice or actual candles truly touched stopLoss.
-  // If it was marked LOSE prematurely without true stop hit, recover it to ACTIVE.
-  if (log.outcome === "LOSE" || log.outcome === "WIN") {
-    // If it was flagged as LOSE without hitting SL or due to the anchor wick bug:
-    const isLong = log.signal === "BUY";
-    // Check if resolvedPrice is far from SL:
-    if (log.outcome === "LOSE" && log.resolvedPrice !== undefined) {
-      const diff = Math.abs(log.resolvedPrice - log.stopLoss);
+  const isLong = log.signal === "BUY";
+
+  // Recover false LOSE:
+  if (log.outcome === "LOSE") {
+    // If resolvedPrice was recorded but didn't actually cross SL:
+    if (log.resolvedPrice !== undefined) {
       const isTrueSlHit = isLong ? log.resolvedPrice <= log.stopLoss : log.resolvedPrice >= log.stopLoss;
-      if (!isTrueSlHit && diff > 0.1) {
+      if (!isTrueSlHit) {
         const { resolvedPrice, resolvedAt, ...rest } = log;
         return { ...rest, outcome: "ACTIVE" };
       }

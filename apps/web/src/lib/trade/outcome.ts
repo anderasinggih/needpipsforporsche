@@ -91,6 +91,7 @@ export const resolveTradeOutcome = (
     const tp = touchedTp(high, low);
     const sl = touchedSl(high, low);
     if (tp || sl) {
+      // If both TP and SL are touched in the same bar, nearest level wins
       const outcome = tp && sl ? nearestLevelWins(entryPrice, takeProfit, stopLoss) : tp ? "WIN" : "LOSE";
       resolvedAt = { outcome, price: outcome === "WIN" ? takeProfit : stopLoss, time };
     }
@@ -99,7 +100,7 @@ export const resolveTradeOutcome = (
   // 1. Historical completed bars:
   // ONLY bars STRICTLY AFTER anchorTime (time > anchorTime) represent market action
   // that took place after the trade was generated!
-  // Any bar where time === anchorTime occurred BEFORE or during setup creation;
+  // Any bar where time <= anchorTime occurred before or during setup creation;
   // evaluating its historical high/low leaks pre-setup wicks into the trade lifecycle.
   const ordered = bars
     .filter(isUsableBar)
@@ -112,7 +113,8 @@ export const resolveTradeOutcome = (
   }
 
   // 2. The live forming bar / current tick:
-  // If the live candle opened strictly after anchorTime, its entire high/low range is post-setup.
+  // If the live candle opened strictly after anchorTime:
+  // we check the live price (close) and extreme wicks.
   // If the live candle is the anchor candle itself (time === anchorTime), ONLY its live close/current price
   // matters — its low/high from earlier minutes before the user clicked evaluate is pre-trade history!
   if (!resolvedAt && isUsableBar(liveBar)) {
