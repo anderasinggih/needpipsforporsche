@@ -657,7 +657,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {evaluation.emotionalState && (
+            {evaluation?.emotionalState && (
               <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                 {/* Overall council emotion + meter */}
                 <div className="rounded border border-zinc-800 bg-black p-3">
@@ -759,7 +759,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {evaluation.consensus && (
+            {evaluation?.consensus && (
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-zinc-800 bg-black px-3 py-2 text-[10px] font-mono text-zinc-400">
                 <span className="text-zinc-300">Weighted voting:</span>
                 <span className="text-emerald-400">bull {evaluation.consensus.bullishWeight}</span>
