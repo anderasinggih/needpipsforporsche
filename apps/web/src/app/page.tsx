@@ -1504,7 +1504,21 @@ export default function DashboardPage() {
                                   : outcomeStatus === "ACTIVE"
                                   ? awaitingEntry
                                     ? "◦ MENUNGGU ENTRY"
-                                    : "● RUNNING"
+                                    : (() => {
+                                        // Hitung floating pips real-time jika simbol cocok dengan currentCandle
+                                        const isSameSym = !log.symbol || log.symbol === activeSymbol;
+                                        if (isSameSym && currentCandle && log.entryPrice) {
+                                          const isGold = (log.symbol || activeSymbol).toUpperCase().includes("XAU") || (log.symbol || activeSymbol).toUpperCase().includes("GOLD");
+                                          const pipDiv = isGold ? 0.1 : 1;
+                                          const diff = log.signal === "BUY"
+                                            ? (currentCandle.close - log.entryPrice) / pipDiv
+                                            : (log.entryPrice - currentCandle.close) / pipDiv;
+                                          const pips = Math.round(diff);
+                                          const sign = pips >= 0 ? "+" : "";
+                                          return `● RUNNING (${sign}${pips}p)`;
+                                        }
+                                        return "● RUNNING";
+                                      })()
                                   : "— WAIT"}
                               </span>
 
