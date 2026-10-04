@@ -37,6 +37,8 @@ import {
   Scale,
   FileText,
   CheckCircle,
+  AlertCircle,
+  Zap,
 } from "lucide-react";
 
 export interface AgentOpinion {
@@ -44,13 +46,15 @@ export interface AgentOpinion {
   agentName: string;
   role: string;
   modelUsed: string;
+  provider: string;
   bias: "BULLISH" | "BEARISH" | "NEUTRAL";
   confidence: number;
   keyObservation: string;
   detailedAnalysis?: string;
   evidence?: string[];
-  suggestedLevel?: { entry: number; sl: number; tp: number };
-  status: "active" | "offline";
+  suggestedLevel?: { entry: number; sl: number; tp: number; slPips?: number; tpPips?: number };
+  status: "active" | "not_contributed";
+  errorMessage?: string;
 }
 
 export interface EvaluationResult {
@@ -62,6 +66,8 @@ export interface EvaluationResult {
   entryPrice?: number;
   stopLoss?: number;
   takeProfit?: number;
+  slPips?: number;
+  tpPips?: number;
   riskRewardRatio?: string;
   confidence: number;
   thesis: string;
@@ -76,10 +82,12 @@ export interface EvaluationResult {
   recommendation: string;
   notes: string;
   agentOpinions?: AgentOpinion[];
+  activeAgentCount?: number;
+  offlineAgentCount?: number;
 }
 
 export default function DashboardPage() {
-  const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
+  const [activeSymbol, setActiveSymbol] = useState<string>("XAUUSD");
   const [timeframe, setTimeframe] = useState<string>("1m");
   const [isClientLoaded, setIsClientLoaded] = useState(false);
 
@@ -95,7 +103,7 @@ export default function DashboardPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Expanded collapse states for agents
-  const [expandedAgentId, setExpandedAgentId] = useState<string | null>("agent_arbiter");
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>("slot_1");
   const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
 
   // Persistent AI Evaluation History Log
@@ -170,23 +178,27 @@ export default function DashboardPage() {
     }
     try {
       setIsEvaluating(true);
-      const geminiKey = localStorage.getItem("gemini_api_key") || "";
-      const groqKey = localStorage.getItem("groq_api_key") || "";
-      const openaiKey = localStorage.getItem("openai_api_key") || "";
-      const deepseekKey = localStorage.getItem("deepseek_api_key") || "";
-      const openrouterKey = localStorage.getItem("openrouter_api_key") || "";
-      const aiModel = localStorage.getItem("ai_model") || "gemini-2.5-flash";
+
+      // Load 10-key slots from localStorage if available
+      let keySlots = [];
+      if (typeof window !== "undefined") {
+        const savedSlots = localStorage.getItem("ai_council_keys_10");
+        if (savedSlots) {
+          try {
+            keySlots = JSON.parse(savedSlots);
+          } catch (e) {}
+        }
+      }
 
       const res = await fetch("/api/ai/evaluate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-gemini-key": geminiKey,
-          "x-groq-key": groqKey,
-          "x-openai-key": openaiKey,
-          "x-deepseek-key": deepseekKey,
-          "x-openrouter-key": openrouterKey,
-          "x-ai-model": aiModel,
+          "x-gemini-key": localStorage.getItem("gemini_api_key") || "",
+          "x-groq-key": localStorage.getItem("groq_api_key") || "",
+          "x-openai-key": localStorage.getItem("openai_api_key") || "",
+          "x-deepseek-key": localStorage.getItem("deepseek_api_key") || "",
+          "x-openrouter-key": localStorage.getItem("openrouter_api_key") || "",
         },
         body: JSON.stringify({
           symbol: activeSymbol,
@@ -195,6 +207,7 @@ export default function DashboardPage() {
           checklistMet: allRequiredMet,
           indicatorsSummary: `${activeSymbol} ${timeframe.toUpperCase()} @ ${currentCandle.close.toFixed(2)}`,
           candles: historicalCandles.slice(-25),
+          keySlots,
         }),
       });
 
@@ -208,7 +221,7 @@ export default function DashboardPage() {
           timeframe: timeframe,
         };
         setEvaluation(newRecord);
-        setExpandedAgentId("agent_arbiter");
+        setExpandedAgentId(newRecord.agentOpinions?.[0]?.agentId || "slot_1");
 
         const updatedLogs = [newRecord, ...evalLogs.slice(0, 49)];
         setEvalLogs(updatedLogs);
@@ -216,7 +229,7 @@ export default function DashboardPage() {
           localStorage.setItem("ai_evaluation_logs", JSON.stringify(updatedLogs));
         }
 
-        showToast(`5-Agent Council consensus successfully reached!`);
+        showToast(`10-Agent Council deliberation completed!`);
       }
     } catch (err) {
       console.error("Evaluation failed:", err);
@@ -282,7 +295,7 @@ export default function DashboardPage() {
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  XAUUSD
+                  XAUUSD (Gold)
                 </button>
               </div>
               <span className="text-zinc-700">·</span>
@@ -308,7 +321,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-1.5 border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-zinc-300 hover:text-white text-xs h-8"
               >
                 <Key className="h-3.5 w-3.5 text-zinc-400" />
-                <span>5-Agent Keys (/owner/key)</span>
+                <span>10-Key Manager (/owner/key)</span>
               </Button>
             </Link>
           </div>
@@ -336,6 +349,8 @@ export default function DashboardPage() {
                     entryPrice: evaluation.entryPrice,
                     stopLoss: evaluation.stopLoss,
                     takeProfit: evaluation.takeProfit,
+                    slPips: evaluation.slPips,
+                    tpPips: evaluation.tpPips,
                     positionBox: evaluation.positionBox,
                     predictiveTrajectory: evaluation.predictiveTrajectory,
                     note: evaluation.calculations,
@@ -345,20 +360,22 @@ export default function DashboardPage() {
           />
         </Card>
 
-        {/* 5-Agent Council Discussion Strip with Individual Collapse Bars */}
+        {/* 10-Agent Council Discussion Strip with Individual Collapse Bars */}
         {evaluation?.agentOpinions && evaluation.agentOpinions.length > 0 && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-emerald-400" />
                 <span className="text-xs font-semibold font-mono tracking-wider uppercase text-zinc-200">
-                  5-Agent Quantitative Council Debating &amp; Deliberation
+                  10-Agent Multi-Key Scalping Council
                 </span>
-                <span className="text-[11px] text-zinc-500 font-mono">(Klik tiap agent untuk expand detail)</span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  ({evaluation.activeAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "active").length} Contributed &bull; {evaluation.offlineAgentCount ?? evaluation.agentOpinions.filter((a) => a.status === "not_contributed").length} Not Contributed)
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                  Consensus {evaluation.signal} ({evaluation.confidence}%)
+                  Scalp {evaluation.signal} ({evaluation.confidence}%) &bull; SL: {evaluation.slPips ?? 35} pips
                 </Badge>
                 <button
                   type="button"
@@ -373,18 +390,21 @@ export default function DashboardPage() {
 
             {isCouncilStripOpen && (
               <div className="space-y-2.5">
-                {/* 5-Agent Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+                {/* 10-Agent Grid (2 rows of 5) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                   {evaluation.agentOpinions.map((agent) => {
                     const isExpanded = expandedAgentId === agent.agentId;
-                    const isArbiter = agent.agentId === "agent_arbiter";
+                    const isChief = agent.agentId === "slot_1";
+                    const isNotContributed = agent.status === "not_contributed";
 
                     return (
                       <div
                         key={agent.agentId}
                         onClick={() => toggleAgentCollapse(agent.agentId)}
-                        className={`cursor-pointer rounded border p-2.5 text-xs transition-all select-none ${
-                          isArbiter
+                        className={`cursor-pointer rounded border p-2 text-xs transition-all select-none ${
+                          isNotContributed
+                            ? "border-zinc-900 bg-black/40 opacity-60 hover:opacity-100"
+                            : isChief
                             ? isExpanded
                               ? "border-emerald-700 bg-emerald-950/25 ring-1 ring-emerald-600/40"
                               : "border-emerald-900/60 bg-emerald-950/10 hover:border-emerald-700"
@@ -397,31 +417,37 @@ export default function DashboardPage() {
                           <span className="font-mono text-[10px] font-semibold text-zinc-200 truncate pr-1">
                             {agent.agentName}
                           </span>
-                          <span
-                            className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                              agent.bias === "BULLISH"
-                                ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
-                                : agent.bias === "BEARISH"
-                                ? "bg-red-950/60 text-red-400 border border-red-900/50"
-                                : "bg-zinc-800 text-zinc-400"
-                            }`}
-                          >
-                            {agent.bias}
-                          </span>
+                          {isNotContributed ? (
+                            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-amber-500 border border-amber-900/40">
+                              OFFLINE
+                            </span>
+                          ) : (
+                            <span
+                              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                agent.bias === "BULLISH"
+                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
+                                  : agent.bias === "BEARISH"
+                                  ? "bg-red-950/60 text-red-400 border border-red-900/50"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }`}
+                            >
+                              {agent.bias}
+                            </span>
+                          )}
                         </div>
 
-                        <div className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
-                          <span className="truncate">{agent.role.split(" ")[0]}</span>
-                          <span className="text-[9px]">{agent.modelUsed}</span>
+                        <div className="text-[9px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
+                          <span className="truncate">{agent.provider.toUpperCase()}</span>
+                          <span className="text-[8px] text-zinc-600 truncate">{agent.modelUsed}</span>
                         </div>
 
-                        <p className="mt-1.5 text-[11px] text-zinc-300 leading-snug line-clamp-2">
-                          {agent.keyObservation}
+                        <p className="mt-1 text-[10px] text-zinc-400 leading-tight line-clamp-2">
+                          {isNotContributed ? "Not Contributed (API Key empty/offline)" : agent.keyObservation}
                         </p>
 
-                        <div className="mt-2 pt-1.5 border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                          <span>{isExpanded ? "Collapse" : "Lihat Detail"}</span>
-                          <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? "rotate-180 text-emerald-400" : ""}`} />
+                        <div className="mt-1.5 pt-1 border-t border-zinc-900 flex items-center justify-between text-[9px] font-mono text-zinc-500">
+                          <span>{isNotContributed ? "Detail Offline" : isExpanded ? "Collapse" : "Lihat Detail"}</span>
+                          <ChevronDown className={`h-2.5 w-2.5 transition-transform ${isExpanded ? "rotate-180 text-emerald-400" : ""}`} />
                         </div>
                       </div>
                     );
@@ -432,17 +458,24 @@ export default function DashboardPage() {
                 {expandedAgentId && (() => {
                   const selectedAgent = evaluation.agentOpinions?.find((a) => a.agentId === expandedAgentId);
                   if (!selectedAgent) return null;
-                  const isArbiter = selectedAgent.agentId === "agent_arbiter";
+                  const isChief = selectedAgent.agentId === "slot_1";
+                  const isOffline = selectedAgent.status === "not_contributed";
 
                   return (
                     <div className={`rounded-lg border p-3.5 transition-all text-xs font-sans ${
-                      isArbiter
-                        ? "border-emerald-800/80 bg-black/90"
-                        : "border-zinc-800 bg-black/90"
+                      isOffline
+                        ? "border-amber-900/40 bg-zinc-950/90"
+                        : isChief
+                        ? "border-emerald-800/80 bg-black/95"
+                        : "border-zinc-800 bg-black/95"
                     }`}>
                       <div className="flex flex-wrap items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
                         <div className="flex items-center gap-2">
-                          <Bot className={`h-4 w-4 ${isArbiter ? "text-emerald-400" : "text-zinc-400"}`} />
+                          {isOffline ? (
+                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                          ) : (
+                            <Bot className={`h-4 w-4 ${isChief ? "text-emerald-400" : "text-zinc-400"}`} />
+                          )}
                           <span className="font-semibold text-zinc-100 font-mono text-xs">
                             {selectedAgent.agentName}
                           </span>
@@ -450,26 +483,32 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                            Engine: {selectedAgent.modelUsed}
+                            {selectedAgent.provider.toUpperCase()} ({selectedAgent.modelUsed})
                           </Badge>
-                          <Badge className={`text-[10px] font-mono font-bold ${
-                            selectedAgent.bias === "BULLISH"
-                              ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
-                              : selectedAgent.bias === "BEARISH"
-                              ? "bg-red-950/60 text-red-400 border border-red-800"
-                              : "bg-zinc-900 text-zinc-300"
-                          }`}>
-                            Bias: {selectedAgent.bias} ({selectedAgent.confidence}%)
-                          </Badge>
+                          {isOffline ? (
+                            <Badge className="text-[10px] font-mono font-bold bg-amber-950/40 text-amber-400 border border-amber-900/50">
+                              NOT CONTRIBUTED
+                            </Badge>
+                          ) : (
+                            <Badge className={`text-[10px] font-mono font-bold ${
+                              selectedAgent.bias === "BULLISH"
+                                ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
+                                : selectedAgent.bias === "BEARISH"
+                                ? "bg-red-950/60 text-red-400 border border-red-800"
+                                : "bg-zinc-900 text-zinc-300"
+                            }`}>
+                              Bias: {selectedAgent.bias} ({selectedAgent.confidence}%)
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
                       <div className="space-y-3">
                         <div>
                           <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
-                            Analisis Mendalam &amp; Observasi Pasar:
+                            {isOffline ? "Status Agen AI:" : "Analisis Mendalam Scalping:"}
                           </div>
-                          <p className="text-zinc-200 text-xs leading-relaxed">
+                          <p className={`text-xs leading-relaxed ${isOffline ? "text-amber-300/80 font-mono" : "text-zinc-200"}`}>
                             {selectedAgent.detailedAnalysis || selectedAgent.keyObservation}
                           </p>
                         </div>
@@ -482,7 +521,11 @@ export default function DashboardPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                               {selectedAgent.evidence.map((ev, i) => (
                                 <div key={i} className="flex items-start gap-2 rounded bg-zinc-950 border border-zinc-900 p-2 text-[11px] text-zinc-300">
-                                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                  {isOffline ? (
+                                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                  ) : (
+                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                  )}
                                   <span>{ev}</span>
                                 </div>
                               ))}
@@ -506,26 +549,26 @@ export default function DashboardPage() {
             <div className="grid grid-cols-3 gap-3">
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
                 <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                  Market Source
+                  Target Scalping SL
                 </div>
-                <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
-                  Real-time {activeSymbol} ({timeframe.toUpperCase()})
-                </div>
-              </Card>
-              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                  Execution Model
-                </div>
-                <div className="mt-1 truncate text-xs font-medium text-zinc-200">
-                  {selectedSkill ? selectedSkill.title : "Discipline Framework"}
+                <div className="mt-1 font-mono text-xs font-semibold text-red-400">
+                  {evaluation?.slPips ?? 35} Pips (~$3.50 / 0.01 lot)
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
                 <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
-                  Risk / Reward Target
+                  Target Scalping TP
+                </div>
+                <div className="mt-1 font-mono text-xs font-semibold text-emerald-400">
+                  {evaluation?.tpPips ?? 88} Pips (RR 1:2.5)
+                </div>
+              </Card>
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                  Dewan Berkontribusi
                 </div>
                 <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
-                  1 : {selectedSkill?.risk_reward_min ?? 2.5}
+                  {evaluation ? `${evaluation.activeAgentCount ?? 10} / 10 Otak Aktif` : "10 AI Slots"}
                 </div>
               </Card>
             </div>
@@ -534,8 +577,8 @@ export default function DashboardPage() {
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
                 <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-200">
-                  <Compass className="h-4 w-4 text-zinc-400" />
-                  Synthesized Council Decision &amp; Execution Plan
+                  <Zap className="h-4 w-4 text-emerald-400" />
+                  Scalping Execution Plan (Synthesized by Council)
                 </CardTitle>
                 {evaluation?.signal && (
                   <Badge
@@ -548,7 +591,7 @@ export default function DashboardPage() {
                         : "bg-zinc-900 text-zinc-300 border-zinc-800"
                     }`}
                   >
-                    SIGNAL: {evaluation.signal} · Confidence {evaluation.confidence}%
+                    SIGNAL: SCALP {evaluation.signal} &bull; Conf {evaluation.confidence}%
                   </Badge>
                 )}
               </CardHeader>
@@ -556,7 +599,7 @@ export default function DashboardPage() {
               <CardContent className="p-0 pt-3">
                 {evaluation ? (
                   <div className="space-y-3 text-xs leading-relaxed">
-                    {/* Bounded Entry, SL, and TP Level Metrics */}
+                    {/* Bounded Entry, SL, and TP Level Metrics with Exact Pips */}
                     {evaluation.entryPrice && (
                       <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black border border-zinc-800 font-mono">
                         <div className="text-center border-r border-zinc-800 pr-2">
@@ -569,12 +612,22 @@ export default function DashboardPage() {
                           <span className="text-[10px] text-red-400 uppercase">Stop Loss (SL)</span>
                           <div className="text-sm font-semibold text-red-400 mt-0.5">
                             ${evaluation.stopLoss?.toFixed(2)}
+                            {evaluation.slPips && (
+                              <span className="text-[10px] block text-red-400/80 font-normal">
+                                (-{evaluation.slPips} pips / ~$3.50)
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-center">
                           <span className="text-[10px] text-emerald-400 uppercase">Take Profit (TP)</span>
                           <div className="text-sm font-semibold text-emerald-400 mt-0.5">
                             ${evaluation.takeProfit?.toFixed(2)}
+                            {evaluation.tpPips && (
+                              <span className="text-[10px] block text-emerald-400/80 font-normal">
+                                (+{evaluation.tpPips} pips / RR 1:2.5)
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -585,7 +638,7 @@ export default function DashboardPage() {
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                           <Calculator className="h-3 w-3 text-zinc-400" />
-                          Quantitative Calculations &amp; Volatility Metrics
+                          Quantitative Calculations &amp; Pip Multipliers
                         </div>
                         <p className="mt-1 font-mono text-zinc-300 text-[11px] leading-relaxed">
                           {evaluation.calculations}
@@ -610,7 +663,7 @@ export default function DashboardPage() {
                     <div className="rounded border border-zinc-800 bg-black p-3">
                       <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                         <Activity className="h-3 w-3 text-zinc-400" />
-                        Tesis Konsensus Dewan AI ({activeSymbol} · {timeframe.toUpperCase()})
+                        Tesis Konsensus Dewan AI ({activeSymbol} &bull; {timeframe.toUpperCase()})
                       </div>
                       <p className="mt-1 text-zinc-200 leading-relaxed">{evaluation.thesis}</p>
                     </div>
@@ -655,7 +708,7 @@ export default function DashboardPage() {
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                           <Target className="h-3 w-3 text-zinc-400" />
-                          Instruksi Eksekusi Dewan
+                          Instruksi Eksekusi Scalping
                         </div>
                         <p className="mt-1 text-zinc-200 text-[11px]">
                           {evaluation.recommendation}
@@ -666,9 +719,9 @@ export default function DashboardPage() {
                     {/* Chart Mapping Coordinates Notice */}
                     {evaluation.chartMapping && (
                       <div className="rounded border border-zinc-800 bg-zinc-900/40 p-2.5 text-[11px] font-mono text-zinc-300 flex items-center justify-between">
-                        <span className="text-zinc-400">Position Box &amp; Support/Resistance Overlaid on Chart</span>
+                        <span className="text-zinc-400">Scalping Segment Lines Overlaid on Chart</span>
                         <span>
-                          Support: <strong className="text-zinc-200">${evaluation.chartMapping.supportLevel}</strong> · Resistance: <strong className="text-zinc-200">${evaluation.chartMapping.resistanceLevel}</strong>
+                          Support: <strong className="text-zinc-200">${evaluation.chartMapping.supportLevel}</strong> &bull; Resistance: <strong className="text-zinc-200">${evaluation.chartMapping.resistanceLevel}</strong>
                         </span>
                       </div>
                     )}
@@ -676,7 +729,7 @@ export default function DashboardPage() {
                     {evaluation.notes && (
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-500 font-mono text-[10px] uppercase tracking-wider">
-                          Catatan Risiko &amp; Psikologi
+                          Catatan Manajemen Lot 0.01 &amp; Psikologi
                         </div>
                         <p className="mt-1 text-zinc-300 font-mono text-[11px]">{evaluation.notes}</p>
                       </div>
@@ -685,9 +738,9 @@ export default function DashboardPage() {
                 ) : (
                   <div className="py-12 text-center">
                     <BrainCircuit className="mx-auto h-8 w-8 text-zinc-600" />
-                    <p className="mt-2 text-xs text-zinc-300 font-medium">Ready for 5-Agent Council Deliberation</p>
+                    <p className="mt-2 text-xs text-zinc-300 font-medium">Ready for 10-Agent Scalping Deliberation</p>
                     <p className="mt-1 text-[11px] text-zinc-500 max-w-sm mx-auto">
-                      5 distinct AI minds debate market structure, order flows, indicators, and volatility in parallel, then synthesize a single execution setup.
+                      10 distinct AI minds evaluate microstructure, liquidity sweeps, and pip risks in parallel, then synthesize a 30-50 pip scalping setup.
                     </p>
                     <Button
                       onClick={handleEvaluate}
@@ -697,12 +750,12 @@ export default function DashboardPage() {
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          5 Minds Deliberating &amp; Synthesizing...
+                          10 Minds Deliberating &amp; Synthesizing...
                         </>
                       ) : (
                         <>
                           <Compass className="h-3.5 w-3.5 mr-1.5" />
-                          Start 5-Agent Deliberation &amp; Mapping
+                          Start 10-Agent Scalping Deliberation
                         </>
                       )}
                     </Button>
@@ -801,12 +854,12 @@ export default function DashboardPage() {
                       {isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Deliberating 5 Minds...</span>
+                          <span>Deliberating 10 Minds...</span>
                         </>
                       ) : (
                         <>
                           <Compass className="h-3.5 w-3.5" />
-                          <span>Run 5-Agent Deliberation &amp; Mapping</span>
+                          <span>Run 10-Agent Deliberation &amp; Mapping</span>
                         </>
                       )}
                     </Button>
@@ -872,7 +925,7 @@ export default function DashboardPage() {
                                 {log.signal}
                               </span>
                               <span className="font-mono text-xs font-semibold text-zinc-200">
-                                {log.symbol || activeSymbol} · {(log.timeframe || timeframe).toUpperCase()}
+                                {log.symbol || activeSymbol} &bull; {(log.timeframe || timeframe).toUpperCase()}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
@@ -883,7 +936,7 @@ export default function DashboardPage() {
 
                           <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono text-zinc-400">
                             <div>
-                              Entry: <span className="text-zinc-200">${log.entryPrice?.toFixed(2)}</span> · SL: <span className="text-red-400">${log.stopLoss?.toFixed(2)}</span> · TP: <span className="text-emerald-400">${log.takeProfit?.toFixed(2)}</span>
+                              Entry: <span className="text-zinc-200">${log.entryPrice?.toFixed(2)}</span> &bull; SL: <span className="text-red-400">${log.stopLoss?.toFixed(2)} ({log.slPips ? `-${log.slPips}p` : ""})</span> &bull; TP: <span className="text-emerald-400">${log.takeProfit?.toFixed(2)} ({log.tpPips ? `+${log.tpPips}p` : ""})</span>
                             </div>
                             <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors" />
                           </div>
