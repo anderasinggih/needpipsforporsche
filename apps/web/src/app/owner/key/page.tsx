@@ -25,11 +25,15 @@ interface ModelOption {
 
 const PROVIDER_MODELS: Record<string, ModelOption[]> = {
   gemini: [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Super Fast Scalp)", recommended: true },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Deep Technical Reasoner)" },
-    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (Stable)" },
-    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (High Throughput)" },
-    { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (Legacy)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Flagship Scalp - Cepat & Akurat)", recommended: true },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Deep Technical Reasoner / Reasoning)" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (Super Low Latency)" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (General Fast)" },
+    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite (Ultra Fast)" },
+    { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Frontier Series)" },
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite (High Throughput)" },
+    { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash (Legacy High Capacity)" },
+    { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (Legacy Reasoner)" },
     { value: "custom", label: "Custom Model..." },
   ],
   groq: [
