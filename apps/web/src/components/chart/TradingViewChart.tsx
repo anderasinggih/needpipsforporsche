@@ -105,14 +105,21 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     };
   }, []);
 
-  // Update whole series when historicalCandles arrive
+  const isDataSetRef = useRef(false);
+
+  // Update whole series when historicalCandles arrive (only fitContent once)
   useEffect(() => {
     if (candleSeriesRef.current && historicalCandles.length > 0) {
-      // Ensure sorted ascending
+      // Ensure sorted ascending and deduplicated by time
       const sorted = [...historicalCandles].sort((a, b) => a.time - b.time);
-      candleSeriesRef.current.setData(sorted as any);
-      if (chartRef.current) {
+      const unique = sorted.filter((item, index, self) => 
+        index === 0 || item.time > self[index - 1].time
+      );
+      candleSeriesRef.current.setData(unique as any);
+      
+      if (chartRef.current && !isDataSetRef.current) {
         chartRef.current.timeScale().fitContent();
+        isDataSetRef.current = true;
       }
     }
   }, [historicalCandles]);
@@ -124,10 +131,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         const candleTime = Number(currentCandle.time);
         candleSeriesRef.current.update({
           time: candleTime as any,
-          open: currentCandle.open,
-          high: currentCandle.high,
-          low: currentCandle.low,
-          close: currentCandle.close,
+          open: Number(currentCandle.open),
+          high: Number(currentCandle.high),
+          low: Number(currentCandle.low),
+          close: Number(currentCandle.close),
         });
       } catch (err) {
         console.warn("Candle update error:", err);

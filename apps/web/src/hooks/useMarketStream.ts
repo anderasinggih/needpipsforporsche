@@ -57,12 +57,13 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
     fetchHistorical();
   }, [fetchHistorical]);
 
-  // 2. Real-Time Stream: Connect directly to Binance 1m Kline WebSocket
+  // 2. Real-Time Stream: Connect directly to Binance 1m Kline & aggTrade combined WebSocket
   useEffect(() => {
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceStream}@kline_1m`;
+    // Use combined streams: <symbol>@kline_1m and <symbol>@aggTrade for instant sub-second ticks
+    const streamUrl = `wss://stream.binance.com:9443/ws/${binanceStream}@kline_1m/${binanceStream}@aggTrade`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -83,7 +84,9 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
           if (!isMounted) return;
           try {
             const data = JSON.parse(event.data);
-            if (data.k) {
+            
+            // 1. Handle kline stream event
+            if (data.e === "kline" && data.k) {
               const k = data.k;
               const candle: CandleData = {
                 time: Math.floor(Number(k.t) / 1000), // bar open time in seconds
@@ -95,9 +98,48 @@ export function useMarketStream(activeSymbol: string = "BTCUSDT") {
                 is_closed: k.x,
               };
               setCurrentCandle(candle);
+            } 
+            // 2. Handle aggTrade for instant sub-second price animation
+            else if (data.e === "aggTrade" && data.p) {
+              const tradePrice = parseFloat(data.p);
+              const tradeTimeMs = Number(data.T);
+              const barStartTime = Math.floor(tradeTimeMs / 60000) * 60; // 1-minute bucket in seconds
+
+              setCurrentCandle((prev) => {
+                if (!prev) {
+                  return {
+                    time: barStartTime,
+                    open: tradePrice,
+                    high: tradePrice,
+                    low: tradePrice,
+                    close: tradePrice,
+                    volume: parseFloat(data.q || "0"),
+                  };
+                }
+
+                if (prev.time === barStartTime) {
+                  return {
+                    ...prev,
+                    high: Math.max(prev.high, tradePrice),
+                    low: Math.min(prev.low, tradePrice),
+                    close: tradePrice,
+                  };
+                } else if (barStartTime > prev.time) {
+                  // New minute candle started
+                  return {
+                    time: barStartTime,
+                    open: tradePrice,
+                    high: tradePrice,
+                    low: tradePrice,
+                    close: tradePrice,
+                    volume: parseFloat(data.q || "0"),
+                  };
+                }
+                return prev;
+              });
             }
           } catch (err) {
-            console.error("Error parsing Binance kline stream:", err);
+            console.error("Error parsing Binance stream message:", err);
           }
         };
 
