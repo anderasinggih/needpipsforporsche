@@ -54,16 +54,17 @@ interface TradingViewChartProps {
   aiSignal?: AISignalOverlay | null;
 }
 
+// Clean timeframe labels without parentheses or translation text
 const TIMEFRAMES = [
-  { label: "1s (Detik)", value: "1s" },
-  { label: "M1 (1 Menit)", value: "1m" },
-  { label: "M3 (3 Menit)", value: "3m" },
-  { label: "M5 (5 Menit)", value: "5m" },
-  { label: "M15 (15 Menit)", value: "15m" },
-  { label: "M30 (30 Menit)", value: "30m" },
-  { label: "H1 (1 Jam)", value: "1h" },
-  { label: "H4 (4 Jam)", value: "4h" },
-  { label: "D1 (1 Hari)", value: "1d" },
+  { label: "1s", value: "1s" },
+  { label: "M1", value: "1m" },
+  { label: "M3", value: "3m" },
+  { label: "M5", value: "5m" },
+  { label: "M15", value: "15m" },
+  { label: "M30", value: "30m" },
+  { label: "H1", value: "1h" },
+  { label: "H4", value: "4h" },
+  { label: "D1", value: "1d" },
 ];
 
 export const TradingViewChart: React.FC<TradingViewChartProps> = ({
@@ -85,7 +86,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const isDataSetRef = useRef(false);
   const [pulse, setPulse] = useState(false);
 
-  // Trigger brief visual pulse on every real-time tick update
+  // Trigger visual pulse on real-time tick update
   useEffect(() => {
     if (lastTickTimestamp) {
       setPulse(true);
@@ -94,18 +95,18 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [lastTickTimestamp, currentCandle?.close]);
 
-  // Inisialisasi Chart dengan tema MT5 Klasik (Cyan/Blue Bullish, Red/Magenta Bearish)
+  // Inisialisasi Chart: Candlestick TETAP Hijau & Merah standar trader, latar belakang gelap MT5
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "#000000" },
-        textColor: "#8A9BA8",
+        textColor: "#64748B",
       },
       grid: {
-        vertLines: { color: "#111822" },
-        horzLines: { color: "#111822" },
+        vertLines: { color: "#0B132B" },
+        horzLines: { color: "#0B132B" },
       },
       crosshair: {
         mode: 1,
@@ -123,16 +124,16 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       height: 640,
     });
 
-    // MT5 Standard Style: Bullish = Electric Cyan/Blue (#00D2FF / #0088FF), Bearish = Crimson/Red (#FF3366)
+    // Chart Candlestick TETAP HIJAU & MERAH
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#00D2FF",
-      downColor: "#FF3366",
+      upColor: "#00FF66",
+      downColor: "#FF3344",
       borderVisible: true,
-      borderColor: "#0088FF",
-      borderUpColor: "#00D2FF",
-      borderDownColor: "#FF3366",
-      wickUpColor: "#00D2FF",
-      wickDownColor: "#FF3366",
+      borderColor: "#00FF66",
+      borderUpColor: "#00FF66",
+      borderDownColor: "#FF3344",
+      wickUpColor: "#00FF66",
+      wickDownColor: "#FF3344",
       priceFormat: {
         type: "price",
         precision: 2,
@@ -210,13 +211,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     const firstTime = historicalCandles[0]?.time;
     const lastTime = historicalCandles[historicalCandles.length - 1]?.time || Math.floor(Date.now() / 1000);
 
-    // 1. Garis Support AI (Blue/Cyan dashed)
+    // 1. Garis Support AI (Navy/Blue dashed khas MT5)
     if (aiMapping?.supportLevel && firstTime) {
       const id = "ai_support_line";
       activeOverlayIds.add(id);
       if (!lineMap.has(id)) {
         const line = chartRef.current.addLineSeries({
-          color: "#00D2FF",
+          color: "#3B82F6",
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           title: `AI Support @ ${aiMapping.supportLevel}`,
@@ -229,13 +230,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 2. Garis Resistance AI (Orange/Red dashed)
+    // 2. Garis Resistance AI (Orange dashed)
     if (aiMapping?.resistanceLevel && firstTime) {
       const id = "ai_resistance_line";
       activeOverlayIds.add(id);
       if (!lineMap.has(id)) {
         const line = chartRef.current.addLineSeries({
-          color: "#FF9900",
+          color: "#F59E0B",
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           title: `AI Resistance @ ${aiMapping.resistanceLevel}`,
@@ -254,7 +255,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       activeOverlayIds.add(id);
       if (!lineMap.has(id)) {
         const line = chartRef.current.addLineSeries({
-          color: "#38BDF8",
+          color: "#60A5FA",
           lineWidth: 2,
           lineStyle: LineStyle.Solid,
           title: `AI Trendline (${aiMapping.trendDirection || "MAPPING"})`,
@@ -267,7 +268,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // 4. Sinyal Saran Entry AI (TP & SL Level)
+    // 4. Sinyal Saran Entry AI (TP Hijau & SL Merah)
     if (aiSignal?.stopLoss && firstTime) {
       const id = "ai_signal_sl";
       activeOverlayIds.add(id);
@@ -304,7 +305,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
     }
 
-    // Bersihkan garis overlay lama jika mapping diperbarui
+    // Bersihkan garis overlay lama jika mapping berganti
     lineMap.forEach((line, id) => {
       if (id.startsWith("ai_") && !activeOverlayIds.has(id)) {
         chartRef.current!.removeSeries(line);
@@ -325,7 +326,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       activeLineIds.add(entryId);
       if (!lineMap.has(entryId)) {
         const line = chartRef.current!.addLineSeries({
-          color: pos.type === "BUY" ? "#00D2FF" : "#FF3366",
+          color: pos.type === "BUY" ? "#00FF66" : "#FF3344",
           lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           title: `${pos.type} Entry @ ${pos.open_price.toFixed(2)}`,
@@ -339,7 +340,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         activeLineIds.add(slId);
         if (!lineMap.has(slId)) {
           const line = chartRef.current!.addLineSeries({
-            color: "#FF3366",
+            color: "#EF4444",
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
             title: `SL @ ${pos.sl.toFixed(2)}`,
@@ -354,7 +355,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         activeLineIds.add(tpId);
         if (!lineMap.has(tpId)) {
           const line = chartRef.current!.addLineSeries({
-            color: "#00D2FF",
+            color: "#10B981",
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
             title: `TP @ ${pos.tp.toFixed(2)}`,
@@ -376,17 +377,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const totalPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
 
   return (
-    <div className="relative w-full rounded-md bg-black overflow-hidden border border-neutral-900">
-      <div className="flex flex-wrap items-center justify-between border-b border-neutral-800/80 px-4 py-2 bg-[#050B14]">
+    <div className="relative w-full rounded-md bg-black overflow-hidden border border-slate-900">
+      <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 px-4 py-2 bg-[#060D1F]">
         <div className="flex items-center gap-3">
           {/* Pair Switcher: XAUUSD & BTCUSD */}
-          <div className="flex items-center rounded-md bg-neutral-900/90 p-0.5 border border-neutral-800">
+          <div className="flex items-center rounded-md bg-slate-950 p-0.5 border border-slate-800">
             <button
               onClick={() => onSymbolChange?.("BTCUSD")}
               className={`px-3 py-1 text-xs font-mono font-bold rounded transition-all ${
                 symbol.toUpperCase().startsWith("BTC")
-                  ? "bg-[#00D2FF] text-black shadow-[0_0_12px_rgba(0,210,255,0.5)]"
-                  : "text-neutral-400 hover:text-white"
+                  ? "bg-[#1E40AF] text-white shadow-[0_0_12px_rgba(30,64,175,0.6)] border border-[#3B82F6]"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
               BTC/USD
@@ -395,23 +396,23 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
               onClick={() => onSymbolChange?.("XAUUSD")}
               className={`px-3 py-1 text-xs font-mono font-bold rounded transition-all ${
                 symbol.toUpperCase().startsWith("XAU") || symbol.toUpperCase().startsWith("PAXG")
-                  ? "bg-[#00D2FF] text-black shadow-[0_0_12px_rgba(0,210,255,0.5)]"
-                  : "text-neutral-400 hover:text-white"
+                  ? "bg-[#1E40AF] text-white shadow-[0_0_12px_rgba(30,64,175,0.6)] border border-[#3B82F6]"
+                  : "text-slate-400 hover:text-white"
               }`}
             >
-              XAU/USD (GOLD)
+              XAU/USD
             </button>
           </div>
 
-          {/* Timeframe Dropdown Selector Lengkap */}
-          <div className="flex items-center gap-1">
+          {/* Timeframe Dropdown Bersih Tanpa Terjemahan / Tanpa Kurung */}
+          <div className="flex items-center">
             <select
               value={timeframe}
               onChange={(e) => onTimeframeChange?.(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 text-[#00D2FF] text-xs font-mono font-semibold rounded px-2.5 py-1 focus:outline-none focus:border-[#00D2FF] cursor-pointer hover:bg-neutral-800/80 transition-colors"
+              className="bg-slate-950 border border-slate-800 text-[#60A5FA] text-xs font-mono font-bold rounded px-2.5 py-1 focus:outline-none focus:border-[#3B82F6] cursor-pointer hover:bg-slate-900 transition-colors"
             >
               {TIMEFRAMES.map((tf) => (
-                <option key={tf.value} value={tf.value} className="bg-neutral-950 text-white">
+                <option key={tf.value} value={tf.value} className="bg-slate-950 text-white font-mono">
                   {tf.label}
                 </option>
               ))}
@@ -419,45 +420,45 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           </div>
 
           {/* Live Feed Status */}
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-neutral-400">
-            <span className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#00D2FF] scale-125 shadow-[0_0_8px_#00D2FF]" : "bg-neutral-600"} transition-all duration-150`} />
-            <span className="text-[#00D2FF]">MT5 LIVE FEED</span>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-400">
+            <span className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#3B82F6] scale-125 shadow-[0_0_8px_#3B82F6]" : "bg-slate-600"} transition-all duration-150`} />
+            <span className="text-[#60A5FA]">FEED</span>
           </div>
 
           {/* AI Signal Badge jika ada */}
           {aiSignal?.signal && (
             <span className={`rounded px-2.5 py-0.5 text-[10px] font-mono font-bold border ${
               aiSignal.signal === "BUY"
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                 : aiSignal.signal === "SELL"
-                ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                : "bg-amber-500/15 text-amber-400 border-amber-500/30"
             }`}>
-              AI SINYAL: {aiSignal.signal}
+              AI: {aiSignal.signal}
             </span>
           )}
 
           {positions.length > 0 && (
             <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400 border border-amber-500/20">
-              {positions.length} OPEN POS
+              {positions.length} OPEN
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-[10px] font-mono text-neutral-400 uppercase flex items-center justify-end gap-1.5">
-              <span>HARGA SEKARANG</span>
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#00D2FF]" : "bg-neutral-700"} transition-all`} />
+            <div className="text-[10px] font-mono text-slate-400 uppercase flex items-center justify-end gap-1.5">
+              <span>PRICE</span>
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${pulse ? "bg-[#3B82F6]" : "bg-slate-700"} transition-all`} />
             </div>
-            <div className={`text-sm font-mono font-bold transition-colors duration-150 ${pulse ? "text-white" : "text-[#00D2FF]"}`}>
-              {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "Memuat Data..."}
+            <div className={`text-sm font-mono font-bold transition-colors duration-150 ${pulse ? "text-white" : "text-[#60A5FA]"}`}>
+              {currentCandle ? `$${currentCandle.close.toFixed(2)}` : "---.--"}
             </div>
           </div>
           {positions.length > 0 && (
             <div className="text-right">
-              <div className="text-[10px] font-mono text-neutral-500 uppercase">FLOATING PnL</div>
-              <div className={`text-sm font-mono font-bold ${totalPnL >= 0 ? "text-[#00D2FF]" : "text-rose-400"}`}>
+              <div className="text-[10px] font-mono text-slate-400 uppercase">PnL</div>
+              <div className={`text-sm font-mono font-bold ${totalPnL >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                 ${totalPnL.toFixed(2)}
               </div>
             </div>

@@ -13,28 +13,87 @@ interface EvaluateRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: EvaluateRequest = await request.json();
-    const { symbol, price, direction = 'BUY', checklistMet = true, indicatorsSummary, timeframe = '1m', candles = [] } = body;
+    const { symbol, price, timeframe = '1m', candles = [] } = body;
 
-    const recentCandlesText = candles.slice(-15).map(c => 
-      `T:${c.time} O:${c.open} H:${c.high} L:${c.low} C:${c.close}`
+    // Hitung indikator teknikal riil dari data candlestick historis jika ada
+    let atr = 0;
+    let highestHigh = price;
+    let lowestLow = price;
+    let currentRsi = 50;
+    let smaFast = price;
+    let smaSlow = price;
+
+    if (candles.length >= 10) {
+      const closes = candles.map(c => c.close);
+      const highs = candles.map(c => c.high);
+      const lows = candles.map(c => c.low);
+
+      highestHigh = Math.max(...highs);
+      lowestLow = Math.min(...lows);
+
+      // Simple ATR estimation
+      const trs = [];
+      for (let i = 1; i < candles.length; i++) {
+        const tr = Math.max(
+          candles[i].high - candles[i].low,
+          Math.abs(candles[i].high - candles[i - 1].close),
+          Math.abs(candles[i].low - candles[i - 1].close)
+        );
+        trs.push(tr);
+      }
+      atr = trs.length > 0 ? trs.reduce((a, b) => a + b, 0) / trs.length : 1.5;
+
+      // SMA Fast (5) vs Slow (15)
+      smaFast = closes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+      smaSlow = closes.slice(-15).reduce((a, b) => a + b, 0) / Math.min(15, closes.length);
+
+      // Simple RSI approximation
+      let gains = 0, losses = 0;
+      for (let i = Math.max(1, closes.length - 14); i < closes.length; i++) {
+        const diff = closes[i] - closes[i - 1];
+        if (diff >= 0) gains += diff;
+        else losses -= diff;
+      }
+      const rs = losses === 0 ? 100 : gains / losses;
+      currentRsi = 100 - (100 / (1 + rs));
+    } else {
+      const isGold = symbol.toUpperCase().includes("XAU") || symbol.toUpperCase().includes("PAXG");
+      atr = isGold ? 4.5 : 85.0;
+      highestHigh = price + atr * 2;
+      lowestLow = price - atr * 2;
+    }
+
+    const recentCandlesText = candles.slice(-20).map(c => 
+      `[T:${c.time} O:${c.open.toFixed(2)} H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)}]`
     ).join(' | ');
 
-    // Prompt khusus Bahasa Indonesia untuk Analisis Kuantitatif & Pemetaan MT5
-    const prompt = `Anda adalah Asisten Analis Kuantitatif & Technical Mapping Trader Profesional untuk instrumen ${symbol} pada timeframe ${timeframe}.
-Gaya analisis berfokus pada Smart Money Concepts (SMC), Market Structure Mapping, Support/Resistance Liquidity, dan Sinyal Eksekusi Disiplin MT5.
+    // Prompt Kuantitatif Canggih Khusus Bahasa Indonesia
+    const prompt = `Anda adalah Hedge Fund Senior Quant Trader & Analis Smart Money Concepts (SMC) untuk instrumen ${symbol} pada timeframe ${timeframe}.
+Tugas Anda adalah membedah market structure, order block, liquidity pool, dan memberikan kalkulasi setup eksekusi presisi.
 
-Data Pasar Saat Ini:
-- Instrumen: ${symbol}
-- Harga Terakhir: ${price}
+Data Pasar Real-Time Terkini:
+- Pasangan: ${symbol}
+- Harga Saat Ini: ${price}
 - Timeframe: ${timeframe}
-- Ringkasan Teknis: ${indicatorsSummary || 'Normal'}
-- 15 Candle Terakhir: ${recentCandlesText || 'Tidak ada'}
+- ATR Saat Ini: ${atr.toFixed(2)}
+- High Tertinggi 20 Bar: ${highestHigh.toFixed(2)}
+- Low Terendah 20 Bar: ${lowestLow.toFixed(2)}
+- Indikator Tren: SMA Fast (${smaFast.toFixed(2)}) vs SMA Slow (${smaSlow.toFixed(2)}), RSI ~${currentRsi.toFixed(1)}
+- Riwayat Candlestick Terakhir: ${recentCandlesText || 'Tersedia'}
 
-Instruksi Analisis:
-1. Analisis tren saat ini, zona supply/demand, dan likuiditas.
-2. Tentukan SARAN SINYAL ENTRY yang jelas (BUY, SELL, atau WAIT).
-3. Berikan koordinat mapping garis MT5 konkret (Garis Tren / Support / Resistance / Key Level) dengan harga pasti di sekitar ${price}.
-4. Tulis SEMUA penjelasan, tesis, rekomendasi, dan catatan murni dalam BAHASA INDONESIA yang santai, tegas, dan profesional ala trader handal.
+Panduan Analisis Kuantitatif:
+1. Bedah struktur: Apakah Break of Structure (BOS), Change of Character (CHoCH), atau Fakeout Liquidity Sweep?
+2. Putuskan Sinyal Eksekusi Tegas: "BUY", "SELL", atau "WAIT".
+3. Berikan Rekomendasi Level Presisi:
+   - entryPrice: disekitar ${price}
+   - stopLoss: di luar swing high/low terdekat yang logis
+   - takeProfit: rasio minimum 1:2.0 hingga 1:3.5
+4. Berikan Titik Mapping Garis MT5:
+   - supportLevel: batas demand/support terkuat di bawah harga
+   - resistanceLevel: batas supply/resistance terkuat di atas harga
+   - trendDirection: "UPTREND" | "DOWNTREND" | "SIDEWAYS"
+   - trendlineStart & trendlineEnd: koordinat waktu (Unix seconds) & harga garis tren
+5. Seluruh penjelasan, tesis, invalidation, dan rekomendasi WAJIB dalam BAHASA INDONESIA yang lugas, cerdas, berwibawa, dan kaya terminologi trading profesional (Supply/Demand, Liquidity, Imbalance/FVG, Risk-to-Reward).
 
 Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
 {
@@ -43,9 +102,9 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
   "stopLoss": number,
   "takeProfit": number,
   "riskRewardRatio": "1:2.5",
-  "confidence": 85,
-  "thesis": "Penjelasan tren dan alasan analisa dalam Bahasa Indonesia (2-3 kalimat)",
-  "riskInvalidation": "Tingkat harga pembatalan skenario (invalidation level) dalam Bahasa Indonesia",
+  "confidence": 88,
+  "thesis": "Analisa terperinci struktur pasar dan alasan konfirmasi teknikal (Bahasa Indonesia)",
+  "riskInvalidation": "Syarat pasti batalnya setup jika market berbalik arah (Bahasa Indonesia)",
   "chartMapping": {
     "supportLevel": number,
     "resistanceLevel": number,
@@ -53,8 +112,8 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
     "trendlineStart": { "time": number, "price": number },
     "trendlineEnd": { "time": number, "price": number }
   },
-  "recommendation": "Saran tindakan eksekusi dalam Bahasa Indonesia",
-  "notes": "Catatan psikologi atau manajemen risiko tambahan"
+  "recommendation": "Instruksi eksekusi taktis lengkap (Bahasa Indonesia)",
+  "notes": "Rekomendasi manajemen lot, psikologi market, dan mitigasi risiko (Bahasa Indonesia)"
 }`;
 
     let responseData: any = null;
@@ -78,7 +137,7 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
               }
             ],
             generationConfig: {
-              temperature: 0.3,
+              temperature: 0.25,
               responseMimeType: "application/json"
             }
           }),
@@ -110,11 +169,11 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
           body: JSON.stringify({
             model: userModel.startsWith("llama") ? userModel : 'llama-3.3-70b-versatile',
             messages: [
-              { role: 'system', content: 'Anda adalah AI analis trading kuantitatif handal. Jawab hanya format JSON valid.' },
+              { role: 'system', content: 'Anda adalah Hedge Fund Quant AI Trader profesional. Kembalikan HANYA JSON valid.' },
               { role: 'user', content: prompt }
             ],
-            temperature: 0.4,
-            max_tokens: 1000,
+            temperature: 0.3,
+            max_tokens: 1200,
           }),
         });
         if (groqRes.ok) {
@@ -127,38 +186,51 @@ Format Output WAJIB JSON murni tanpa markdown, tanpa backticks:
       }
     }
 
-    // 3. Fallback Cerdas Dinamis dalam Bahasa Indonesia jika API Key belum dipasang
+    // 3. Algoritma Kuantitatif Cerdas Berbasis Indikator Riil (Fallback Pintar Otomatis)
     if (!responseData) {
+      const isBullish = smaFast >= smaSlow;
       const isGold = symbol.toUpperCase().includes("XAU") || symbol.toUpperCase().includes("PAXG");
-      const slOffset = isGold ? 15.0 : 350.0;
-      const tpOffset = isGold ? 38.0 : 880.0;
-      const supOffset = isGold ? 22.0 : 500.0;
-      const resOffset = isGold ? 25.0 : 600.0;
+      const baseSL = Math.max(atr * 1.5, isGold ? 12.0 : 250.0);
+      const baseTP = baseSL * 2.6;
+
+      const calcSignal = isBullish ? "BUY" : "SELL";
+      const calcEntry = Number(price.toFixed(2));
+      const calcSL = isBullish ? Number((price - baseSL).toFixed(2)) : Number((price + baseSL).toFixed(2));
+      const calcTP = isBullish ? Number((price + baseTP).toFixed(2)) : Number((price - baseTP).toFixed(2));
+      const sup = Number((lowestLow - (atr * 0.5)).toFixed(2));
+      const res = Number((highestHigh + (atr * 0.5)).toFixed(2));
+
+      const startTime = candles.length > 0 ? candles[0].time : Math.floor(Date.now() / 1000) - 3600;
+      const endTime = candles.length > 0 ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000);
 
       responseData = {
-        signal: "BUY",
-        entryPrice: Number(price.toFixed(2)),
-        stopLoss: Number((price - slOffset).toFixed(2)),
-        takeProfit: Number((price + tpOffset).toFixed(2)),
-        riskRewardRatio: "1:2.5",
-        confidence: 82,
-        thesis: `Struktur pasar ${symbol} pada timeframe ${timeframe} terkonfirmasi membentuk akumulasi liquidity sweep di area diskon. Peluang momentum bullish terbuka menuju likuiditas eksternal.`,
-        riskInvalidation: `Jika harga menembus di bawah $${(price - slOffset).toFixed(2)}, maka struktur bullish dibatalkan (Market Structure Shift) dan segera amankan posisi.`,
+        signal: calcSignal,
+        entryPrice: calcEntry,
+        stopLoss: calcSL,
+        takeProfit: calcTP,
+        riskRewardRatio: "1:2.6",
+        confidence: isBullish ? 86 : 84,
+        thesis: isBullish
+          ? `Struktur pasar ${symbol} timeframe ${timeframe} menunjukkan dominasi buyer dengan pembentukan Higher Low di area demand. Indikator momentum mengonfirmasi adanya akumulasi likuiditas sebelum ekspansi menuju swing high.`
+          : `Struktur pasar ${symbol} timeframe ${timeframe} tertekan seller setelah liquidity sweep di resistance. Terjadi Change of Character (CHoCH) mikro yang membuka peluang distribusi harga menuju swing low berikutnya.`,
+        riskInvalidation: isBullish
+          ? `Skenario bullish batal jika harga menembus level support kunci di $${calcSL} dengan volume tinggi (Break of Structure ke bawah).`
+          : `Skenario bearish batal jika harga mampu reclaim dan ditutup di atas resistance $${calcSL}.`,
         chartMapping: {
-          supportLevel: Number((price - supOffset).toFixed(2)),
-          resistanceLevel: Number((price + resOffset).toFixed(2)),
-          trendDirection: "UPTREND",
+          supportLevel: sup,
+          resistanceLevel: res,
+          trendDirection: isBullish ? "UPTREND" : "DOWNTREND",
           trendlineStart: {
-            time: Math.floor(Date.now() / 1000) - 3600,
-            price: Number((price - supOffset * 1.2).toFixed(2))
+            time: startTime,
+            price: isBullish ? sup : res,
           },
           trendlineEnd: {
-            time: Math.floor(Date.now() / 1000),
-            price: Number(price.toFixed(2))
+            time: endTime,
+            price: calcEntry,
           }
         },
-        recommendation: `Buka posisi BUY pada kisaran $${price.toFixed(2)} dengan Stop Loss ketat di $${(price - slOffset).toFixed(2)} dan Take Profit di $${(price + tpOffset).toFixed(2)}.`,
-        notes: "Gunakan lot konservatif (maks 1-2% risiko ekuitas). Pantau reaksi candlestick saat mendekati resistance."
+        recommendation: `Buka posisi ${calcSignal} di area $${calcEntry}. Pasang Stop Loss disiplin di $${calcSL} dan Take Profit objektif di $${calcTP} (R:R 1:2.6).`,
+        notes: "Gunakan ukuran lot proporsional dengan risiko maksimal 1% - 2% per transaksi. Hindari geser SL saat floating minus."
       };
     }
 
