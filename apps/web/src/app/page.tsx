@@ -256,20 +256,16 @@ export default function DashboardPage() {
     const updated = evalLogs.map((log) => {
       // Only evaluate if it matches current symbol and is still active/unresolved
       if (log.symbol && log.symbol !== activeSymbol) return log;
-      if (log.outcome && log.outcome !== "ACTIVE") return log;
-      if (log.signal === "WAIT" || !log.entryPrice || !log.takeProfit || !log.stopLoss) {
-        if (log.outcome !== "WAIT") {
-          hasChanges = true;
-          return { ...log, outcome: "WAIT" as EvaluationOutcome };
-        }
-        return log;
-      }
+      if (log.outcome && log.outcome !== "ACTIVE" && log.outcome !== "WAIT") return log;
+      if (!log.entryPrice || !log.takeProfit || !log.stopLoss) return log;
+
+      const directionSide = log.direction === "BULLISH" ? "BUY" : log.direction === "BEARISH" ? "SELL" : (log.signal === "BUY" ? "BUY" : "SELL");
 
       // Candles only make sense on the timeframe the setup was taken on.
       const onSameTimeframe = !log.timeframe || log.timeframe === timeframe;
       const state = resolveTradeOutcome(
         {
-          signal: log.signal as "BUY" | "SELL",
+          signal: directionSide,
           entryPrice: log.entryPrice,
           stopLoss: log.stopLoss,
           takeProfit: log.takeProfit,
@@ -280,12 +276,21 @@ export default function DashboardPage() {
         onSameTimeframe ? currentCandle : null,
       );
 
-      if (state.outcome === log.outcome && state.entryFilled === log.entryFilled) return log;
+      // If entry has been filled (or price traded entry level), transition outcome from WAIT to ACTIVE or WIN/LOSE
+      const nextOutcome: EvaluationOutcome = state.outcome !== "ACTIVE"
+        ? state.outcome
+        : state.entryFilled
+        ? "ACTIVE"
+        : log.signal === "WAIT"
+        ? "WAIT"
+        : "ACTIVE";
+
+      if (nextOutcome === log.outcome && state.entryFilled === log.entryFilled) return log;
 
       hasChanges = true;
       return {
         ...log,
-        outcome: state.outcome,
+        outcome: nextOutcome,
         anchorTime: setupAnchorSec(log),
         entryFilled: state.entryFilled,
         resolvedPrice: state.resolvedPrice,
@@ -298,8 +303,15 @@ export default function DashboardPage() {
       if (typeof window !== "undefined") {
         localStorage.setItem("ai_evaluation_logs", JSON.stringify(updated));
       }
+      // Keep active evaluation in sync if it was updated
+      if (evaluation?.id) {
+        const activeMatch = updated.find((u) => u.id === evaluation.id);
+        if (activeMatch) {
+          setEvaluation((prev) => (prev ? { ...prev, ...activeMatch } : prev));
+        }
+      }
     }
-  }, [currentCandle?.close, activeSymbol, timeframe, historicalCandles.length]);
+  }, [currentCandle?.close, activeSymbol, timeframe, historicalCandles.length, evaluation?.id]);
 
   const handleSymbolChange = (sym: string) => {
     setActiveSymbol(sym);
@@ -623,21 +635,36 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                {evaluation ? (
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] sm:text-[11px] font-mono ${
-                      evaluation.signal === "BUY"
-                        ? "border-emerald-800 text-emerald-400"
-                        : evaluation.signal === "SELL"
-                        ? "border-red-800 text-red-400"
-                        : "border-amber-800 text-amber-400"
-                    }`}
-                  >
-                    {evaluation.signal === "BUY" ? "Buy" : evaluation.signal === "SELL" ? "Sell" : "Wait"}{" "}
-                    ({evaluation.confidence}%) &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
-                  </Badge>
-                ) : (
+                {evaluation ? (() => {
+                  const isFilled = (evaluation as any).entryFilled === true;
+                  const isWaitPlan = evaluation.signal === "WAIT";
+                  const activeDir = evaluation.direction === "BULLISH" ? "Buy" : evaluation.direction === "BEARISH" ? "Sell" : "Trade";
+                  const badgeColor = isWaitPlan && !isFilled
+                    ? "border-amber-800 text-amber-400"
+                    : (evaluation.signal === "BUY" || evaluation.direction === "BULLISH")
+                    ? "border-emerald-800 text-emerald-400"
+                    : "border-red-800 text-red-400";
+
+                  const labelText = isWaitPlan
+                    ? isFilled
+                      ? `● Triggered ${activeDir}`
+                      : `Wait (${evaluation.confidence}%)`
+                    : evaluation.signal === "BUY"
+                    ? "Buy"
+                    : evaluation.signal === "SELL"
+                    ? "Sell"
+                    : "Wait";
+
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] sm:text-[11px] font-mono ${badgeColor}`}
+                    >
+                      {labelText}{" "}
+                      {isWaitPlan && isFilled ? `(Entry Terisi)` : `(${evaluation.confidence}%)`} &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
+                    </Badge>
+                  );
+                })() : (
                   <Badge
                     variant="outline"
                     className="text-[10px] sm:text-[11px] font-mono border-amber-800/80 text-amber-400 animate-pulse"
