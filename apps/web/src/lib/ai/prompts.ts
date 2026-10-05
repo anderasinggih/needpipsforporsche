@@ -393,9 +393,21 @@ export const buildAgentPrompt = (ctx: AgentPromptContext): string => `KAMU ADALA
 INSTRUMEN: ${ctx.symbol} (${ctx.isGold ? "XAUUSD, 1 poin harga = 10 pips" : "crypto, 1 poin harga = 1 pip"})
 TIMEFRAME AKTIF: ${ctx.timeframe.toUpperCase()} | HARGA SEKARANG: $${ctx.price}
 
-MANDAT:
+  MANDAT:
 ${ctx.role.mandate}
 
+${
+  ctx.tradingMethod && ctx.tradingMethod !== "ALL"
+    ? `METODE ANALISIS PRIORITAS: ${ctx.tradingMethod}
+FOKUS ANALISIS (WAJIB DIIKUTI):
+- Untuk SMC: Break of Structure (BOS), Change of Character (CHoCH), Order Block (OB), Liquidity Sweep, Fair Value Gap (FVG).
+- Untuk ICT: Judas Swing, Liquidity Sweep, FVG, Order Block (OB), Session Killzones (London/NY Open), Optimal Trade Entry (OTE).
+- Untuk SNR: Major Swing Pivots, Breakout & Retest, Multi-Timeframe Key Levels, Dynamic Support/Resistance Clusters.
+- Untuk FIBONACCI: Genuine Impulse Leg, Golden Pocket 0.5 - 0.618, Harmonic Confluence, Retracement Validation.
+- Untuk VOLUME_ORDERFLOW atau VOLUME: Orderbook Imbalance, Microstructure Absorption, Delta Footprint, High Volume Nodes.
+Berikan bobot tertinggi pada validasi sesuai ${ctx.tradingMethod}. Sebutkan secara spesifik elemen yang terkonfirmasi atau tidak terkonfirmasi di evidence.\n`
+    : ""
+}
 ${
   ctx.strategySkill
     ? `STRATEGI INSTITUTIONAL AKTIF DARI TRADER:
