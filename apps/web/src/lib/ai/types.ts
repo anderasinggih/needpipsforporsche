@@ -316,6 +316,17 @@ export interface EvaluationResult {
   setupStatus: SetupStatus;
   orderType?: "MARKET" | "LIMIT" | "PULLBACK";
   entryTrigger?: string;
+  plannedOrder?: {
+    type: "BUY_LIMIT" | "SELL_LIMIT" | "BUY_STOP" | "SELL_STOP";
+    price: number;
+    sl: number;
+    tp: number;
+    slPips: number;
+    tpPips: number;
+    rr: string;
+    rationale: string;
+    status: "ARMED" | "PENDING_PULLBACK" | "STANDBY";
+  };
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;

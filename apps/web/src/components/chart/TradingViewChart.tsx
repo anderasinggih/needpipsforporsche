@@ -526,12 +526,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       if (
         !aiSignal?.entryPrice ||
         !aiSignal?.stopLoss ||
-        !aiSignal?.takeProfit ||
-        aiSignal?.signal === "WAIT"
+        !aiSignal?.takeProfit
       ) {
         positionBoxBoundsRef.current = null;
         return;
       }
+
+      const isWait = aiSignal.signal === "WAIT";
 
       const timeScale = chart.timeScale();
       const liveCandle = liveCandleRef.current;
@@ -775,8 +776,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const tpPipsText = aiSignal.tpPips ? `${aiSignal.tpPips} pips` : `${(rewardDist * 10).toFixed(0)} pips`;
       const slPipsText = aiSignal.slPips ? `${aiSignal.slPips} pips` : `${(riskDist * 10).toFixed(0)} pips`;
 
-      const badgeText1 = `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
-      const badgeText2 = `Rasio Risk/Reward: 1:${rrRatio}`;
+      const badgeText1 = isWait
+        ? `[Planned Limit] ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
+        : `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
+      const badgeText2 = isWait ? `Pending Retest • RR 1:${rrRatio}` : `Rasio Risk/Reward: 1:${rrRatio}`;
 
       ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
       const w1 = ctx.measureText(badgeText1).width;
@@ -790,9 +793,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
       const badgeY = yEntry - badgeH / 2;
 
-      // Rounded background pill
-      ctx.fillStyle = isLong ? "rgba(8, 153, 129, 0.95)" : "rgba(242, 54, 69, 0.95)";
-      ctx.strokeStyle = "#FFFFFF";
+      // Rounded background pill (Amber/Gold accent if Planned Limit during WAIT)
+      ctx.fillStyle = isWait
+        ? "rgba(217, 119, 6, 0.95)"
+        : isLong
+        ? "rgba(8, 153, 129, 0.95)"
+        : "rgba(242, 54, 69, 0.95)";
+      ctx.strokeStyle = isWait ? "#FDE68A" : "#FFFFFF";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       if (ctx.roundRect) {
@@ -901,7 +908,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
           {aiSignal?.signal === "WAIT" && (
             <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-amber-400 border border-amber-900/50">
-              No Trade
+              Wait (Plan: {resolveSide(aiSignal.signal, aiSignal.direction) === "BUY" ? "Buy" : "Sell"} Limit @ ${aiSignal.entryPrice ? Number(aiSignal.entryPrice).toFixed(aiSignal.entryPrice > 100 ? 2 : 4) : "-"})
             </span>
           )}
 

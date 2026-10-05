@@ -1037,16 +1037,17 @@ export async function POST(request: NextRequest) {
     let decision: Signal = consensus.decision;
 
     // Smart Entry Level Determination (Limit / Pullback vs Market):
+    // Smart Entry Level Determination (Limit / Pullback vs Market):
     // Rather than blindly executing at current candle close (which is aggressive & causes bad fills),
     // calculate if market is stretched or if optimal entry requires a pullback to Golden Pocket / key pivot.
     let targetEntryPrice = round(price);
     let orderType: "MARKET" | "LIMIT" | "PULLBACK" = "MARKET";
     let entryTrigger = `Market Execution @ $${round(price)}`;
 
-    if (decision !== "WAIT") {
-      const isLong = direction === "BULLISH";
-      const pocket = fib?.goldenPocket;
+    const isLong = direction === "BULLISH";
+    const pocket = fib?.goldenPocket;
 
+    if (decision !== "WAIT") {
       if (pocket) {
         if (pocket.priceInside) {
           // Price is currently inside Golden Pocket (0.5 - 0.618) -> Valid immediate entry!
@@ -1073,6 +1074,30 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    } else {
+      // During WAIT: derive intelligent planned limit level where the setup WOULD be valid!
+      if (pocket) {
+        // Target pullback to the high of pocket for Long or low of pocket for Short
+        targetEntryPrice = round(isLong ? pocket.zoneHigh : pocket.zoneLow);
+        orderType = "LIMIT";
+        entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu harga retest ke zona Golden Pocket ($${targetEntryPrice})`;
+      } else {
+        // Fallback to closest pivot point retest
+        const targetKind = isLong ? "LOW" : "HIGH";
+        const matchingPivots = pivots.filter((p) => p.kind === targetKind);
+        const recentPivot = matchingPivots.length ? matchingPivots[matchingPivots.length - 1] : undefined;
+        if (recentPivot && Number.isFinite(recentPivot.price)) {
+          targetEntryPrice = round(recentPivot.price);
+          orderType = "LIMIT";
+          entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu retest swing pivot ($${targetEntryPrice})`;
+        } else {
+          // Micro pullback fallback (12 pips pullback against current price)
+          const pullbackOffset = fromPips(12, spec);
+          targetEntryPrice = round(isLong ? price - pullbackOffset : price + pullbackOffset);
+          orderType = "LIMIT";
+          entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu retracement (${targetEntryPrice})`;
+        }
+      }
     }
 
     const riskPlan = planRisk({
@@ -1085,6 +1110,23 @@ export async function POST(request: NextRequest) {
       spec,
       targetRr,
     });
+
+    // Build plannedOrder object for transparent pending order execution / guidance
+    const plannedOrderType: "BUY_LIMIT" | "SELL_LIMIT" = isLong ? "BUY_LIMIT" : "SELL_LIMIT";
+    const plannedOrder = {
+      type: plannedOrderType,
+      price: targetEntryPrice,
+      sl: riskPlan.slPrice,
+      tp: riskPlan.tpPrice,
+      slPips: riskPlan.slPips,
+      tpPips: riskPlan.tpPips,
+      rr: `1:${riskPlan.rr}`,
+      rationale:
+        pocket
+          ? `Area retest Golden Pocket Fibonacci 0.5 - 0.618 ($${pocket.zoneLow} - $${pocket.zoneHigh})`
+          : `Area pullback pivot struktural ${structure.label}`,
+      status: decision === "WAIT" ? ("PENDING_PULLBACK" as const) : ("ARMED" as const),
+    };
 
     if (riskPlan.structuralSlPips > spec.maxSlPips) {
       warnings.push(
@@ -1268,6 +1310,7 @@ export async function POST(request: NextRequest) {
         decision === "WAIT" ? "WAITING_FOR_TRIGGER" : activeAgents.length === 0 ? "DEGRADED_QUANT_FALLBACK" : "ARMED",
       orderType,
       entryTrigger,
+      plannedOrder,
       entryPrice: targetEntryPrice,
       stopLoss: riskPlan.slPrice,
       takeProfit: riskPlan.tpPrice,

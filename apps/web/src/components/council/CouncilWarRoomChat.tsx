@@ -198,7 +198,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-zinc-400">
-              Diskusi & Sanggahan 10 Agen AI • {symbol} ({timeframe.toUpperCase()})
+              Diskusi & Sanggahan Hingga 20 Agen AI • {symbol} ({timeframe.toUpperCase()})
             </p>
           </div>
         </div>
@@ -257,7 +257,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
             </div>
             <p className="text-zinc-300 font-medium text-xs">War Room Siap Berdiskusi</p>
             <p className="text-zinc-500 text-[11px] max-w-sm mt-1 leading-normal">
-              Klik &quot;Deliberate 10 Minds&quot; untuk memulai musyawarah. Seluruh agen AI akan saling melempar argumen, mendebat setup, dan menguji kelayakan risiko secara transparan.
+              Klik tombol musyawarah untuk memulai sidang dewan. Seluruh agen AI akan saling melempar argumen, mendebat setup, dan menguji kelayakan risiko secara transparan.
             </p>
           </div>
         ) : null}

@@ -792,6 +792,55 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* Smart Planned Order Card (Even if WAIT / PENDING RETEST) */}
+            {evaluation?.plannedOrder && (
+              <div className="mb-3 rounded border border-amber-900/60 bg-amber-950/20 px-3.5 py-2.5 font-mono text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-900/40 pb-1.5 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span className="font-semibold text-amber-300">
+                      {evaluation.plannedOrder.type === "BUY_LIMIT" ? "🎯 PLANNED BUY LIMIT" : "🎯 PLANNED SELL LIMIT"}
+                    </span>
+                    <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
+                      {evaluation.signal === "WAIT" ? "Pending Pullback Trigger" : "Armed for Execution"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-zinc-400">Target RR:</span>
+                    <span className="font-bold text-emerald-400">{evaluation.plannedOrder.rr}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]">
+                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
+                    <span className="text-[10px] text-zinc-500 block">Pending Limit</span>
+                    <span className="font-bold text-zinc-100">${evaluation.plannedOrder.price}</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
+                    <span className="text-[10px] text-red-400/90 block">Stop Loss</span>
+                    <span className="font-bold text-red-300">${evaluation.plannedOrder.sl} ({evaluation.plannedOrder.slPips}p)</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
+                    <span className="text-[10px] text-emerald-400/90 block">Take Profit</span>
+                    <span className="font-bold text-emerald-300">${evaluation.plannedOrder.tp} ({evaluation.plannedOrder.tpPips}p)</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80 flex flex-col justify-center">
+                    <span className="text-[9px] text-zinc-500 block">Status Trigger</span>
+                    <span className="text-[10px] text-amber-400 truncate">{evaluation.entryTrigger || evaluation.plannedOrder.rationale}</span>
+                  </div>
+                </div>
+
+                {evaluation.plannedOrder.rationale && (
+                  <p className="mt-2 text-[10px] text-zinc-400 font-sans italic">
+                    💡 Rationale Dewan: {evaluation.plannedOrder.rationale}
+                  </p>
+                )}
+              </div>
+            )}
+
             {isCouncilStripOpen && (
               <div className="space-y-3">
                 {/* Mode 1: War Room Interactive Chat */}
