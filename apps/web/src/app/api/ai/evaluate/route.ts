@@ -875,6 +875,32 @@ export async function POST(request: NextRequest) {
         }, C projection ${harmonic.ratios?.cProjection ?? "-"}, quality ${harmonic.quality ?? "-"})`
       : "tidak ada pola harmonik valid saat ini";
 
+    const recent12Candles = candles.slice(-12);
+    const recentCandlesText = recent12Candles
+      .map((c, idx) => {
+        const offset = idx - recent12Candles.length + 1; // e.g. -11 ... 0
+        const tag = offset === 0 ? "LIVE/LAST" : `Bar ${offset}`;
+        const isBull = c.close >= c.open;
+        const bodyPips = Math.round(toPips(Math.abs(c.close - c.open), spec));
+        const upperWickPips = Math.round(toPips(c.high - Math.max(c.open, c.close), spec));
+        const lowerWickPips = Math.round(toPips(Math.min(c.open, c.close) - c.low, spec));
+        const volStr = c.volume ? ` | Vol: ${Math.round(c.volume).toLocaleString()}` : "";
+        return `[${tag}] O: ${c.open.toFixed(2)} | H: ${c.high.toFixed(2)} | L: ${c.low.toFixed(2)} | C: ${c.close.toFixed(2)} | ${isBull ? "🟢 BULL" : "🔴 BEAR"} (Body: ${bodyPips}p, UpperWick: ${upperWickPips}p, LowerWick: ${lowerWickPips}p)${volStr}`;
+      })
+      .join("\n");
+
+    const highestRecent = Math.max(...recent12Candles.map((c) => c.high));
+    const lowestRecent = Math.min(...recent12Candles.map((c) => c.low));
+    const lastBar = recent12Candles[recent12Candles.length - 1];
+    const prevBar = recent12Candles.length > 1 ? recent12Candles[recent12Candles.length - 2] : lastBar;
+    const isLastBull = lastBar ? lastBar.close >= lastBar.open : false;
+    const lastUpperWick = lastBar ? Math.round(toPips(lastBar.high - Math.max(lastBar.open, lastBar.close), spec)) : 0;
+    const lastLowerWick = lastBar ? Math.round(toPips(Math.min(lastBar.open, lastBar.close) - lastBar.low, spec)) : 0;
+
+    const priceActionSummary = `Rentang 12 Candle: Tertinggi $${highestRecent.toFixed(2)} | Terendah $${lowestRecent.toFixed(2)}
+- Candle Terakhir (${isLastBull ? "BULLISH" : "BEARISH"}): Upper wick ${lastUpperWick} pips ${lastUpperWick > 5 ? "(Rejection atas kuat!)" : ""}, Lower wick ${lastLowerWick} pips ${lastLowerWick > 5 ? "(Rejection bawah kuat!)" : ""}.
+- Volume Flow: ${lastBar?.volume && prevBar?.volume ? (lastBar.volume > prevBar.volume * 1.3 ? "Lonjakan volume terdeteksi di bar terakhir!" : "Volume relatif stabil/normal.") : "Normal"}`;
+
     const slots = keySlots.length ? keySlots : defaultSlots(request);
 
     const runSlot = async (
@@ -911,6 +937,8 @@ export async function POST(request: NextRequest) {
         checklistMet,
         strategySkill: selectedSkill,
         tradingMethod,
+        recentCandlesText,
+        priceActionSummary,
         rebuttalTarget: extra?.rebuttalTarget,
         debateTranscript: extra?.debateTranscript,
       });

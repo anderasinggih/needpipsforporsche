@@ -387,13 +387,15 @@ export interface AgentPromptContext {
     keyObservation: string;
   };
   tradingMethod?: string;
+  recentCandlesText?: string;
+  priceActionSummary?: string;
 }
 
 export const buildAgentPrompt = (ctx: AgentPromptContext): string => `KAMU ADALAH: ${ctx.agentName} - ${ctx.role.role}
 INSTRUMEN: ${ctx.symbol} (${ctx.isGold ? "XAUUSD, 1 poin harga = 10 pips" : "crypto, 1 poin harga = 1 pip"})
 TIMEFRAME AKTIF: ${ctx.timeframe.toUpperCase()} | HARGA SEKARANG: $${ctx.price}
 
-  MANDAT:
+MANDAT:
 ${ctx.role.mandate}
 
 ${
@@ -420,6 +422,22 @@ ${ctx.strategySkill.rules.map((r) => `- [${r.required ? "WAJIB" : "OPSIONAL"}] $
 }EDGE WAJIB (tanpa ini suara-mu diabaikan):
 ${ctx.role.edgeCriteria.map((c) => `- ${c}`).join("\n")}
 
+${
+  ctx.recentCandlesText
+    ? `================================================================
+DATA 12 CANDLE TERAKHIR REAL LIVE WEBSOCKET (${ctx.timeframe.toUpperCase()}):
+${ctx.recentCandlesText}
+================================================================
+ANATOMI PRICE ACTION & VOLUME:
+${ctx.priceActionSummary || "Amati wicks, body momentum, dan volume footprint dari data di atas."}
+
+ATURAN ANTI-HALUSINASI KETAT (WAJIB PATUH 100%):
+1. DILARANG MENGARANG ANGKA! Semua level harga yang kamu sebutkan (High, Low, Rejection, Order Block) WAJIB mengacu pada data 12 candle di atas atau swing pivot yang diberikan.
+2. Analisa wicks (ekor candle) untuk mendeteksi penolakan harga (rejection), liquidity grab/sweep, atau absorption.
+3. Analisa volume: apakah pergerakan didukung lonjakan volume atau volume kering (fakeout/exhaustion)?
+4. Jangan berasumsi tren jika candle terakhir berkali-kali gagal menembus batas High/Low terdekat.\n`
+    : ""
+}
 DATA MULTI-TIMEFRAME REAL (M1 / M5 / M15 / H1):
 ${ctx.mtfSummaryText}
 Confluence: ${ctx.mtfConfluenceText}
