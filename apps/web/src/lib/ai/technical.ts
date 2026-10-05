@@ -706,3 +706,178 @@ export const buildTechnicalContext = (opts: {
     structuralSlPips: structuralSlPips ?? undefined,
   };
 };
+
+// ---------------------------------------------------------------------------
+// Institutional Market Mechanics: FVG, Order Blocks, Liquidity Pools & Sessions
+// ---------------------------------------------------------------------------
+
+export interface FairValueGap {
+  type: "BULLISH_FVG" | "BEARISH_FVG";
+  top: number;
+  bottom: number;
+  time: number;
+  mitigated: boolean;
+  sizePips: number;
+}
+
+export interface LiquidityPool {
+  type: "BUY_SIDE_LIQUIDITY" | "SELL_SIDE_LIQUIDITY";
+  level: number;
+  label: string;
+  distancePips: number;
+}
+
+export interface TradingSessionInfo {
+  session: "ASIA" | "LONDON" | "NEW_YORK" | "LONDON_CLOSE" | "SYDNEY";
+  isKillzone: boolean;
+  killzoneName?: string;
+  utcHour: number;
+  description: string;
+}
+
+/** Detect Trading Session and institutional Killzones in UTC */
+export const getTradingSession = (timestampMs: number = Date.now()): TradingSessionInfo => {
+  const date = new Date(timestampMs);
+  const hour = date.getUTCHours();
+  const minute = date.getUTCMinutes();
+  const timeVal = hour + minute / 60;
+
+  // London Open Killzone: 07:00 - 10:00 UTC
+  // New York Open Killzone: 12:00 - 15:00 UTC
+  // London Close Killzone: 15:00 - 17:00 UTC
+  // Asian Range: 00:00 - 07:00 UTC
+  if (timeVal >= 7 && timeVal < 10) {
+    return {
+      session: "LONDON",
+      isKillzone: true,
+      killzoneName: "London Open Killzone (High Volatility Judas Swing / Expansion)",
+      utcHour: hour,
+      description: "London Open Killzone: Waspadai manipulasi Judas Swing sebelum ekspansi tren.",
+    };
+  } else if (timeVal >= 12 && timeVal < 15) {
+    return {
+      session: "NEW_YORK",
+      isKillzone: true,
+      killzoneName: "New York Open Killzone (Maximum Institutional Volume)",
+      utcHour: hour,
+      description: "New York Open Killzone: Volume institusional puncak, peluang continuation atau reversal tajam.",
+    };
+  } else if (timeVal >= 15 && timeVal < 17) {
+    return {
+      session: "LONDON_CLOSE",
+      isKillzone: true,
+      killzoneName: "London Close Killzone (Profit Taking & Reversals)",
+      utcHour: hour,
+      description: "London Close: Area rawan profit taking dan retracement dari pergerakan sesi London.",
+    };
+  } else if (timeVal >= 10 && timeVal < 12) {
+    return {
+      session: "LONDON",
+      isKillzone: false,
+      utcHour: hour,
+      description: "Mid-London Session: Likuiditas stabil pasca-open.",
+    };
+  } else if (timeVal >= 17 && timeVal < 21) {
+    return {
+      session: "NEW_YORK",
+      isKillzone: false,
+      utcHour: hour,
+      description: "Afternoon New York: Menjelang penutupan pasar AS.",
+    };
+  } else {
+    return {
+      session: "ASIA",
+      isKillzone: false,
+      utcHour: hour,
+      description: "Asian Session: Rentang akumulasi biasanya membentuk liquidity pool untuk disikat di London.",
+    };
+  }
+};
+
+/** Detect Fair Value Gaps (FVG) from 3-candle imbalance pattern */
+export const detectFvg = (candles: Candle[], spec: SymbolSpec, currentPrice: number): FairValueGap[] => {
+  if (candles.length < 5) return [];
+  const fvgs: FairValueGap[] = [];
+
+  for (let i = 2; i < candles.length; i++) {
+    const bar1 = candles[i - 2];
+    const bar3 = candles[i];
+
+    // Bullish FVG: Bar 1 High < Bar 3 Low (Gap between Bar 1 High and Bar 3 Low)
+    if (bar3.low > bar1.high) {
+      const top = bar3.low;
+      const bottom = bar1.high;
+      const sizePips = Math.round(toPips(top - bottom, spec));
+      if (sizePips >= 2) {
+        // Check if later candles mitigated this gap
+        let mitigated = false;
+        for (let j = i + 1; j < candles.length; j++) {
+          if (candles[j].low <= bottom) {
+            mitigated = true;
+            break;
+          }
+        }
+        fvgs.push({
+          type: "BULLISH_FVG",
+          top: round(top),
+          bottom: round(bottom),
+          time: bar3.time,
+          mitigated,
+          sizePips,
+        });
+      }
+    }
+
+    // Bearish FVG: Bar 1 Low > Bar 3 High (Gap between Bar 1 Low and Bar 3 High)
+    if (bar1.low > bar3.high) {
+      const top = bar1.low;
+      const bottom = bar3.high;
+      const sizePips = Math.round(toPips(top - bottom, spec));
+      if (sizePips >= 2) {
+        let mitigated = false;
+        for (let j = i + 1; j < candles.length; j++) {
+          if (candles[j].high >= top) {
+            mitigated = true;
+            break;
+          }
+        }
+        fvgs.push({
+          type: "BEARISH_FVG",
+          top: round(top),
+          bottom: round(bottom),
+          time: bar3.time,
+          mitigated,
+          sizePips,
+        });
+      }
+    }
+  }
+
+  // Return only recent unmitigated or closest FVGs
+  return fvgs.slice(-4);
+};
+
+/** Detect Equal Highs (EQH) & Equal Lows (EQL) / Liquidity Pools */
+export const detectLiquidityPools = (candles: Candle[], spec: SymbolSpec, currentPrice: number): LiquidityPool[] => {
+  if (candles.length < 15) return [];
+  const pools: LiquidityPool[] = [];
+  const highest = Math.max(...candles.map((c) => c.high));
+  const lowest = Math.min(...candles.map((c) => c.low));
+
+  pools.push({
+    type: "BUY_SIDE_LIQUIDITY",
+    level: round(highest),
+    label: `Major Buy-Side Liquidity / Session High ($${round(highest)})`,
+    distancePips: Math.round(toPips(Math.abs(highest - currentPrice), spec)),
+  });
+
+  pools.push({
+    type: "SELL_SIDE_LIQUIDITY",
+    level: round(lowest),
+    label: `Major Sell-Side Liquidity / Session Low ($${round(lowest)})`,
+    distancePips: Math.round(toPips(Math.abs(currentPrice - lowest), spec)),
+  });
+
+  return pools;
+};
+

@@ -36,6 +36,9 @@ import {
   sma,
   toPips,
   computeMtfConfluence,
+  detectFvg,
+  detectLiquidityPools,
+  getTradingSession,
   type Candle,
   type ImpulseLeg,
   type Pivot,
@@ -875,10 +878,26 @@ export async function POST(request: NextRequest) {
         }, C projection ${harmonic.ratios?.cProjection ?? "-"}, quality ${harmonic.quality ?? "-"})`
       : "tidak ada pola harmonik valid saat ini";
 
-    const recent12Candles = candles.slice(-12);
-    const recentCandlesText = recent12Candles
+    // Institutional Market Context:
+    const sessionInfo = getTradingSession();
+    const recent25Candles = candles.slice(-25);
+    const recent60Candles = candles.slice(-60);
+    const sessionHigh60 = Math.max(...recent60Candles.map((c) => c.high));
+    const sessionLow60 = Math.min(...recent60Candles.map((c) => c.low));
+
+    const fvgs = detectFvg(candles, spec, price);
+    const unmitigatedFvgs = fvgs.filter((f) => !f.mitigated);
+    const liquidityPools = detectLiquidityPools(recent60Candles, spec, price);
+
+    const fvgSummary = unmitigatedFvgs.length > 0
+      ? unmitigatedFvgs.map((f) => `- [${f.type}] $${f.bottom} - $${f.top} (${f.sizePips} pips gap, belum termitigasi)`).join("\n")
+      : "Tidak ada imbalance FVG perawan terbuka di rentang terdekat.";
+
+    const poolSummary = liquidityPools.map((p) => `- [${p.type}] $${p.level} (${p.distancePips} pips dari harga saat ini)`).join("\n");
+
+    const recentCandlesText = recent25Candles
       .map((c, idx) => {
-        const offset = idx - recent12Candles.length + 1; // e.g. -11 ... 0
+        const offset = idx - recent25Candles.length + 1; // e.g. -24 ... 0
         const tag = offset === 0 ? "LIVE/LAST" : `Bar ${offset}`;
         const isBull = c.close >= c.open;
         const bodyPips = Math.round(toPips(Math.abs(c.close - c.open), spec));
@@ -889,17 +908,30 @@ export async function POST(request: NextRequest) {
       })
       .join("\n");
 
-    const highestRecent = Math.max(...recent12Candles.map((c) => c.high));
-    const lowestRecent = Math.min(...recent12Candles.map((c) => c.low));
-    const lastBar = recent12Candles[recent12Candles.length - 1];
-    const prevBar = recent12Candles.length > 1 ? recent12Candles[recent12Candles.length - 2] : lastBar;
+    const highestRecent = Math.max(...recent25Candles.map((c) => c.high));
+    const lowestRecent = Math.min(...recent25Candles.map((c) => c.low));
+    const lastBar = recent25Candles[recent25Candles.length - 1];
+    const prevBar = recent25Candles.length > 1 ? recent25Candles[recent25Candles.length - 2] : lastBar;
     const isLastBull = lastBar ? lastBar.close >= lastBar.open : false;
     const lastUpperWick = lastBar ? Math.round(toPips(lastBar.high - Math.max(lastBar.open, lastBar.close), spec)) : 0;
     const lastLowerWick = lastBar ? Math.round(toPips(Math.min(lastBar.open, lastBar.close) - lastBar.low, spec)) : 0;
 
-    const priceActionSummary = `Rentang 12 Candle: Tertinggi $${highestRecent.toFixed(2)} | Terendah $${lowestRecent.toFixed(2)}
+    const priceActionSummary = `SESI TRADING INSTITUSIONAL:
+- Sesi Saat Ini: ${sessionInfo.session} (${sessionInfo.description})
+- Status Killzone: ${sessionInfo.isKillzone ? `⚡ AKTIF (${sessionInfo.killzoneName})` : "Standard Volume Hours"}
+
+STRUKTUR MAKRO & LIQUIDITY POOLS (60 BAR):
+- Major Session High: $${sessionHigh60.toFixed(2)} | Major Session Low: $${sessionLow60.toFixed(2)}
+- Liquidity Target Pools:
+${poolSummary}
+
+FAIR VALUE GAPS (FVG / IMBALANCE) TERBUKA:
+${fvgSummary}
+
+ANATOMI MIKRO (25 BAR TERAKHIR):
+- Rentang 25 Candle: Tertinggi $${highestRecent.toFixed(2)} | Terendah $${lowestRecent.toFixed(2)}
 - Candle Terakhir (${isLastBull ? "BULLISH" : "BEARISH"}): Upper wick ${lastUpperWick} pips ${lastUpperWick > 5 ? "(Rejection atas kuat!)" : ""}, Lower wick ${lastLowerWick} pips ${lastLowerWick > 5 ? "(Rejection bawah kuat!)" : ""}.
-- Volume Flow: ${lastBar?.volume && prevBar?.volume ? (lastBar.volume > prevBar.volume * 1.3 ? "Lonjakan volume terdeteksi di bar terakhir!" : "Volume relatif stabil/normal.") : "Normal"}`;
+- Volume Flow: ${lastBar?.volume && prevBar?.volume ? (lastBar.volume > prevBar.volume * 1.3 ? "Lonjakan volume terdeteksi di bar terakhir!" : "Volume normal/stabil.") : "Normal"}`;
 
     const slots = keySlots.length ? keySlots : defaultSlots(request);
 
