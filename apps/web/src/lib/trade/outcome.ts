@@ -65,17 +65,32 @@ export const resolveTradeOutcome = (
   const isLong = levels.signal === "BUY";
   const { entryPrice, stopLoss, takeProfit, anchorTime } = levels;
 
-  const touchedEntry = (high: number, low: number) => (isLong ? high >= entryPrice : low <= entryPrice);
+  // For a BUY/Long pullback order (setupPrice >= entryPrice): price must drop to or below entry (low <= entryPrice).
+  // For a BUY/Long breakout order (setupPrice < entryPrice): price must rise to or above entry (high >= entryPrice).
+  // For a SELL/Short pullback order (setupPrice <= entryPrice): price must bounce up to or above entry (high >= entryPrice).
+  // For a SELL/Short breakdown order (setupPrice > entryPrice): price must drop to or below entry (low <= entryPrice).
+  const isPullback = levels.setupPrice !== undefined
+    ? (isLong ? levels.setupPrice >= entryPrice : levels.setupPrice <= entryPrice)
+    : false;
+
+  const touchedEntry = (high: number, low: number) => {
+    if (isLong) {
+      return isPullback ? low <= entryPrice : high >= entryPrice;
+    } else {
+      return isPullback ? high >= entryPrice : low <= entryPrice;
+    }
+  };
+
   const touchedTp = (high: number, low: number) => (isLong ? high >= takeProfit : low <= takeProfit);
   const touchedSl = (high: number, low: number) => (isLong ? low <= stopLoss : high >= stopLoss);
 
   let extremeHigh = -Infinity;
   let extremeLow = Infinity;
-  // An evaluation with a direct BUY/SELL signal is an immediate market entry,
-  // or entry filled as soon as price is at or crosses entry level.
-  let entryFilled = levels.setupPrice !== undefined 
-    ? Math.abs(levels.setupPrice - entryPrice) <= Math.max(1, entryPrice * 0.002) 
-    : true;
+  // A setup is only considered filled at inception if market price was essentially already touching entry price
+  // AND it wasn't a designated pullback/limit order waiting away from current market price.
+  let entryFilled = levels.setupPrice !== undefined
+    ? Math.abs(levels.setupPrice - entryPrice) <= Math.max(0.1, entryPrice * 0.0003)
+    : false;
   let filledTime: number | undefined = entryFilled ? anchorTime : undefined;
   let resolvedAt: { outcome: "WIN" | "LOSE"; price: number; time: number } | undefined;
 

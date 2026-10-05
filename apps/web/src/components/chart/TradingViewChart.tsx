@@ -82,6 +82,9 @@ export interface AISignalOverlay {
   riskRewardRatio?: string;
   positionBox?: PositionBox;
   predictiveTrajectory?: Array<{ time: number; price: number }>;
+  orderType?: "MARKET" | "LIMIT" | "PULLBACK";
+  entryTrigger?: string;
+  setupPrice?: number;
   note?: string;
 }
 
@@ -558,6 +561,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
       // Same lifecycle the history log uses: price action before the setup
       // cannot resolve it, and the box only closes once TP/SL is really hit.
+      const setupEntryPrice = aiSignal.setupPrice ?? aiSignal.positionBox?.entryPrice;
       const tradeState = resolveTradeOutcome(
         {
           signal: isLong ? "BUY" : "SELL",
@@ -565,11 +569,12 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           stopLoss: aiSignal.stopLoss,
           takeProfit: aiSignal.takeProfit,
           anchorTime: startTime,
-          setupPrice: aiSignal.positionBox?.entryPrice,
+          setupPrice: setupEntryPrice,
         },
         candles,
         liveCandle,
       );
+      const isAwaitingEntry = !tradeState.entryFilled && (isWait || aiSignal.orderType === "LIMIT" || (setupEntryPrice !== undefined && Math.abs(setupEntryPrice - aiSignal.entryPrice) > 0.05));
       const resolutionTime = tradeState.resolvedTime ?? null;
 
       // Dynamic End Time:
@@ -776,10 +781,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const tpPipsText = aiSignal.tpPips ? `${aiSignal.tpPips} pips` : `${(rewardDist * 10).toFixed(0)} pips`;
       const slPipsText = aiSignal.slPips ? `${aiSignal.slPips} pips` : `${(riskDist * 10).toFixed(0)} pips`;
 
-      const badgeText1 = isWait
-        ? `[Planned Limit] ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
+      const badgeText1 = isAwaitingEntry
+        ? `[Pending Limit] ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
         : `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
-      const badgeText2 = isWait ? `Pending Retest • RR 1:${rrRatio}` : `Rasio Risk/Reward: 1:${rrRatio}`;
+      const badgeText2 = isAwaitingEntry ? `Menunggu Retest • RR 1:${rrRatio}` : `Rasio Risk/Reward: 1:${rrRatio}`;
 
       ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
       const w1 = ctx.measureText(badgeText1).width;
@@ -793,13 +798,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
       const badgeY = yEntry - badgeH / 2;
 
-      // Rounded background pill (Amber/Gold accent if Planned Limit during WAIT)
-      ctx.fillStyle = isWait
+      // Rounded background pill (Amber accent if still awaiting entry / retest limit)
+      ctx.fillStyle = isAwaitingEntry
         ? "rgba(217, 119, 6, 0.95)"
         : isLong
         ? "rgba(8, 153, 129, 0.95)"
         : "rgba(242, 54, 69, 0.95)";
-      ctx.strokeStyle = isWait ? "#FDE68A" : "#FFFFFF";
+      ctx.strokeStyle = isAwaitingEntry ? "#FDE68A" : "#FFFFFF";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       if (ctx.roundRect) {

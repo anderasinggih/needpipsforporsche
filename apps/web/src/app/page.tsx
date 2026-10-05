@@ -579,6 +579,9 @@ export default function DashboardPage() {
                     riskRewardRatio: evaluation.riskRewardRatio,
                     positionBox: evaluation.positionBox,
                     predictiveTrajectory: evaluation.predictiveTrajectory,
+                    orderType: evaluation.orderType,
+                    entryTrigger: evaluation.entryTrigger,
+                    setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
                     note: evaluation.calculations,
                   }
                 : null
