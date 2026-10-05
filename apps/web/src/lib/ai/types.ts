@@ -309,6 +309,8 @@ export interface EvaluationResult {
   id?: string;
   /** Client-side archive timestamp (epoch ms), assigned by the dashboard. */
   timestamp?: number;
+  /** Trading method/category selected by trader (ICT/SMC/SNR/FIBONACCI/VOLUME_ORDERFLOW/ALL) */
+  tradingMethod?: string;
   symbol: string;
   timeframe: string;
   signal: Signal;
@@ -373,4 +375,9 @@ export interface EvaluationResult {
     durationMs: number;
     modelsUsed: string[];
   };
+  /** Lifecycle tracking */
+  generatedAt?: number;
+  triggeredAt?: number | null;
+  elapsedBeforeTriggerSeconds?: number | null;
+  lifecycleStatus?: "WAITING" | "RUNNING" | "RESOLVED" | "EXPIRED" | null;
 }

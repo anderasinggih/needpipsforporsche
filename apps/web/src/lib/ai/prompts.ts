@@ -386,6 +386,7 @@ export interface AgentPromptContext {
     bias: string;
     keyObservation: string;
   };
+  tradingMethod?: string;
 }
 
 export const buildAgentPrompt = (ctx: AgentPromptContext): string => `KAMU ADALAH: ${ctx.agentName} - ${ctx.role.role}

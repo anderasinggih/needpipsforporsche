@@ -177,6 +177,7 @@ export default function DashboardPage() {
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
+  const [tradingMethod, setTradingMethod] = useState<string>("ALL");
 
   // Configurable Target Risk-Reward Ratio (e.g. 1.5, 2.0, 2.5, 3.0)
   const [targetRr, setTargetRr] = useState<number>(2.5);
@@ -226,6 +227,10 @@ export default function DashboardPage() {
         const savedRules = localStorage.getItem("trading_checked_rules");
         if (savedRules) {
           setCheckedRules(JSON.parse(savedRules));
+        }
+        const savedMethod = localStorage.getItem("trading_method");
+        if (savedMethod) {
+          setTradingMethod(savedMethod);
         }
       } catch (e) {
         console.warn("Failed to restore strategy/checklist", e);
@@ -388,6 +393,7 @@ export default function DashboardPage() {
           price: currentCandle.close,
           timeframe,
           targetRr,
+          tradingMethod,
           checklistMet: allRequiredMet,
           selectedSkill: selectedSkill ? {
             title: selectedSkill.title,
@@ -507,6 +513,24 @@ export default function DashboardPage() {
                   XAUUSD (Gold)
                 </button>
               </div>
+              <span className="text-zinc-700">·</span>
+              <select
+                value={tradingMethod}
+                onChange={(e) => {
+                  setTradingMethod(e.target.value);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("trading_method", e.target.value);
+                  }
+                }}
+                className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[11px] font-mono text-zinc-300 focus:outline-none hover:bg-zinc-900"
+              >
+                <option value="ALL">ALL</option>
+                <option value="SMC">SMC</option>
+                <option value="ICT">ICT</option>
+                <option value="SNR">SNR</option>
+                <option value="FIBONACCI">FIBONACCI</option>
+                <option value="VOLUME">VOLUME &amp; ORDERFLOW</option>
+              </select>
               <span className="text-zinc-700">·</span>
               <span className="font-semibold text-zinc-200 font-mono tracking-wide text-xs">
                 ${currentPriceFormatted}

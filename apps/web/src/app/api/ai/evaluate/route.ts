@@ -94,6 +94,7 @@ interface EvaluateRequest {
   candles?: unknown;
   keySlots?: unknown;
   targetRr?: unknown;
+  tradingMethod?: unknown;
 }
 
 interface ParsedRequest {
@@ -110,6 +111,7 @@ interface ParsedRequest {
   keySlots: KeySlotPayload[];
   currentUnix: number;
   targetRr?: number | undefined;
+  tradingMethod?: string;
 }
 
 // ------------------------------------------------------------- validation ---
@@ -178,6 +180,8 @@ const parseRequest = (body: EvaluateRequest): { errors: string[]; payload: Parse
       }
     : undefined;
 
+  const tradingMethod = typeof body.tradingMethod === "string" ? body.tradingMethod.trim().toUpperCase() : undefined;
+
   return {
     errors,
     payload: {
@@ -190,6 +194,7 @@ const parseRequest = (body: EvaluateRequest): { errors: string[]; payload: Parse
       keySlots: sanitizeSlots(body.keySlots),
       currentUnix: candles.length ? candles[candles.length - 1].time : Math.floor(Date.now() / 1000),
       targetRr,
+      tradingMethod,
     },
   };
 };
@@ -770,7 +775,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Permintaan tidak valid.", details: errors }, { status: 400 });
   }
 
-  const { symbol, price, timeframe, candles, checklistMet, selectedSkill, keySlots, currentUnix, targetRr } = payload;
+  const { symbol, price, timeframe, candles, checklistMet, selectedSkill, keySlots, currentUnix, targetRr, tradingMethod } = payload;
   const spec = getSpec(symbol);
   const tfSeconds = parseTimeframeSeconds(timeframe);
 
@@ -905,6 +910,7 @@ export async function POST(request: NextRequest) {
         harmonicText,
         checklistMet,
         strategySkill: selectedSkill,
+        tradingMethod,
         rebuttalTarget: extra?.rebuttalTarget,
         debateTranscript: extra?.debateTranscript,
       });
@@ -1390,6 +1396,11 @@ export async function POST(request: NextRequest) {
         currentUnix,
         tfSeconds,
       }),
+      generatedAt: Date.now(),
+      triggeredAt: null,
+      elapsedBeforeTriggerSeconds: null,
+      lifecycleStatus: plannedOrder?.status === "PENDING_PULLBACK" || decision === "WAIT" ? "WAITING" : "RUNNING",
+      tradingMethod: tradingMethod || "ALL",
       recommendation:
         (typeof synthRaw?.recommendation === "string" && synthRaw.recommendation.trim().slice(0, 800)) ||
         defaultRecommendation({ consensus, direction, price, risk: riskPlan, spec }),
