@@ -577,9 +577,13 @@ export default function DashboardPage() {
             lastTickTimestamp={lastTickTimestamp}
             onSymbolChange={handleSymbolChange}
             onTimeframeChange={handleTimeframeChange}
-            aiMapping={evaluation?.chartMapping || null}
+            aiMapping={
+              evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                ? evaluation.chartMapping
+                : null
+            }
             aiSignal={
-              evaluation?.signal
+              evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
                 ? {
                     signal: evaluation.signal,
                     direction: evaluation.direction,
