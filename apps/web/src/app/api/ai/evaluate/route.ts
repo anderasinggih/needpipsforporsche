@@ -1064,7 +1064,9 @@ export async function POST(request: NextRequest) {
           // If price is extended > 8 pips away from golden pocket in trend direction,
           // don't chase aggressively! Set LIMIT / PULLBACK order at the edge of Golden Pocket.
           if (distToPocket > 0 && distPips >= 8 && distPips <= 60) {
-            targetEntryPrice = round(isLong ? pocket.zoneHigh : pocket.zoneLow);
+            // For BUY (Long): wait for pullback DOWN to pocket support -> enter at zoneLow (discount)
+            // For SELL (Short): wait for pullback UP to pocket resistance -> enter at zoneHigh
+            targetEntryPrice = round(isLong ? pocket.zoneLow : pocket.zoneHigh);
             orderType = "LIMIT";
             entryTrigger = `Limit / Retest Order: Tunggu harga pullback ke Golden Pocket Fib ($${targetEntryPrice}) sebelum masuk`;
           } else if (distPips > 60) {
@@ -1077,8 +1079,9 @@ export async function POST(request: NextRequest) {
     } else {
       // During WAIT: derive intelligent planned limit level where the setup WOULD be valid!
       if (pocket) {
-        // Target pullback to the high of pocket for Long or low of pocket for Short
-        targetEntryPrice = round(isLong ? pocket.zoneHigh : pocket.zoneLow);
+        // For BUY (Long): wait for price to pullback DOWN to support zoneLow
+        // For SELL (Short): wait for price to pullback UP to resistance zoneHigh
+        targetEntryPrice = round(isLong ? pocket.zoneLow : pocket.zoneHigh);
         orderType = "LIMIT";
         entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu harga retest ke zona Golden Pocket ($${targetEntryPrice})`;
       } else {
