@@ -19,3 +19,6 @@ redisdata/
 *.exe
 *.dll
 apps/engine/server
+
+# Candle history store
+apps/web/data/
