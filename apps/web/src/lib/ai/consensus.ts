@@ -340,6 +340,21 @@ export const agreementGate = (verdict: MtfVerdict): number => {
   }
 };
 
+/** Calculate vote entropy (0 = unanimous, higher = more fragmented) */
+export const calculateVoteEntropy = (bull: number, bear: number, neutral: number): number => {
+  const total = bull + bear + neutral;
+  if (total <= 0) return 1;
+  const pBull = bull / total;
+  const pBear = bear / total;
+  const pNeutral = neutral / total;
+  const entropy = -(
+    (pBull > 0 ? pBull * Math.log2(pBull) : 0) +
+    (pBear > 0 ? pBear * Math.log2(pBear) : 0) +
+    (pNeutral > 0 ? pNeutral * Math.log2(pNeutral) : 0)
+  );
+  return Math.max(0, Math.min(1.58, entropy));
+};
+
 const buildConsensusNarrative = (o: {
   direction: Direction;
   bull: number;

@@ -380,4 +380,29 @@ export interface EvaluationResult {
   triggeredAt?: number | null;
   elapsedBeforeTriggerSeconds?: number | null;
   lifecycleStatus?: "WAITING" | "RUNNING" | "RESOLVED" | "EXPIRED" | null;
+  /** Consensus metrics */
+  voteEntropy?: number;
+  abstainReason?: string | null;
+}
+
+/** Agent performance scorecard for adaptive weighting */
+export interface AgentScorecardEntry {
+  agentName: string;
+  role: string;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  breakEven: number;
+  winRate: number;
+  totalRMul: number;
+  avgRMul: number;
+  expectancyPips: number;
+  accuracy: number; // 0-100
+  weightMultiplier: number; // 0.5 - 1.5
+  lastUpdated: number;
+}
+
+export interface AgentScorecard {
+  entries: AgentScorecardEntry[];
+  updatedAt: number;
 }
