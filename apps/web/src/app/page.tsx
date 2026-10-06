@@ -9,6 +9,7 @@ import {
   PositionBox,
 } from "@/components/chart/TradingViewChart";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
+import { LiquidityHeatmapRadar } from "@/components/chart/LiquidityHeatmapRadar";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
@@ -42,6 +43,7 @@ import {
   CheckCircle,
   AlertCircle,
   Zap,
+  Layers,
 } from "lucide-react";
 import type {
   AgentOpinion,
@@ -172,10 +174,11 @@ export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState<string>("1m");
   const [isClientLoaded, setIsClientLoaded] = useState(false);
 
-  const { currentCandle, historicalCandles, positions, recentTrades, isConnected, lastTickTimestamp } =
+  const { currentCandle, historicalCandles, positions, recentTrades, marketDepth, isConnected, lastTickTimestamp } =
     useMarketStream(activeSymbol, timeframe);
 
-  const [showOrderbookTape, setShowOrderbookTape] = useState<boolean>(true);
+  const [showSidePanel, setShowSidePanel] = useState<boolean>(true);
+  const [sidePanelTab, setSidePanelTab] = useState<"tape" | "heatmap">("heatmap");
 
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
@@ -573,19 +576,51 @@ export default function DashboardPage() {
               <span className="sm:hidden">HIVE</span>
             </Link>
 
-            <button
-              type="button"
-              onClick={() => setShowOrderbookTape((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono border transition-colors ${
-                showOrderbookTape
-                  ? "bg-zinc-800 text-emerald-400 border-zinc-700 font-semibold"
-                  : "bg-zinc-950 text-zinc-400 border-zinc-850 hover:text-zinc-200"
-              }`}
-              title="Toggle Live Running Trades Orderbook Tape"
-            >
-              <Activity className="h-3 w-3 text-emerald-400" />
-              <span className="hidden md:inline">TAPE</span>
-            </button>
+            {/* Side Panel Toggle (Tape & Heatmap) */}
+            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("heatmap");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "heatmap"
+                    ? "bg-zinc-800 text-cyan-400 font-semibold shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="L2 Liquidity Heatmap Radar"
+              >
+                <Layers className="h-3 w-3 text-cyan-400" />
+                <span className="hidden md:inline">HEATMAP</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("tape");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "tape"
+                    ? "bg-zinc-800 text-emerald-400 font-semibold shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Live Running Trades Orderbook Tape"
+              >
+                <Activity className="h-3 w-3 text-emerald-400" />
+                <span className="hidden md:inline">TAPE</span>
+              </button>
+              {showSidePanel && (
+                <button
+                  type="button"
+                  onClick={() => setShowSidePanel(false)}
+                  className="px-1.5 py-0.5 text-zinc-500 hover:text-red-400"
+                  title="Close Side Panel"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
             <Badge
               variant="outline"
@@ -602,9 +637,9 @@ export default function DashboardPage() {
 
       {/* Main Full-Width Terminal Content - Responsive padding */}
       <div className="w-full px-2 sm:px-4 md:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
-        {/* TradingView Chart + Optional Live Running Trades Orderbook Tape */}
-        <div className={`grid grid-cols-1 ${showOrderbookTape ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
-          <div className={showOrderbookTape ? "lg:col-span-3" : "w-full"}>
+        {/* TradingView Chart + Optional Institutional Side Panel (Heatmap / Tape) */}
+        <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
+          <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
             <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-full">
               <TradingViewChart
                 currentCandle={currentCandle}
@@ -645,13 +680,21 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {showOrderbookTape && (
-            <div className="lg:col-span-1 h-[640px]">
-              <LiveOrderbookTape
-                trades={recentTrades}
-                symbol={activeSymbol}
-                currentPrice={currentCandle?.close}
-              />
+          {showSidePanel && (
+            <div className="lg:col-span-1 h-[640px] flex flex-col">
+              {sidePanelTab === "heatmap" ? (
+                <LiquidityHeatmapRadar
+                  depth={marketDepth}
+                  currentPrice={currentCandle?.close}
+                  symbol={activeSymbol}
+                />
+              ) : (
+                <LiveOrderbookTape
+                  trades={recentTrades}
+                  symbol={activeSymbol}
+                  currentPrice={currentCandle?.close}
+                />
+              )}
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { PossibilityMonteCarloChart } from "@/components/chart/PossibilityMonteCarloChart";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
+import { LiquidityHeatmapRadar } from "@/components/chart/LiquidityHeatmapRadar";
 import { PossibilityScenario, EvaluationResult } from "@/lib/ai/types";
 import {
   Sparkles,
@@ -27,10 +28,11 @@ import { Button } from "@/components/ui/button";
 export default function PossibilityPage() {
   const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
   const [timeframe, setTimeframe] = useState<string>("1m");
+  const [sideTab, setSideTab] = useState<"heatmap" | "tape">("heatmap");
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
 
-  const { currentCandle, historicalCandles, recentTrades, isConnected } = useMarketStream(
+  const { currentCandle, historicalCandles, recentTrades, marketDepth, isConnected } = useMarketStream(
     activeSymbol,
     timeframe
   );
@@ -311,13 +313,53 @@ export default function PossibilityPage() {
             </div>
           </div>
 
-          {/* Running Ticker / Orderbook Tape Panel (1 Column - Stockbit style) */}
-          <div className="lg:col-span-1 h-[680px]">
-            <LiveOrderbookTape
-              trades={recentTrades}
-              symbol={activeSymbol}
-              currentPrice={currentCandle?.close}
-            />
+          {/* Institutional Side Panel (Heatmap Radar & Tape Switcher) */}
+          <div className="lg:col-span-1 h-[680px] flex flex-col space-y-2">
+            <div className="flex items-center justify-between bg-black p-1 rounded border border-zinc-800 text-[11px] font-mono">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSideTab("heatmap")}
+                  className={`px-2.5 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                    sideTab === "heatmap"
+                      ? "bg-zinc-800 text-cyan-400 font-bold"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Layers className="h-3 w-3 text-cyan-400" />
+                  <span>HEATMAP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSideTab("tape")}
+                  className={`px-2.5 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                    sideTab === "tape"
+                      ? "bg-zinc-800 text-emerald-400 font-bold"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Activity className="h-3 w-3 text-emerald-400" />
+                  <span>TAPE</span>
+                </button>
+              </div>
+              <span className="text-[10px] text-zinc-500 pr-1">L2 STREAM</span>
+            </div>
+
+            <div className="flex-1 overflow-hidden">
+              {sideTab === "heatmap" ? (
+                <LiquidityHeatmapRadar
+                  depth={marketDepth}
+                  currentPrice={currentCandle?.close}
+                  symbol={activeSymbol}
+                />
+              ) : (
+                <LiveOrderbookTape
+                  trades={recentTrades}
+                  symbol={activeSymbol}
+                  currentPrice={currentCandle?.close}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

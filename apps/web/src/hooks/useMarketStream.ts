@@ -25,6 +25,23 @@ export interface LiveTradeTick {
   side: "BUY" | "SELL";
 }
 
+export interface OrderbookDepthLevel {
+  price: number;
+  qty: number;
+  total: number;
+}
+
+export interface MarketDepthState {
+  bids: OrderbookDepthLevel[];
+  asks: OrderbookDepthLevel[];
+  maxBidQty: number;
+  maxAskQty: number;
+  totalBidLiquidity: number;
+  totalAskLiquidity: number;
+  spread: number;
+  imbalancePct: number; // -100 to +100 (- is sell heavy, + is buy heavy)
+}
+
 export function normalizeBinanceStreamSymbol(symbol: string): string {
   const upper = symbol.toUpperCase().trim();
   if (upper === "XAUUSD" || upper === "GOLD") return "paxgusdt";
@@ -42,6 +59,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
   const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [recentTrades, setRecentTrades] = useState<LiveTradeTick[]>([]);
+  const [marketDepth, setMarketDepth] = useState<MarketDepthState | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastTickTimestamp, setLastTickTimestamp] = useState<number>(Date.now());
   const wsRef = useRef<WebSocket | null>(null);
@@ -110,9 +128,10 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     if (timeframe === "1s") binanceInterval = "1m";
 
     const klineStream = `${binanceStream}@kline_${binanceInterval}`;
+    const depthStream = `${binanceStream}@depth20@100ms`;
 
     // Direct combined stream endpoint:
-    const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade`;
+    const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade/${depthStream}`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -135,9 +154,55 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
             const raw = JSON.parse(event.data);
             const payload = raw.data || raw;
             const eventType = payload.e;
+            const streamName = raw.stream || "";
+
+            // Handle Depth 20 stream for Liquidity Heatmap & Orderbook Depth
+            if (streamName.includes("@depth") || payload.bids || payload.asks) {
+              const rawBids: [string, string][] = payload.bids || payload.b || [];
+              const rawAsks: [string, string][] = payload.asks || payload.a || [];
+
+              let runningBidTotal = 0;
+              let maxBid = 0;
+              const parsedBids: OrderbookDepthLevel[] = [];
+              for (const [p, q] of rawBids.slice(0, 15)) {
+                const price = parseFloat(p);
+                const qty = parseFloat(q);
+                runningBidTotal += qty;
+                if (qty > maxBid) maxBid = qty;
+                parsedBids.push({ price, qty, total: runningBidTotal });
+              }
+
+              let runningAskTotal = 0;
+              let maxAsk = 0;
+              const parsedAsks: OrderbookDepthLevel[] = [];
+              for (const [p, q] of rawAsks.slice(0, 15)) {
+                const price = parseFloat(p);
+                const qty = parseFloat(q);
+                runningAskTotal += qty;
+                if (qty > maxAsk) maxAsk = qty;
+                parsedAsks.push({ price, qty, total: runningAskTotal });
+              }
+
+              const bestBid = parsedBids[0]?.price || 0;
+              const bestAsk = parsedAsks[0]?.price || 0;
+              const spread = bestAsk > bestBid ? bestAsk - bestBid : 0;
+              const totalLiq = runningBidTotal + runningAskTotal;
+              const imbalance = totalLiq > 0 ? Math.round(((runningBidTotal - runningAskTotal) / totalLiq) * 100) : 0;
+
+              setMarketDepth({
+                bids: parsedBids,
+                asks: parsedAsks,
+                maxBidQty: maxBid,
+                maxAskQty: maxAsk,
+                totalBidLiquidity: runningBidTotal,
+                totalAskLiquidity: runningAskTotal,
+                spread,
+                imbalancePct: imbalance,
+              });
+            }
 
             // Handle kline stream
-            if (eventType === "kline" && payload.k) {
+            else if (eventType === "kline" && payload.k) {
               const k = payload.k;
               const barOpenSec = Math.floor(Number(k.t) / 1000);
               const candle: CandleData = {
@@ -238,5 +303,5 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     };
   }, [binanceStream, timeframe, activeSymbol]);
 
-  return { currentCandle, historicalCandles, positions, recentTrades, isConnected, lastTickTimestamp };
+  return { currentCandle, historicalCandles, positions, recentTrades, marketDepth, isConnected, lastTickTimestamp };
 }
