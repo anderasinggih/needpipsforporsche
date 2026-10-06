@@ -1772,6 +1772,34 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
       },
     };
 
+    // Record audit log for AI Evaluation
+    try {
+      const token = request.cookies.get("npfp_session")?.value;
+      const { verifySessionToken, logAction } = await import("@/lib/auth");
+      const actor = token ? verifySessionToken(token) : null;
+      await logAction({
+        username: actor?.username || "anonymous",
+        role: actor?.role || "member",
+        action_type: "AI_EVALUATE",
+        description: `Evaluasi AI Council untuk ${symbol} [${timeframe}] -> Sinyal ${decision} (${direction}), RR ${evaluation.riskRewardRatio}, Confidence ${evaluation.confidence}%`,
+        metadata: {
+          symbol,
+          timeframe,
+          signal: decision,
+          direction,
+          confidence: evaluation.confidence,
+          orderType: evaluation.orderType,
+          entryPrice: evaluation.entryPrice,
+          stopLoss: evaluation.stopLoss,
+          takeProfit: evaluation.takeProfit,
+          activeAgentsCount: activeAgents.length,
+        },
+        ip_address: request.headers.get("x-forwarded-for") || request.ip || undefined,
+      });
+    } catch (logErr) {
+      console.warn("Failed to write AI audit log:", logErr);
+    }
+
     return NextResponse.json({ evaluation });
   } catch (error) {
     console.error("Multi-agent council evaluation error:", error);
@@ -1781,3 +1809,4 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
     );
   }
 }
+

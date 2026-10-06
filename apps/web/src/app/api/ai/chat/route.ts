@@ -88,10 +88,35 @@ Jawab pertanyaan trader secara langsung, tajam, objektif, dan profesional sebaga
       json: false,
     });
 
+    const answerText = String(answer || "").trim();
+
+    // Record audit log for AI Chat interaction
+    try {
+      const token = req.cookies.get("npfp_session")?.value;
+      const { verifySessionToken, logAction } = await import("@/lib/auth");
+      const actor = token ? verifySessionToken(token) : null;
+      await logAction({
+        username: actor?.username || "anonymous",
+        role: actor?.role || "member",
+        action_type: "AI_CHAT",
+        description: `Tanya-jawab War Room dengan ${roleLabel}: "${userQuery.slice(0, 100)}"`,
+        metadata: {
+          agentId: targetSlot.id,
+          agentLabel: roleLabel,
+          userQuery,
+          answerPreview: answerText.slice(0, 120),
+          symbol,
+        },
+        ip_address: req.headers.get("x-forwarded-for") || req.ip || undefined,
+      });
+    } catch (logErr) {
+      console.warn("Failed to write AI chat log:", logErr);
+    }
+
     return NextResponse.json({
       sender: roleLabel,
       agentId: targetSlot.id,
-      text: String(answer || "").trim(),
+      text: answerText,
       timestamp: Date.now(),
     });
   } catch (err: any) {

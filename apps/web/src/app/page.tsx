@@ -612,6 +612,23 @@ export default function DashboardPage() {
               <Radio className={`h-2.5 w-2.5 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
               <span>{isConnected ? "LIVE" : "SYNC"}</span>
             </Badge>
+
+            {/* Logout button */}
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch("/api/auth", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "logout" }),
+                });
+                window.location.href = "/login";
+              }}
+              className="px-2 py-0.5 rounded text-[10px] font-mono border border-zinc-800 hover:border-red-800 text-zinc-400 hover:text-red-300 hover:bg-red-950/30 transition-colors shrink-0"
+              title="Logout from Terminal"
+            >
+              Exit
+            </button>
           </div>
         </div>
       </header>

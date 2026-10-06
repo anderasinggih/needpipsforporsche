@@ -104,6 +104,137 @@ export default function OwnerKeyPage() {
   const [isSavingOffsets, setIsSavingOffsets] = useState(false);
   const [offsetsSavedToast, setOffsetsSavedToast] = useState(false);
 
+  // User Accounts State
+  const [users, setUsers] = useState<any[]>([]);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"owner" | "admin" | "member">("member");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [userMsg, setUserMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  // Audit Logs State
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logFilter, setLogFilter] = useState<string>("ALL");
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/users");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.users) setUsers(data.users);
+      }
+    } catch (e) {}
+  };
+
+  const fetchLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetch("/api/logs?limit=150");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.logs) setLogs(data.logs);
+      }
+    } catch (e) {} finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch("/api/auth");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authenticated) setCurrentUser(data.user);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchLogs();
+    fetchCurrentUser();
+  }, []);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim() || !newPassword.trim()) {
+      setUserMsg({ type: "err", text: "Username dan password wajib diisi." });
+      return;
+    }
+    setIsCreatingUser(true);
+    setUserMsg(null);
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUsername.trim(),
+          password: newPassword.trim(),
+          role: newRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal membuat akun.");
+      setUserMsg({ type: "ok", text: `Akun "${newUsername}" [${newRole}] berhasil dibuat!` });
+      setNewUsername("");
+      setNewPassword("");
+      fetchUsers();
+      fetchLogs();
+    } catch (err: any) {
+      setUserMsg({ type: "err", text: err.message || "Gagal membuat akun." });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId: number, uname: string) => {
+    if (!confirm(`Hapus pengguna "${uname}"?`)) return;
+    try {
+      const res = await fetch(`/api/users?id=${userId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal menghapus pengguna.");
+        return;
+      }
+      fetchUsers();
+      fetchLogs();
+    } catch (e: any) {
+      alert(e.message || "Gagal menghapus");
+    }
+  };
+
+  const handleDeleteLog = async (logId: number) => {
+    if (!confirm(`Hapus entri log ID ${logId}?`)) return;
+    try {
+      const res = await fetch(`/api/logs?id=${logId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal menghapus log.");
+        return;
+      }
+      fetchLogs();
+    } catch (e: any) {
+      alert(e.message || "Gagal menghapus log.");
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    if (!confirm("PERINGATAN: Yakin ingin membersihkan SEMUA audit log aktivitas dan AI?")) return;
+    try {
+      const res = await fetch(`/api/logs?clear_all=true`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Gagal membersihkan log.");
+        return;
+      }
+      fetchLogs();
+    } catch (e: any) {
+      alert(e.message || "Gagal membersihkan log.");
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedMusic = localStorage.getItem("bg_music_youtube_links") || "";
@@ -686,6 +817,251 @@ export default function OwnerKeyPage() {
             </div>
           </div>
         </form>
+
+        {/* SECTION 1: MANAJEMEN AKUN PENGGUNA (BUAT AKUN DI URL OWNER/KEY) */}
+        <Card className="border-zinc-800 bg-zinc-950 p-5 shadow-none space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="h-5 w-5 text-emerald-400" />
+              <div>
+                <h3 className="text-xs font-semibold uppercase font-mono tracking-wider text-zinc-100">
+                  User Account Management & Access Authorization
+                </h3>
+                <p className="text-[11px] text-zinc-400 font-mono">
+                  Buat akun baru untuk trader/anggota tim agar bisa mengakses terminal. Data tersimpan di PostgreSQL.
+                </p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-emerald-400">
+              {users.length} Registered Users
+            </Badge>
+          </div>
+
+          {/* Form Buat Akun Baru */}
+          <form onSubmit={handleCreateUser} className="space-y-3 bg-black/50 p-3.5 rounded-lg border border-zinc-900">
+            <div className="text-[11px] font-mono font-semibold text-zinc-300">Buat Akun Baru:</div>
+            {userMsg && (
+              <div
+                className={`p-2 rounded text-xs font-mono ${
+                  userMsg.type === "ok"
+                    ? "bg-emerald-950/80 text-emerald-200 border border-emerald-800"
+                    : "bg-red-950/80 text-red-200 border border-red-800"
+                }`}
+              >
+                {userMsg.text}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <Label className="text-[10px] font-mono text-zinc-400">Username</Label>
+                <Input
+                  type="text"
+                  placeholder="e.g. trader1, alex"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  className="bg-black border-zinc-800 text-xs font-mono h-8 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] font-mono text-zinc-400">Password</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="bg-black border-zinc-800 text-xs font-mono h-8 mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] font-mono text-zinc-400">Role Privilege</Label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as any)}
+                  className="w-full bg-black border border-zinc-800 rounded-md text-xs font-mono h-8 mt-1 px-2 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="member">member (Normal Trader Access)</option>
+                  <option value="admin">admin (Full Trade & Chat)</option>
+                  <option value="owner">owner (Owner Privilege - Manage & Purge Logs)</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="submit"
+                  disabled={isCreatingUser}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs h-8"
+                >
+                  {isCreatingUser ? "Membuat..." : "+ Buat Akun"}
+                </Button>
+              </div>
+            </div>
+          </form>
+
+          {/* List Akun Terdaftar */}
+          <div className="space-y-1.5 pt-2">
+            <div className="text-[11px] font-mono font-semibold text-zinc-400">Daftar Akun Aktif:</div>
+            <div className="divide-y divide-zinc-900 border border-zinc-900 rounded-lg overflow-hidden bg-black/40">
+              {users.map((u) => (
+                <div key={u.id} className="flex items-center justify-between p-2.5 text-xs font-mono">
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-white">{u.username}</span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] uppercase font-mono px-1.5 py-0 ${
+                        u.role === "owner"
+                          ? "border-amber-500/50 text-amber-400 bg-amber-950/20"
+                          : u.role === "admin"
+                          ? "border-purple-500/50 text-purple-400 bg-purple-950/20"
+                          : "border-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {u.role}
+                    </Badge>
+                    <span className="text-[10px] text-zinc-600">
+                      ID #{u.id} • Dibuat: {new Date(u.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteUser(u.id, u.username)}
+                      className="h-6 px-2 text-red-400 hover:text-red-300 hover:bg-red-950/50 text-[10px] font-mono"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Hapus
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        {/* SECTION 2: LIVE AUDIT LOGS (AKTIVITAS PENGGUNA & GENERATE AI) */}
+        <Card className="border-zinc-800 bg-zinc-950 p-5 shadow-none space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase font-mono tracking-wider text-zinc-100">
+                  Institutional Security & AI Activity Audit Trail
+                </h3>
+                <Badge variant="outline" className="text-[9px] font-mono border-zinc-800 text-purple-400">
+                  PROTECTED LOGS
+                </Badge>
+              </div>
+              <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                Log real-time siapa yang login, generate AI evaluasi council, chat di War Room, atau ubah konfigurasi.
+                <span className="text-amber-400 ml-1">
+                  (Peraturan: Log AI & aktivitas dilindungi ketat dan TIDAK BISA dihapus kecuali oleh role OWNER).
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchLogs}
+                disabled={isLoadingLogs}
+                className="h-7 text-[10px] font-mono border-zinc-800 bg-black text-zinc-300"
+              >
+                {isLoadingLogs ? "Refreshing..." : "Refresh Log"}
+              </Button>
+              {currentUser?.role === "owner" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearAllLogs}
+                  className="h-7 text-[10px] font-mono border-red-900/60 bg-red-950/30 text-red-400 hover:bg-red-950/60"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Purge All (Owner Only)
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] font-mono">
+            {["ALL", "AI_EVALUATE", "AI_CHAT", "LOGIN", "USER_CREATE"].map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setLogFilter(f)}
+                className={`px-2.5 py-1 rounded text-[10px] transition-colors ${
+                  logFilter === f
+                    ? "bg-zinc-200 text-black font-semibold"
+                    : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
+          {/* Log Table / List */}
+          <div className="max-h-96 overflow-y-auto divide-y divide-zinc-900 border border-zinc-900 rounded-lg bg-black/60 font-mono text-xs">
+            {logs.filter((l) => logFilter === "ALL" || l.action_type === logFilter).length === 0 ? (
+              <div className="p-6 text-center text-zinc-600 text-xs">
+                Belum ada aktivitas terekam untuk filter ini.
+              </div>
+            ) : (
+              logs
+                .filter((l) => logFilter === "ALL" || l.action_type === logFilter)
+                .map((log) => {
+                  const isAi = log.action_type.startsWith("AI_");
+                  return (
+                    <div key={log.id} className="p-2.5 hover:bg-zinc-900/40 transition-colors flex items-start justify-between gap-3">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-zinc-500">
+                            {new Date(log.created_at).toLocaleTimeString()} ({new Date(log.created_at).toLocaleDateString()})
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] px-1.5 py-0 font-mono ${
+                              log.action_type === "AI_EVALUATE"
+                                ? "border-purple-600/60 text-purple-300 bg-purple-950/30"
+                                : log.action_type === "AI_CHAT"
+                                ? "border-cyan-600/60 text-cyan-300 bg-cyan-950/30"
+                                : log.action_type === "LOGIN"
+                                ? "border-emerald-600/60 text-emerald-300 bg-emerald-950/30"
+                                : "border-zinc-800 text-zinc-400"
+                            }`}
+                          >
+                            {log.action_type}
+                          </Badge>
+                          <span className="text-white font-semibold text-[11px]">
+                            {log.username}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            [{log.role}]
+                          </span>
+                          {log.ip_address && (
+                            <span className="text-[9px] text-zinc-600">IP: {log.ip_address}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-zinc-300 break-words leading-relaxed">
+                          {log.description}
+                        </p>
+                      </div>
+
+                      {/* Delete button: ONLY ACTIVE IF USER IS OWNER */}
+                      {currentUser?.role === "owner" && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLog(log.id)}
+                          className="text-zinc-600 hover:text-red-400 p-1 transition-colors shrink-0"
+                          title="Hapus log ini (Owner Only)"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+            )}
+          </div>
+        </Card>
       </main>
     </div>
   );
