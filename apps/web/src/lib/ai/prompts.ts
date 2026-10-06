@@ -389,6 +389,10 @@ export interface AgentPromptContext {
   tradingMethod?: string;
   recentCandlesText?: string;
   priceActionSummary?: string;
+  fvgSummaryText?: string;
+  mssSummaryText?: string;
+  liquidityPoolsText?: string;
+  neuralLessonsLearnedText?: string;
 }
 
 export const buildAgentPrompt = (ctx: AgentPromptContext): string => `KAMU ADALAH: ${ctx.agentName} - ${ctx.role.role}
@@ -399,6 +403,12 @@ MANDAT:
 ${ctx.role.mandate}
 
 ${
+  ctx.neuralLessonsLearnedText
+    ? `⚠️ MEMORI PEMBELAJARAN DARI KESALAHAN TRADE SEBELUMNYA (POSTGRESQL NEURAL MEMORY):
+${ctx.neuralLessonsLearnedText}
+*ATURAN WAJIB:* Pelajari evaluasi kegagalan di atas dan JANGAN ULANGI kesalahan setup atau bias yang sama pada kondisi pasar saat ini!\n\n`
+    : ""
+}${
   ctx.tradingMethod && ctx.tradingMethod !== "ALL"
     ? `METODE ANALISIS PRIORITAS: ${ctx.tradingMethod}
 FOKUS ANALISIS (WAJIB DIIKUTI):
@@ -430,6 +440,11 @@ ${ctx.recentCandlesText}
 ================================================================
 ANATOMI PRICE ACTION & VOLUME:
 ${ctx.priceActionSummary || "Amati wicks, body momentum, dan volume footprint dari data di atas."}
+
+DATA SMART MONEY CONCEPTS (SMC) & ICT TERDETEKSI:
+- Fair Value Gaps (FVG): ${ctx.fvgSummaryText || "Tidak ada FVG aktif terdekat"}
+- Market Structure Shift (MSS/BOS/CHoCH): ${ctx.mssSummaryText || "Struktur internal range"}
+- Liquidity Pools (EQH/EQL): ${ctx.liquidityPoolsText || "Likuiditas swing standar"}
 
 ATURAN ANTI-HALUSINASI KETAT (WAJIB PATUH 100%):
 1. DILARANG MENGARANG ANGKA! Semua level harga yang kamu sebutkan (High, Low, Rejection, Order Block) WAJIB mengacu pada data 12 candle di atas atau swing pivot yang diberikan.

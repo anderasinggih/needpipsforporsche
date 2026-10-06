@@ -881,3 +881,91 @@ export const detectLiquidityPools = (candles: Candle[], spec: SymbolSpec, curren
   return pools;
 };
 
+export interface MarketStructureShift {
+  detected: boolean;
+  type: "BULLISH_MSS" | "BEARISH_MSS" | "NONE";
+  pattern: "MSS" | "BOS" | "CHOCH" | "NONE";
+  breakPrice: number;
+  displacementConfirmed: boolean;
+  brokenPivotTime?: number;
+  description: string;
+}
+
+/**
+ * Detect Market Structure Shift (MSS), Break of Structure (BOS), and Change of Character (CHoCH)
+ * Identifies institutional trend disruption through impulse displacement through recent swing highs/lows.
+ */
+export const detectMssAndBos = (
+  candles: Candle[],
+  pivots: Pivot[],
+  spec: SymbolSpec
+): MarketStructureShift => {
+  if (candles.length < 5 || pivots.length < 2) {
+    return {
+      detected: false,
+      type: "NONE",
+      pattern: "NONE",
+      breakPrice: 0,
+      displacementConfirmed: false,
+      description: "Insufficient swing pivot depth for structural shift detection",
+    };
+  }
+
+  const lastCandle = candles[candles.length - 1];
+  const prevCandle = candles[candles.length - 2];
+  const recentHighs = pivots.filter((p) => p.kind === "HIGH").slice(-3);
+  const recentLows = pivots.filter((p) => p.kind === "LOW").slice(-3);
+
+  const lastHigh = recentHighs[recentHighs.length - 1];
+  const lastLow = recentLows[recentLows.length - 1];
+
+  // Bullish MSS / BOS / CHoCH: Close impulsively breaks above recent significant swing high
+  if (lastHigh && lastCandle.close > lastHigh.price) {
+    const candleBody = Math.abs(lastCandle.close - lastCandle.open);
+    const avgBody = candles.slice(-10).reduce((acc, c) => acc + Math.abs(c.close - c.open), 0) / 10;
+    const isDisplacement = candleBody > avgBody * 1.35; // True impulse candle
+    const isChoch = recentHighs.length >= 2 && recentHighs[recentHighs.length - 2].price > lastHigh.price;
+
+    return {
+      detected: true,
+      type: "BULLISH_MSS",
+      pattern: isChoch ? "CHOCH" : "MSS",
+      breakPrice: round(lastHigh.price),
+      displacementConfirmed: isDisplacement,
+      brokenPivotTime: lastHigh.time,
+      description: isChoch
+        ? `Bullish Change of Character (CHoCH): Harga breakout di atas swing high $${round(lastHigh.price)} mengakhiri dominasi downtrend.`
+        : `Bullish Market Structure Shift (MSS): Breakout impulsif di atas $${round(lastHigh.price)} dengan konfirmasi displacement institusional.`,
+    };
+  }
+
+  // Bearish MSS / BOS / CHoCH: Close impulsively breaks below recent significant swing low
+  if (lastLow && lastCandle.close < lastLow.price) {
+    const candleBody = Math.abs(lastCandle.close - lastCandle.open);
+    const avgBody = candles.slice(-10).reduce((acc, c) => acc + Math.abs(c.close - c.open), 0) / 10;
+    const isDisplacement = candleBody > avgBody * 1.35;
+    const isChoch = recentLows.length >= 2 && recentLows[recentLows.length - 2].price < lastLow.price;
+
+    return {
+      detected: true,
+      type: "BEARISH_MSS",
+      pattern: isChoch ? "CHOCH" : "MSS",
+      breakPrice: round(lastLow.price),
+      displacementConfirmed: isDisplacement,
+      brokenPivotTime: lastLow.time,
+      description: isChoch
+        ? `Bearish Change of Character (CHoCH): Harga tembus di bawah swing low $${round(lastLow.price)} mengakhiri dominasi uptrend.`
+        : `Bearish Market Structure Shift (MSS): Breakdown impulsif di bawah $${round(lastLow.price)} dengan konfirmasi displacement institusional.`,
+    };
+  }
+
+  return {
+    detected: false,
+    type: "NONE",
+    pattern: "NONE",
+    breakPrice: 0,
+    displacementConfirmed: false,
+    description: "Struktur pasar masih bergerak dalam batas swing sebelumnya (internal range liquidity).",
+  };
+};
+

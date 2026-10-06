@@ -38,12 +38,14 @@ import {
   computeMtfConfluence,
   detectFvg,
   detectLiquidityPools,
+  detectMssAndBos,
   getTradingSession,
   type Candle,
   type ImpulseLeg,
   type Pivot,
   type SymbolSpec,
 } from "@/lib/ai/technical";
+import pool from "@/lib/db";
 import type {
   AgentOpinion,
   Bias,
@@ -1053,6 +1055,32 @@ export async function POST(request: NextRequest) {
     const fvgs = detectFvg(candles, spec, price);
     const unmitigatedFvgs = fvgs.filter((f) => !f.mitigated);
     const liquidityPools = detectLiquidityPools(recent60Candles, spec, price);
+    const mssData = detectMssAndBos(recent25Candles, pivots, spec);
+
+    // Fetch Recent Neural Learning Memory / Post-Mortem Lessons from PostgreSQL database
+    let neuralLessonsLearnedText = "";
+    try {
+      const client = await pool.connect();
+      try {
+        const memRes = await client.query(
+          `SELECT outcome, mistake_analysis, lesson_learned, created_at 
+           FROM neural_learning_memory 
+           WHERE symbol = $1 OR symbol IS NULL
+           ORDER BY created_at DESC 
+           LIMIT 4`,
+          [symbol]
+        );
+        if (memRes.rows && memRes.rows.length > 0) {
+          neuralLessonsLearnedText = memRes.rows
+            .map((r) => `- [${r.outcome}] Evaluasi Kesalahan: "${r.mistake_analysis}" => Solusi/Pelajaran: ${r.lesson_learned}`)
+            .join("\n");
+        }
+      } finally {
+        client.release();
+      }
+    } catch (dbErr) {
+      // Graceful fallback if database memory is still fresh
+    }
 
     const fvgSummary = unmitigatedFvgs.length > 0
       ? unmitigatedFvgs.map((f) => `- [${f.type}] $${f.bottom} - $${f.top} (${f.sizePips} pips gap, belum termitigasi)`).join("\n")
@@ -1092,6 +1120,10 @@ ${poolSummary}
 
 FAIR VALUE GAPS (FVG / IMBALANCE) TERBUKA:
 ${fvgSummary}
+
+MARKET STRUCTURE SHIFT (MSS / BOS / CHOCH):
+- Status: ${mssData.detected ? `⚡ ${mssData.pattern} TERDETEKSI` : "INTERNAL RANGE"}
+- Deskripsi: ${mssData.description}
 
 ANATOMI MIKRO (25 BAR TERAKHIR):
 - Rentang 25 Candle: Tertinggi $${highestRecent.toFixed(2)} | Terendah $${lowestRecent.toFixed(2)}
@@ -1136,6 +1168,10 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
         tradingMethod,
         recentCandlesText,
         priceActionSummary,
+        fvgSummaryText: fvgSummary,
+        mssSummaryText: mssData.description,
+        liquidityPoolsText: poolSummary,
+        neuralLessonsLearnedText,
         rebuttalTarget: extra?.rebuttalTarget,
         debateTranscript: extra?.debateTranscript,
       });

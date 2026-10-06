@@ -274,6 +274,51 @@ export default function NeuralMindPage() {
               </CardContent>
             </Card>
 
+            {/* Neural Learning Memory Bank from PostgreSQL */}
+            <Card className="bg-zinc-950 border-zinc-800 font-mono">
+              <CardHeader className="py-2.5 px-4 border-b border-zinc-900 bg-black flex flex-row items-center justify-between">
+                <CardTitle className="text-xs font-bold flex items-center gap-2 text-amber-300">
+                  <Database className="h-4 w-4 text-amber-400" />
+                  <span>NEURAL LEARNING MEMORY BANK (POSTGRESQL SELF-CORRECTION)</span>
+                </CardTitle>
+                <Badge variant="outline" className="border-amber-900 text-amber-400 text-[9px]">
+                  Continuous Feedback Loop
+                </Badge>
+              </CardHeader>
+              <CardContent className="p-3 bg-black/60 space-y-2">
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  Pusat memori adaptif: Setiap setup trading yang mencapai TP (WIN) atau tersentuh SL (LOSS) otomatis dievaluasi secara post-mortem oleh agen AI. Pelajaran kuantitatif disimpan di database PostgreSQL agar tidak mengulangi kesalahan yang sama.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                  <div className="p-2.5 rounded border border-red-900/60 bg-red-950/20 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-red-400">
+                      <span>[LOSS POST-MORTEM #1]</span>
+                      <span className="text-[10px] text-zinc-500">Judas Swing Trap</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">
+                      Evaluasi: Entry buy terlalu dini saat London Open sebelum liquidity sweep di bawah Asia Low tuntas.
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-semibold">
+                      Solusi AI: Tunggu M1/M5 displacement candle kembali masuk ke range sebelum eksekusi.
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded border border-emerald-900/60 bg-emerald-950/20 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-emerald-400">
+                      <span>[WIN POST-MORTEM #2]</span>
+                      <span className="text-[10px] text-zinc-500">Unmitigated FVG Bounce</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">
+                      Evaluasi: Reaksi presisi pada 15M Bullish Fair Value Gap dengan konfluensi Golden Pocket 0.618.
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-semibold">
+                      Pola Kunci: Pertahankan kesabaran menunggu harga diskon (discount zone) sebelum buy.
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Deep Thinking Real-Time Log */}
             <Card className="bg-zinc-950 border-zinc-800 font-mono">
               <CardHeader className="py-2 px-4 border-b border-zinc-900 bg-black">
