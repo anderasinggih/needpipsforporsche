@@ -171,14 +171,6 @@ export default function PossibilityPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/neural-mind"
-              className="flex items-center gap-1.5 px-3 py-1 rounded bg-purple-950/40 border border-purple-800/80 text-xs font-mono text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 transition-colors"
-            >
-              <BrainCircuit className="h-3.5 w-3.5 text-purple-400" />
-              <span>NEURAL MIND HIVE</span>
-            </Link>
-
             <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800">
               <button
                 type="button"

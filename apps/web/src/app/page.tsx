@@ -495,23 +495,24 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans antialiased selection:bg-zinc-800">
-      {/* Top Navigation Bar - Responsive */}
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/90 px-3 sm:px-6 py-2 sm:py-2.5 backdrop-blur">
-        <div className="mx-auto flex w-full items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-1.5 sm:gap-2 font-mono font-semibold tracking-tight text-white text-xs sm:text-sm">
+      {/* Top Navigation Bar - Single Clean Row Without Duplicate Links */}
+      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-black/90 px-3 sm:px-6 py-2 backdrop-blur">
+        <div className="mx-auto flex w-full items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          {/* Brand & Market Controls (Never Wraps) */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 font-mono font-bold tracking-tight text-white text-xs sm:text-sm shrink-0">
               <span className="flex h-5 w-5 items-center justify-center rounded bg-zinc-800 text-[10px] font-bold text-white border border-zinc-700">
                 P
               </span>
-              NEEDPIPS<span className="text-zinc-600 font-normal">/</span>FORPORSCHE
+              NEEDPIPS<span className="text-zinc-600 font-normal">/</span>PORSCHE
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 border-l border-zinc-800 pl-4 text-xs font-mono">
-              <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800">
+            <div className="flex items-center gap-2 border-l border-zinc-850 pl-2.5 sm:pl-3 text-xs font-mono shrink-0">
+              <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => handleSymbolChange("BTCUSD")}
-                  className={`px-2.5 py-0.5 text-[11px] font-mono font-medium rounded transition-colors ${
+                  className={`px-2 py-0.5 text-[11px] font-mono font-medium rounded transition-colors ${
                     activeSymbol === "BTCUSD"
                       ? "bg-zinc-800 text-white"
                       : "text-zinc-400 hover:text-white"
@@ -522,16 +523,16 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => handleSymbolChange("XAUUSD")}
-                  className={`px-2.5 py-0.5 text-[11px] font-mono font-medium rounded transition-colors ${
+                  className={`px-2 py-0.5 text-[11px] font-mono font-medium rounded transition-colors ${
                     activeSymbol === "XAUUSD"
                       ? "bg-zinc-800 text-white"
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  XAUUSD (Gold)
+                  XAUUSD
                 </button>
               </div>
-              <span className="text-zinc-700">·</span>
+
               <select
                 value={tradingMethod}
                 onChange={(e) => {
@@ -540,44 +541,26 @@ export default function DashboardPage() {
                     localStorage.setItem("trading_method", e.target.value);
                   }
                 }}
-                className="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[11px] font-mono text-zinc-300 focus:outline-none hover:bg-zinc-900"
+                className="hidden md:inline-block rounded-md bg-zinc-950 border border-zinc-800 px-2 py-0.5 text-[11px] font-mono text-zinc-300 focus:outline-none hover:bg-zinc-900 shrink-0"
               >
-                <option value="ALL">ALL</option>
+                <option value="ALL">ALL METHODS</option>
                 <option value="SMC">SMC</option>
                 <option value="ICT">ICT</option>
                 <option value="SNR">SNR</option>
                 <option value="FIBONACCI">FIBONACCI</option>
                 <option value="VOLUME">VOLUME &amp; ORDERFLOW</option>
               </select>
-              <span className="text-zinc-700">·</span>
-              <span className="font-semibold text-zinc-200 font-mono tracking-wide text-xs">
+
+              <span className="font-semibold text-zinc-200 font-mono tracking-wide text-xs shrink-0">
                 ${currentPriceFormatted}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Navigation to Possibility & Neural Mind Pages */}
-            <Link
-              href="/possibility"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-950/40 border border-cyan-800/80 text-[11px] font-mono text-cyan-300 hover:text-cyan-200 hover:bg-cyan-900/40 transition-colors"
-            >
-              <TrendingUp className="h-3 w-3 text-cyan-400" />
-              <span className="hidden sm:inline">POSSIBILITY CHART</span>
-              <span className="sm:hidden">FORECAST</span>
-            </Link>
-
-            <Link
-              href="/neural-mind"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-950/40 border border-purple-800/80 text-[11px] font-mono text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 transition-colors"
-            >
-              <BrainCircuit className="h-3 w-3 text-purple-400" />
-              <span className="hidden sm:inline">NEURAL MIND</span>
-              <span className="sm:hidden">HIVE</span>
-            </Link>
-
-            {/* Side Panel Toggle (Tape & Heatmap) */}
-            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono">
+          {/* Right Controls: Side Panel View Switcher & Live Status (Strict 1-Row) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Side Panel Toggle (Heatmap / Tape / Close) */}
+            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -586,13 +569,13 @@ export default function DashboardPage() {
                 }}
                 className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
                   showSidePanel && sidePanelTab === "heatmap"
-                    ? "bg-zinc-800 text-cyan-400 font-semibold shadow-sm"
+                    ? "bg-zinc-800 text-cyan-400 font-semibold"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="L2 Liquidity Heatmap Radar"
               >
                 <Layers className="h-3 w-3 text-cyan-400" />
-                <span className="hidden md:inline">HEATMAP</span>
+                <span className="hidden sm:inline">HEATMAP</span>
               </button>
               <button
                 type="button"
@@ -602,20 +585,20 @@ export default function DashboardPage() {
                 }}
                 className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
                   showSidePanel && sidePanelTab === "tape"
-                    ? "bg-zinc-800 text-emerald-400 font-semibold shadow-sm"
+                    ? "bg-zinc-800 text-emerald-400 font-semibold"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
                 title="Live Running Trades Orderbook Tape"
               >
                 <Activity className="h-3 w-3 text-emerald-400" />
-                <span className="hidden md:inline">TAPE</span>
+                <span className="hidden sm:inline">TAPE</span>
               </button>
               {showSidePanel && (
                 <button
                   type="button"
                   onClick={() => setShowSidePanel(false)}
                   className="px-1.5 py-0.5 text-zinc-500 hover:text-red-400"
-                  title="Close Side Panel"
+                  title="Close Side Panel for Fullscreen Chart"
                 >
                   ✕
                 </button>
@@ -624,13 +607,11 @@ export default function DashboardPage() {
 
             <Badge
               variant="outline"
-              className="flex items-center gap-1.5 py-0.5 sm:py-1 px-2 sm:px-2.5 text-[10px] sm:text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
+              className="flex items-center gap-1.5 py-0.5 px-2 text-[10px] sm:text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400 shrink-0"
             >
-              <Radio className={`h-2.5 sm:h-3 w-2.5 sm:w-3 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
-              <span>{isConnected ? "Live feed" : "Connecting"}</span>
+              <Radio className={`h-2.5 w-2.5 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
+              <span>{isConnected ? "LIVE" : "SYNC"}</span>
             </Badge>
-
-            {/* Owner key menu hidden from navbar as requested, accessible directly via /owner/key */}
           </div>
         </div>
       </header>

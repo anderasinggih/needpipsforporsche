@@ -147,47 +147,80 @@ export const NeuralSynapseCanvas: React.FC<NeuralSynapseCanvasProps> = ({
         node.pulsePhase += isDeliberating ? 0.08 : 0.03;
       }
 
-      // 1. Draw Synaptic Axons (Edges)
+      // 1. Draw Organic Neural Cables / Axon Fiber Bundles
       for (const edge of edges) {
         const n1 = nodes[edge.source];
         const n2 = nodes[edge.target];
 
-        // Advance travelling electrical action potential (photon)
-        edge.activePulse = (edge.activePulse + (isDeliberating ? 0.025 : 0.008)) % 1;
+        // Advance travelling electrical action potential (axon pulse)
+        edge.activePulse = (edge.activePulse + (isDeliberating ? 0.022 : 0.007)) % 1;
 
         const isBullishSynapse = n1.bias === "BULLISH" && n2.bias === "BULLISH";
         const isBearishSynapse = n1.bias === "BEARISH" && n2.bias === "BEARISH";
 
-        const strokeColor = isBullishSynapse
-          ? `rgba(16, 185, 129, ${0.15 * edge.strength})`
-          : isBearishSynapse
-          ? `rgba(239, 68, 68, ${0.15 * edge.strength})`
-          : `rgba(168, 85, 247, ${0.12 * edge.strength})`;
+        // Cable midpoint with natural physical sag/curvature (catenary/bezier flex)
+        const mx = (n1.x + n2.x) / 2;
+        const my = (n1.y + n2.y) / 2;
+        const dx = n2.x - n1.x;
+        const dy = n2.y - n1.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Perpendicular offset for organic cable slack
+        const perpX = -dy / (dist || 1);
+        const perpY = dx / (dist || 1);
+        const cableSag = Math.sin((edge.source + edge.target) * 1.5) * (dist * 0.12);
+        const ctrlX = mx + perpX * cableSag;
+        const ctrlY = my + perpY * cableSag;
 
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = Math.max(0.6, edge.strength * 1.6);
+        // Base Cable Sheath (Outer insulation fiber)
+        ctx.strokeStyle = "rgba(24, 24, 27, 0.75)";
+        ctx.lineWidth = Math.max(1.8, edge.strength * 3.2);
         ctx.beginPath();
         ctx.moveTo(n1.x, n1.y);
-        ctx.lineTo(n2.x, n2.y);
+        ctx.quadraticCurveTo(ctrlX, ctrlY, n2.x, n2.y);
         ctx.stroke();
 
-        // Draw travelling electrical photon packet along axon
-        const px = n1.x + (n2.x - n1.x) * edge.activePulse;
-        const py = n1.y + (n2.y - n1.y) * edge.activePulse;
-
-        ctx.fillStyle = isBullishSynapse
-          ? "#34D399"
+        // Inner Core Conductor Line (Glowing active myelin cable)
+        const coreStroke = isBullishSynapse
+          ? `rgba(16, 185, 129, ${0.35 + edge.strength * 0.3})`
           : isBearishSynapse
-          ? "#F87171"
-          : "#C084FC";
+          ? `rgba(239, 68, 68, ${0.35 + edge.strength * 0.3})`
+          : `rgba(161, 161, 170, ${0.2 + edge.strength * 0.25})`;
+
+        ctx.strokeStyle = coreStroke;
+        ctx.lineWidth = Math.max(0.7, edge.strength * 1.2);
         ctx.beginPath();
-        ctx.arc(px, py, 1.8, 0, Math.PI * 2);
+        ctx.moveTo(n1.x, n1.y);
+        ctx.quadraticCurveTo(ctrlX, ctrlY, n2.x, n2.y);
+        ctx.stroke();
+
+        // High-Definition Action Potential (Travelling Electrical Pulse Spark)
+        const t = edge.activePulse;
+        // Bezier position at t: B(t) = (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+        const pulseX = (1 - t) * (1 - t) * n1.x + 2 * (1 - t) * t * ctrlX + t * t * n2.x;
+        const pulseY = (1 - t) * (1 - t) * n1.y + 2 * (1 - t) * t * ctrlY + t * t * n2.y;
+
+        // Electric spark outer coronal discharge
+        const sparkGlow = ctx.createRadialGradient(pulseX, pulseY, 0.5, pulseX, pulseY, 7);
+        const sparkHex = isBullishSynapse ? "#34D399" : isBearishSynapse ? "#F87171" : "#E4E4E7";
+        sparkGlow.addColorStop(0, sparkHex);
+        sparkGlow.addColorStop(0.4, isBullishSynapse ? "rgba(16,185,129,0.5)" : isBearishSynapse ? "rgba(239,68,68,0.5)" : "rgba(228,228,231,0.4)");
+        sparkGlow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = sparkGlow;
+        ctx.beginPath();
+        ctx.arc(pulseX, pulseY, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hot electric core bead
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(pulseX, pulseY, 1.4, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 2. Draw Central Decision Hive Core (Singularity)
-      const corePulse = Math.sin(frame * 0.04) * 4;
-      const coreRadius = 24 + corePulse;
+      // 2. Draw Central Decision Hive Core (Synthesizer SOMA)
+      const corePulse = Math.sin(frame * 0.04) * 3;
+      const coreRadius = 26 + corePulse;
       const isCoreBull = consensusSignal === "BUY";
       const isCoreBear = consensusSignal === "SELL";
 
@@ -197,36 +230,44 @@ export const NeuralSynapseCanvas: React.FC<NeuralSynapseCanvasProps> = ({
         4,
         centerX,
         centerY,
-        coreRadius * 2
+        coreRadius * 2.2
       );
 
-      const coreColor = isCoreBull ? "#10B981" : isCoreBear ? "#EF4444" : "#A855F7";
-      coreGradient.addColorStop(0, coreColor);
-      coreGradient.addColorStop(0.5, "rgba(88, 28, 135, 0.4)");
+      const coreColor = isCoreBull ? "#10B981" : isCoreBear ? "#EF4444" : "#E4E4E7";
+      coreGradient.addColorStop(0, isCoreBull ? "rgba(16,185,129,0.35)" : isCoreBear ? "rgba(239,68,68,0.35)" : "rgba(161,161,170,0.25)");
+      coreGradient.addColorStop(0.6, "rgba(9, 9, 11, 0.6)");
       coreGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
 
       ctx.fillStyle = coreGradient;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, coreRadius * 2, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, coreRadius * 2.2, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "#000000";
+      // Industrial dark membrane hub
+      ctx.fillStyle = "#09090B";
       ctx.beginPath();
-      ctx.arc(centerX, centerY, coreRadius * 0.7, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, coreRadius * 0.75, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = coreColor;
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.font = "bold 10px monospace";
+      // Inner electric ring
+      ctx.strokeStyle = isCoreBull ? "rgba(52,211,153,0.6)" : isCoreBear ? "rgba(248,113,113,0.6)" : "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, coreRadius * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.font = "bold 11px monospace";
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(consensusSignal, centerX, centerY);
 
-      // 3. Draw Synaptic Neuron Nodes
+      // 3. Draw Biological Neuron Bodies (Soma & Synaptic Terminals)
       for (const node of nodes) {
-        const pulse = Math.sin(node.pulsePhase) * 2;
+        const pulse = Math.sin(node.pulsePhase) * 1.5;
         const r = node.radius + pulse;
 
         const isBull = node.bias === "BULLISH";
@@ -234,33 +275,33 @@ export const NeuralSynapseCanvas: React.FC<NeuralSynapseCanvasProps> = ({
         const nodeColor = isBull ? "#10B981" : isBear ? "#EF4444" : "#71717A";
 
         // Synaptic halo glow
-        const glow = ctx.createRadialGradient(node.x, node.y, 2, node.x, node.y, r * 2.5);
-        glow.addColorStop(0, isBull ? "rgba(16,185,129,0.5)" : isBear ? "rgba(239,68,68,0.5)" : "rgba(168,85,247,0.3)");
+        const glow = ctx.createRadialGradient(node.x, node.y, 1, node.x, node.y, r * 2.4);
+        glow.addColorStop(0, isBull ? "rgba(16,185,129,0.45)" : isBear ? "rgba(239,68,68,0.45)" : "rgba(161,161,170,0.25)");
         glow.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, r * 2.5, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, r * 2.4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Node Body
+        // Metallic/organic node shell
         ctx.fillStyle = "#09090B";
         ctx.beginPath();
         ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = nodeColor;
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 1.6;
         ctx.stroke();
 
-        // Inner nucleus
-        ctx.fillStyle = nodeColor;
+        // Action potential firing center
+        ctx.fillStyle = isBull ? "#34D399" : isBear ? "#F87171" : "#D4D4D8";
         ctx.beginPath();
-        ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, 2.5, 0, Math.PI * 2);
         ctx.fill();
 
         // Node Label
         ctx.font = "9px monospace";
-        ctx.fillStyle = "#D4D4D8";
+        ctx.fillStyle = "#E4E4E7";
         ctx.textAlign = "center";
         ctx.fillText(node.name.slice(0, 14), node.x, node.y + r + 11);
         ctx.fillStyle = isBull ? "#34D399" : isBear ? "#F87171" : "#A1A1AA";

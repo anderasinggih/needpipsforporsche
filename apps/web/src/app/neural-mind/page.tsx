@@ -133,14 +133,6 @@ export default function NeuralMindPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/possibility"
-              className="flex items-center gap-1.5 px-3 py-1 rounded bg-cyan-950/40 border border-cyan-800/80 text-xs font-mono text-cyan-300 hover:text-cyan-200 hover:bg-cyan-900/40 transition-colors"
-            >
-              <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
-              <span>POSSIBILITY CHART</span>
-            </Link>
-
             <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800">
               <button
                 type="button"

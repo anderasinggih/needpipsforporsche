@@ -60,14 +60,37 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
   const [positions, setPositions] = useState<Position[]>([]);
   const [recentTrades, setRecentTrades] = useState<LiveTradeTick[]>([]);
   const [marketDepth, setMarketDepth] = useState<MarketDepthState | null>(null);
+  const [priceOffset, setPriceOffset] = useState<number>(0);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastTickTimestamp, setLastTickTimestamp] = useState<number>(Date.now());
   const wsRef = useRef<WebSocket | null>(null);
+  const offsetRef = useRef<number>(0);
   // Time of the last bar folded into historicalCandles, so intra-bar kline
   // updates do not thrash the array on every tick.
   const streamBarTimeRef = useRef<number | null>(null);
 
   const binanceStream = normalizeBinanceStreamSymbol(activeSymbol);
+
+  // 0. Load Broker Price Offset from PostgreSQL
+  useEffect(() => {
+    let isSubscribed = true;
+    fetch("/api/vault?type=offsets")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isSubscribed) return;
+        if (data.offsets) {
+          const symKey = activeSymbol.toUpperCase();
+          const val = Number(data.offsets[symKey] || 0);
+          setPriceOffset(val);
+          offsetRef.current = val;
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeSymbol]);
 
   // 1. Initial Load: Fetch historical candles for immediate chart rendering
   const fetchHistorical = useCallback(async () => {
@@ -79,9 +102,19 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         if (res.ok) {
           const data = await res.json();
           if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
-            setHistoricalCandles(data.candles);
-            setCurrentCandle(data.candles[data.candles.length - 1]);
-            streamBarTimeRef.current = data.candles[data.candles.length - 1].time;
+            const currentOffset = offsetRef.current;
+            const calibrated = currentOffset === 0
+              ? data.candles
+              : data.candles.map((c: CandleData) => ({
+                  ...c,
+                  open: c.open + currentOffset,
+                  high: c.high + currentOffset,
+                  low: c.low + currentOffset,
+                  close: c.close + currentOffset,
+                }));
+            setHistoricalCandles(calibrated);
+            setCurrentCandle(calibrated[calibrated.length - 1]);
+            streamBarTimeRef.current = calibrated[calibrated.length - 1].time;
           }
         }
       } catch (err) {
@@ -156,6 +189,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
             const eventType = payload.e;
             const streamName = raw.stream || "";
 
+            const currentOffset = offsetRef.current;
+
             // Handle Depth 20 stream for Liquidity Heatmap & Orderbook Depth
             if (streamName.includes("@depth") || payload.bids || payload.asks) {
               const rawBids: [string, string][] = payload.bids || payload.b || [];
@@ -165,7 +200,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               let maxBid = 0;
               const parsedBids: OrderbookDepthLevel[] = [];
               for (const [p, q] of rawBids.slice(0, 15)) {
-                const price = parseFloat(p);
+                const price = parseFloat(p) + currentOffset;
                 const qty = parseFloat(q);
                 runningBidTotal += qty;
                 if (qty > maxBid) maxBid = qty;
@@ -176,7 +211,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               let maxAsk = 0;
               const parsedAsks: OrderbookDepthLevel[] = [];
               for (const [p, q] of rawAsks.slice(0, 15)) {
-                const price = parseFloat(p);
+                const price = parseFloat(p) + currentOffset;
                 const qty = parseFloat(q);
                 runningAskTotal += qty;
                 if (qty > maxAsk) maxAsk = qty;
@@ -207,10 +242,10 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               const barOpenSec = Math.floor(Number(k.t) / 1000);
               const candle: CandleData = {
                 time: barOpenSec,
-                open: parseFloat(k.o),
-                high: parseFloat(k.h),
-                low: parseFloat(k.l),
-                close: parseFloat(k.c),
+                open: parseFloat(k.o) + currentOffset,
+                high: parseFloat(k.h) + currentOffset,
+                low: parseFloat(k.l) + currentOffset,
+                close: parseFloat(k.c) + currentOffset,
                 volume: parseFloat(k.v),
                 is_closed: k.x,
               };
@@ -220,7 +255,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
             }
             // Handle individual real-time trade tick event (@trade)
             else if (eventType === "trade" && payload.p) {
-              const tradePrice = parseFloat(payload.p);
+              const tradePrice = parseFloat(payload.p) + currentOffset;
               const qty = parseFloat(payload.q || "0");
               const isBuyerMaker = Boolean(payload.m); // true: seller initiated (taker sell), false: buyer initiated (taker buy)
               const side: "BUY" | "SELL" = isBuyerMaker ? "SELL" : "BUY";

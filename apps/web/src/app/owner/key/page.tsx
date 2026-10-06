@@ -100,6 +100,9 @@ export default function OwnerKeyPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
   const [testingStatus, setTestingStatus] = useState<Record<string, { loading: boolean; ok?: boolean; msg?: string }>>({});
+  const [brokerOffsets, setBrokerOffsets] = useState<Record<string, number>>({ XAUUSD: 0, BTCUSD: 0 });
+  const [isSavingOffsets, setIsSavingOffsets] = useState(false);
+  const [offsetsSavedToast, setOffsetsSavedToast] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -174,6 +177,19 @@ export default function OwnerKeyPage() {
           }
         })
         .catch((err) => console.warn("Failed to fetch keys from PostgreSQL vault:", err));
+
+      // Load broker price offsets from PostgreSQL
+      fetch("/api/vault?type=offsets")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.offsets) {
+            setBrokerOffsets((prev) => ({
+              ...prev,
+              ...data.offsets,
+            }));
+          }
+        })
+        .catch((err) => console.warn("Failed to fetch broker offsets:", err));
     }
   }, []);
 
@@ -262,6 +278,23 @@ export default function OwnerKeyPage() {
     setTimeout(() => setIsSaved(false), 3000);
   };
 
+  const handleSaveBrokerOffsets = async () => {
+    setIsSavingOffsets(true);
+    try {
+      await fetch("/api/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offsets: brokerOffsets }),
+      });
+      setOffsetsSavedToast(true);
+      setTimeout(() => setOffsetsSavedToast(false), 3000);
+    } catch (err) {
+      console.error("Failed to save broker offsets", err);
+    } finally {
+      setIsSavingOffsets(false);
+    }
+  };
+
   const activeCount = slots.filter((s) => s.apiKey.trim().length > 0).length;
 
   return (
@@ -307,6 +340,96 @@ export default function OwnerKeyPage() {
                 Anda bebas mengisi hingga 10 API Key (misal 3 Gemini, 2 Groq, 2 OpenAI, DeepSeek, dll.).
                 Tersedia tombol <span className="text-zinc-200 font-semibold">Test Key</span> untuk langsung memverifikasi apakah kunci dan kuota model Anda valid sebelum digunakan scalping secara live.
               </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* MT4 / MT5 Broker Price Offset Calibration Card */}
+        <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase font-mono tracking-wider text-zinc-200">
+                    MT4 / MT5 Broker Price Offset Calibration
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed mt-0.5">
+                    Sinkronkan harga feed Binance / TradingView agar presisi dengan harga broker MetaTrader Anda. Nilai offset ini otomatis diaplikasikan ke live ticks, orderbook, dan historical chart, tersimpan permanen di database PostgreSQL server.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-amber-400 shrink-0">
+                  Global PostgreSQL Sync
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div className="rounded-md border border-zinc-900 bg-black/60 p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-[11px] font-mono font-bold text-zinc-300">XAUUSD Price Offset</Label>
+                    <span className="text-[10px] font-mono text-zinc-500">e.g. +2.50 or -1.80</span>
+                  </div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={brokerOffsets["XAUUSD"] ?? 0}
+                    onChange={(e) =>
+                      setBrokerOffsets((prev) => ({
+                        ...prev,
+                        XAUUSD: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0.00"
+                    className="font-mono text-xs h-8 bg-black border-zinc-800 text-amber-300"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    Formula: Displayed Price = Market Price + Offset
+                  </span>
+                </div>
+
+                <div className="rounded-md border border-zinc-900 bg-black/60 p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-[11px] font-mono font-bold text-zinc-300">BTCUSD Price Offset</Label>
+                    <span className="text-[10px] font-mono text-zinc-500">e.g. +15.0 or -20.0</span>
+                  </div>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={brokerOffsets["BTCUSD"] ?? 0}
+                    onChange={(e) =>
+                      setBrokerOffsets((prev) => ({
+                        ...prev,
+                        BTCUSD: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0.00"
+                    className="font-mono text-xs h-8 bg-black border-zinc-800 text-amber-300"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    Formula: Displayed Price = Market Price + Offset
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  {offsetsSavedToast && (
+                    <span className="flex items-center gap-1.5 text-xs text-amber-400 font-mono">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Broker offsets updated in PostgreSQL database!
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleSaveBrokerOffsets}
+                  disabled={isSavingOffsets}
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs h-8 px-4"
+                >
+                  {isSavingOffsets ? "Saving to Database..." : "Save Broker Offsets"}
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

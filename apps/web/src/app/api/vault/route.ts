@@ -7,6 +7,15 @@ export async function GET(request: NextRequest) {
     const type = request.nextUrl.searchParams.get('type');
     const client = await pool.connect();
     try {
+      if (type === 'offsets') {
+        const result = await client.query('SELECT symbol, offset_value FROM broker_price_offsets');
+        const offsets: Record<string, number> = {};
+        for (const row of result.rows) {
+          offsets[row.symbol] = parseFloat(row.offset_value || 0);
+        }
+        return NextResponse.json({ offsets });
+      }
+
       if (type === 'slots' || type === 'council') {
         const result = await client.query(
           'SELECT id, label, role_title, provider, model, encrypted_secret, iv, tag, enabled FROM council_key_slots ORDER BY id ASC'
@@ -72,6 +81,31 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Save broker price offsets (MT4 calibration)
+    if (body.offsets && typeof body.offsets === 'object') {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const [sym, val] of Object.entries(body.offsets)) {
+          const numVal = parseFloat(String(val)) || 0.0;
+          await client.query(
+            `INSERT INTO broker_price_offsets (symbol, offset_value, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (symbol) DO UPDATE SET offset_value = EXCLUDED.offset_value, updated_at = NOW()`,
+            [sym.toUpperCase().trim(), numVal]
+          );
+        }
+        await client.query('COMMIT');
+        return NextResponse.json({ success: true, offsets: body.offsets, storage: 'postgresql' });
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        console.error('Failed to save broker offsets:', err);
+        return NextResponse.json({ error: err.message }, { status: 500 });
+      } finally {
+        client.release();
+      }
+    }
 
     // Batch save of Council Key Slots from /owner/key
     if (Array.isArray(body.slots)) {
