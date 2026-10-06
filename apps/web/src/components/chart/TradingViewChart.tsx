@@ -827,7 +827,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const badgeText1 = isAwaitingEntry
         ? `[Pending Limit] ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
         : `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
-      const badgeText2 = isAwaitingEntry ? `Menunggu Retest • RR 1:${rrRatio}` : `Rasio Risk/Reward: 1:${rrRatio}`;
+      const badgeText2 = isAwaitingEntry ? `Awaiting Retest • RR 1:${rrRatio}` : `Risk/Reward Ratio: 1:${rrRatio}`;
 
       ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
       const w1 = ctx.measureText(badgeText1).width;

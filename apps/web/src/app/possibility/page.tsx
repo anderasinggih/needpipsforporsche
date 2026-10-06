@@ -147,7 +147,7 @@ export default function PossibilityPage() {
               className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>TERMINAL UTAMA</span>
+              <span>MAIN TERMINAL</span>
             </Link>
 
             <div className="h-4 w-px bg-zinc-800" />

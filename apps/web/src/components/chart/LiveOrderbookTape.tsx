@@ -88,7 +88,7 @@ export const LiveOrderbookTape: React.FC<LiveOrderbookTapeProps> = ({
         {trades.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-zinc-600 text-xs gap-1">
             <div className="h-2 w-2 rounded-full bg-zinc-600 animate-ping" />
-            <span>Menunggu tick pasar live...</span>
+            <span>Waiting for live market ticks...</span>
           </div>
         ) : (
           trades.slice(0, 30).map((trade, idx) => {

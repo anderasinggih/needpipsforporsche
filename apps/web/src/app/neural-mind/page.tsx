@@ -110,7 +110,7 @@ export default function NeuralMindPage() {
               className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>TERMINAL UTAMA</span>
+              <span>MAIN TERMINAL</span>
             </Link>
 
             <div className="h-4 w-px bg-zinc-800" />
@@ -286,7 +286,7 @@ export default function NeuralMindPage() {
                 <div className="h-48 overflow-y-auto space-y-1 text-[11px] text-zinc-400 scrollbar-thin scrollbar-thumb-zinc-800">
                   {deepThinkingLog.length === 0 ? (
                     <div className="text-zinc-600">
-                      Klik "TRIGGER DEEP THINKING" untuk memulai forward pass 20-agent neural hive...
+                      Click &quot;TRIGGER DEEP THINKING&quot; to initiate 20-agent neural hive forward pass...
                     </div>
                   ) : (
                     deepThinkingLog.map((log, i) => (

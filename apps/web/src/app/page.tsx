@@ -666,8 +666,8 @@ export default function DashboardPage() {
                 </span>
                 <span className="text-[10px] sm:text-[11px] text-zinc-500">
                   {isEvaluating
-                    ? "(Sedang Bermusyawarah...)"
-                    : `(${evaluation?.activeAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "active").length ?? 0} Aktif • ${evaluation?.offlineAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "not_contributed").length ?? 0} Offline)`}
+                    ? "(Deliberating in Progress...)"
+                    : `(${evaluation?.activeAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "active").length ?? 0} Active • ${evaluation?.offlineAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "not_contributed").length ?? 0} Offline)`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -716,7 +716,7 @@ export default function DashboardPage() {
                       className={`text-[10px] sm:text-[11px] font-mono ${badgeColor}`}
                     >
                       {labelText}{" "}
-                      {isWaitPlan && isFilled ? `(Entry Terisi)` : `(${evaluation.confidence}%)`} &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
+                      {isWaitPlan && isFilled ? `(Entry Filled)` : `(${evaluation.confidence}%)`} &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
                     </Badge>
                   );
                 })() : (
@@ -724,7 +724,7 @@ export default function DashboardPage() {
                     variant="outline"
                     className="text-[10px] sm:text-[11px] font-mono border-amber-800/80 text-amber-400 animate-pulse"
                   >
-                    Menganalisis Pasar...
+                    Analyzing Market Structure...
                   </Badge>
                 )}
                 {/* View Switcher: War Room Chat vs Agent Cards */}
