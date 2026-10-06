@@ -48,19 +48,19 @@ export interface SymbolSpec {
 export const SPECS: Record<string, SymbolSpec> = {
   GOLD: {
     isGold: true,
-    pipValue: 0.1, // 1 price unit = 10 pips
+    pipValue: 0.1, // 1 price unit = 10 pips ($1 move = 10 pips)
     pipLabel: "$0.10",
-    minSlPips: 30,
-    maxSlPips: 50,
-    defaultSlPips: 35,
+    minSlPips: 25,
+    maxSlPips: 70,
+    defaultSlPips: 40,
   },
   DEFAULT: {
     isGold: false,
     pipValue: 1, // 1 price unit = 1 pip (BTC convention)
     pipLabel: "$1",
-    minSlPips: 30,
-    maxSlPips: 50,
-    defaultSlPips: 35,
+    minSlPips: 25,
+    maxSlPips: 80,
+    defaultSlPips: 40,
   },
 };
 

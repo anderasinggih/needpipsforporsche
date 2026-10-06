@@ -753,11 +753,27 @@ const structuralStopPips = (
   direction: Direction,
   atrValue: number,
   pipValue: number,
+  candles: Candle[] = [],
 ): number | null => {
   const long = direction === "BULLISH";
+  const recentCandles = candles.slice(-15);
+  const highestRecent = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : price;
+  const lowestRecent = recentCandles.length ? Math.min(...recentCandles.map((c) => c.low)) : price;
+
   const pivot = [...pivots].reverse().find((p) => (long ? p.kind === "LOW" : p.kind === "HIGH"));
-  if (!pivot) return null;
-  return Math.ceil((Math.abs(price - pivot.price) + atrValue * 0.25) / pipValue);
+  const buffer = Math.max(atrValue * 0.35, pipValue * 5);
+
+  if (long) {
+    const structuralRef = pivot ? Math.min(pivot.price, lowestRecent) : lowestRecent;
+    const dist = price - structuralRef;
+    if (dist <= 0) return Math.ceil((Math.abs(dist) + buffer) / pipValue);
+    return Math.ceil((dist + buffer) / pipValue);
+  } else {
+    const structuralRef = pivot ? Math.max(pivot.price, highestRecent) : highestRecent;
+    const dist = structuralRef - price;
+    if (dist <= 0) return Math.ceil((Math.abs(dist) + buffer) / pipValue);
+    return Math.ceil((dist + buffer) / pipValue);
+  }
 };
 
 // -------------------------------------------------------------------- POST --
@@ -858,7 +874,7 @@ export async function POST(request: NextRequest) {
       atrValue,
       volatility,
       mtfVerdict: confluence.verdict,
-      structuralSlPips: structuralStopPips(pivots, price, baselineDirectionValue, atrValue, spec.pipValue),
+      structuralSlPips: structuralStopPips(pivots, price, baselineDirectionValue, atrValue, spec.pipValue, candles),
       spec,
       targetRr,
     });
@@ -1099,12 +1115,42 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
       checklistMet,
     });
 
-    const direction: Direction = consensus.direction;
+    let direction: Direction = consensus.direction;
     let decision: Signal = consensus.decision;
 
+    // --- INSTITUTIONAL BREAKOUT / BOS MOMENTUM VETO FILTER ---
+    // If the market is printing strong impulsive momentum breaking recent swing structure,
+    // NEVER allow suicidal counter-trend executions (e.g. shorting into a raging bull breakout)!
+    const recent5 = candles.slice(-5);
+    const last3 = candles.slice(-3);
+    const lastCandle = candles[candles.length - 1];
+    const prevCandle = candles.length > 1 ? candles[candles.length - 2] : lastCandle;
+
+    const recentHighSwing = pivots.filter((p) => p.kind === "HIGH").slice(-1)[0];
+    const recentLowSwing = pivots.filter((p) => p.kind === "LOW").slice(-1)[0];
+
+    const isBullBreakout =
+      recentHighSwing &&
+      (price > recentHighSwing.price || (lastCandle && lastCandle.close > recentHighSwing.price)) &&
+      last3.filter((c) => c.close > c.open).length >= 2;
+
+    const isBearBreakdown =
+      recentLowSwing &&
+      (price < recentLowSwing.price || (lastCandle && lastCandle.close < recentLowSwing.price)) &&
+      last3.filter((c) => c.close < c.open).length >= 2;
+
+    if (decision === "SELL" && isBullBreakout) {
+      decision = "WAIT";
+      direction = "BULLISH";
+      warnings.push("Veto Momentum Institusional: Harga sedang breakout menembus Swing High dengan candle bullish kuat. Dilarang SHORT!");
+    } else if (decision === "BUY" && isBearBreakdown) {
+      decision = "WAIT";
+      direction = "BEARISH";
+      warnings.push("Veto Momentum Institusional: Harga sedang breakdown menembus Swing Low dengan candle bearish kuat. Dilarang BUY!");
+    }
+
     // Smart Entry Level Determination (Limit / Pullback vs Market):
-    // Smart Entry Level Determination (Limit / Pullback vs Market):
-    // Rather than blindly executing at current candle close (which is aggressive & causes bad fills),
+    // Rather than blindly executing at current candle close or an obsolete breached pivot,
     // calculate if market is stretched or if optimal entry requires a pullback to Golden Pocket / key pivot.
     let targetEntryPrice = round(price);
     let orderType: "MARKET" | "LIMIT" | "PULLBACK" = "MARKET";
@@ -1127,16 +1173,11 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
             : pocket.zoneLow - price;
           const distPips = toPips(Math.abs(distToPocket), spec);
 
-          // If price is extended > 8 pips away from golden pocket in trend direction,
-          // don't chase aggressively! Set LIMIT / PULLBACK order at the edge of Golden Pocket.
           if (distToPocket > 0 && distPips >= 8 && distPips <= 60) {
-            // For BUY (Long): wait for pullback DOWN to pocket support -> enter at zoneLow (discount)
-            // For SELL (Short): wait for pullback UP to pocket resistance -> enter at zoneHigh
             targetEntryPrice = round(isLong ? pocket.zoneLow : pocket.zoneHigh);
             orderType = "LIMIT";
             entryTrigger = `Limit / Retest Order: Tunggu harga pullback ke Golden Pocket Fib ($${targetEntryPrice}) sebelum masuk`;
           } else if (distPips > 60) {
-            // Price is overextended (> 60 pips away) without pullback -> Force WAIT!
             decision = "WAIT";
             entryTrigger = `Overextended: Harga sudah bergerak terlalu jauh (${Math.round(distPips)} pips) dari anchor Fibonacci`;
           }
@@ -1145,23 +1186,25 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
     } else {
       // During WAIT: derive intelligent planned limit level where the setup WOULD be valid!
       if (pocket) {
-        // For BUY (Long): wait for price to pullback DOWN to support zoneLow
-        // For SELL (Short): wait for price to pullback UP to resistance zoneHigh
         targetEntryPrice = round(isLong ? pocket.zoneLow : pocket.zoneHigh);
         orderType = "LIMIT";
         entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu harga retest ke zona Golden Pocket ($${targetEntryPrice})`;
       } else {
-        // Fallback to closest pivot point retest
+        // Fallback to safe pullback limit:
+        // For BUY limit, entry MUST be below current price.
+        // For SELL limit, entry MUST be above current price.
         const targetKind = isLong ? "LOW" : "HIGH";
         const matchingPivots = pivots.filter((p) => p.kind === targetKind);
-        const recentPivot = matchingPivots.length ? matchingPivots[matchingPivots.length - 1] : undefined;
+        const validPivots = matchingPivots.filter((p) => (isLong ? p.price < price : p.price > price));
+        const recentPivot = validPivots.length ? validPivots[validPivots.length - 1] : undefined;
+
         if (recentPivot && Number.isFinite(recentPivot.price)) {
           targetEntryPrice = round(recentPivot.price);
           orderType = "LIMIT";
           entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu retest swing pivot ($${targetEntryPrice})`;
         } else {
-          // Micro pullback fallback (12 pips pullback against current price)
-          const pullbackOffset = fromPips(12, spec);
+          // Dynamic pullback offset (15 pips pullback against current price)
+          const pullbackOffset = fromPips(15, spec);
           targetEntryPrice = round(isLong ? price - pullbackOffset : price + pullbackOffset);
           orderType = "LIMIT";
           entryTrigger = `Planned ${isLong ? "Buy" : "Sell"} Limit: Menunggu retracement (${targetEntryPrice})`;
@@ -1175,7 +1218,7 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
       atrValue,
       volatility,
       mtfVerdict: confluence.verdict,
-      structuralSlPips: structuralStopPips(pivots, targetEntryPrice, direction, atrValue, spec.pipValue),
+      structuralSlPips: structuralStopPips(pivots, targetEntryPrice, direction, atrValue, spec.pipValue, candles),
       spec,
       targetRr,
     });
