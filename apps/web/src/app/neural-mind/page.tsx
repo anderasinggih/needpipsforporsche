@@ -25,6 +25,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { EvaluationResult, AgentOpinion, DiscussionMessage } from "@/lib/ai/types";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
+import { NeuralSynapseCanvas } from "@/components/council/NeuralSynapseCanvas";
 
 const NEURAL_NODES = [
   { id: "node_smc", name: "SMC Liquidity Engine", type: "Orderflow / Liquidity", status: "ACTIVE", weight: "0.22", activation: "ReLU (0.84)" },
@@ -231,6 +232,13 @@ export default function NeuralMindPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Main Nodes & Deliberation (3 Cols) */}
           <div className="lg:col-span-3 space-y-4">
+            {/* Real Interactive Biological Neuron Synapse Graph */}
+            <NeuralSynapseCanvas
+              opinions={evaluation?.agentOpinions || []}
+              consensusSignal={evaluation?.signal || "WAIT"}
+              isDeliberating={isThinking}
+            />
+
             {/* Neural Layers Visualizer */}
             <Card className="bg-zinc-950 border-zinc-800">
               <CardHeader className="py-2.5 px-4 border-b border-zinc-900">

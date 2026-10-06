@@ -215,18 +215,33 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
 
-    const handleResize = () => {
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === chartContainerRef.current && chartRef.current) {
+          const newWidth = entry.contentRect.width;
+          if (newWidth > 0) {
+            chartRef.current.applyOptions({ width: newWidth });
+          }
+        }
+      }
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
+    const handleWindowResize = () => {
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
         });
       }
     };
-
-    window.addEventListener("resize", handleResize);
+    window.addEventListener("resize", handleWindowResize);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
       chart.remove();
       lineSeriesMap.current.clear();
       isDataSetRef.current = false;
