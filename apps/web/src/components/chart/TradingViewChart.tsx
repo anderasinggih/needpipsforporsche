@@ -250,8 +250,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
   useEffect(() => {
     isDataSetRef.current = false;
-    // Clear old timeframe overlays so new timeframe redraws with accurate coordinates
+    // Update timeScale seconds visibility if switching to/from seconds timeframe
     if (chartRef.current) {
+      chartRef.current.applyOptions({
+        timeScale: {
+          secondsVisible: timeframe.endsWith("s"),
+        },
+      });
+      // Clear old timeframe overlays so new timeframe redraws with accurate coordinates
       lineSeriesMap.current.forEach((line) => {
         try {
           chartRef.current?.removeSeries(line);

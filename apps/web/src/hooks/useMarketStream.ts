@@ -54,6 +54,19 @@ export function normalizeBinanceStreamSymbol(symbol: string): string {
   return upper.toLowerCase();
 }
 
+export function getTimeframeSeconds(tf: string): number {
+  const match = tf.match(/^(\d+)([smhdM])$/);
+  if (!match) return 60;
+  const val = parseInt(match[1], 10);
+  const unit = match[2];
+  if (unit === "s") return val;
+  if (unit === "m") return val * 60;
+  if (unit === "h") return val * 3600;
+  if (unit === "d") return val * 86400;
+  if (unit === "M") return val * 2592000;
+  return 60;
+}
+
 export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: string = "1m") {
   const [currentCandle, setCurrentCandle] = useState<CandleData | null>(null);
   const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
@@ -65,11 +78,18 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
   const [lastTickTimestamp, setLastTickTimestamp] = useState<number>(Date.now());
   const wsRef = useRef<WebSocket | null>(null);
   const offsetRef = useRef<number>(0);
+  const currentCandleRef = useRef<CandleData | null>(null);
   // Time of the last bar folded into historicalCandles, so intra-bar kline
   // updates do not thrash the array on every tick.
   const streamBarTimeRef = useRef<number | null>(null);
 
   const binanceStream = normalizeBinanceStreamSymbol(activeSymbol);
+  const intervalSeconds = getTimeframeSeconds(timeframe);
+
+  // Keep currentCandleRef synchronized with state
+  useEffect(() => {
+    currentCandleRef.current = currentCandle;
+  }, [currentCandle]);
 
   // 0. Load Broker Price Offset from PostgreSQL
   useEffect(() => {
@@ -97,6 +117,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     // Clear old candles when switching symbol/timeframe to avoid mismatch glitch
     setHistoricalCandles([]);
     setCurrentCandle(null);
+    currentCandleRef.current = null;
+    streamBarTimeRef.current = null;
       try {
         const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=3000`);
         if (res.ok) {
@@ -113,8 +135,10 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
                   close: c.close + currentOffset,
                 }));
             setHistoricalCandles(calibrated);
-            setCurrentCandle(calibrated[calibrated.length - 1]);
-            streamBarTimeRef.current = calibrated[calibrated.length - 1].time;
+            const latestBar = calibrated[calibrated.length - 1];
+            setCurrentCandle(latestBar);
+            currentCandleRef.current = latestBar;
+            streamBarTimeRef.current = latestBar.time;
           }
         }
       } catch (err) {
@@ -142,7 +166,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         next.push(candle);
         return next;
       }
-      return [...prev, candle].slice(-2000);
+      return [...prev, candle].slice(-3000);
     });
   }, []);
 
@@ -155,15 +179,13 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
 
-    // Map timeframe to Binance supported kline intervals: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
-    // (Binance WS does not support 1s kline, fallback to 1m for kline but keep raw trade stream for sub-second ticks)
-    let binanceInterval = timeframe;
-    if (timeframe === "1s") binanceInterval = "1m";
+    // Binance WebSocket supports 1s, 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+    const binanceInterval = timeframe;
 
     const klineStream = `${binanceStream}@kline_${binanceInterval}`;
     const depthStream = `${binanceStream}@depth20@100ms`;
 
-    // Direct combined stream endpoint:
+    // Direct combined stream endpoint with trade tick stream (@trade)
     const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade/${depthStream}`;
 
     const connect = () => {
@@ -249,19 +271,21 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
                 volume: parseFloat(k.v),
                 is_closed: k.x,
               };
+              currentCandleRef.current = candle;
               setCurrentCandle(candle);
               foldStreamedBar(candle);
               setLastTickTimestamp(Date.now());
             }
-            // Handle individual real-time trade tick event (@trade)
+            // Handle individual real-time trade tick event (@trade) - SUB-SECOND ZERO DELAY
             else if (eventType === "trade" && payload.p) {
               const tradePrice = parseFloat(payload.p) + currentOffset;
               const qty = parseFloat(payload.q || "0");
               const isBuyerMaker = Boolean(payload.m); // true: seller initiated (taker sell), false: buyer initiated (taker buy)
               const side: "BUY" | "SELL" = isBuyerMaker ? "SELL" : "BUY";
+              const tickTimeMs = Number(payload.T || Date.now());
               const tick: LiveTradeTick = {
                 id: String(payload.t || Date.now() + Math.random()),
-                time: Number(payload.T || Date.now()),
+                time: tickTimeMs,
                 price: tradePrice,
                 qty,
                 isBuyerMaker,
@@ -270,15 +294,56 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
 
               setRecentTrades((prev) => [tick, ...prev].slice(0, 50));
 
-              setCurrentCandle((prev) => {
-                if (!prev) return null;
-                return {
-                  ...prev,
-                  high: Math.max(prev.high, tradePrice),
-                  low: Math.min(prev.low, tradePrice),
+              // Compute the exact bar open time according to timeframe
+              const tickSec = Math.floor(tickTimeMs / 1000);
+              const currentBarTime = Math.floor(tickSec / intervalSeconds) * intervalSeconds;
+
+              const prevCandle = currentCandleRef.current;
+              let nextCandle: CandleData;
+
+              if (!prevCandle) {
+                // First tick initialization
+                nextCandle = {
+                  time: currentBarTime,
+                  open: tradePrice,
+                  high: tradePrice,
+                  low: tradePrice,
                   close: tradePrice,
+                  volume: qty,
+                  is_closed: false,
                 };
-              });
+              } else if (currentBarTime > prevCandle.time) {
+                // New candle period started by this trade tick!
+                // Close previous candle
+                const closedPrev: CandleData = {
+                  ...prevCandle,
+                  is_closed: true,
+                };
+                foldStreamedBar(closedPrev);
+
+                // Start new active candle
+                nextCandle = {
+                  time: currentBarTime,
+                  open: tradePrice,
+                  high: tradePrice,
+                  low: tradePrice,
+                  close: tradePrice,
+                  volume: qty,
+                  is_closed: false,
+                };
+              } else {
+                // Same forming candle: update high, low, close immediately on every trade tick!
+                nextCandle = {
+                  ...prevCandle,
+                  high: Math.max(prevCandle.high, tradePrice),
+                  low: Math.min(prevCandle.low, tradePrice),
+                  close: tradePrice,
+                  volume: (prevCandle.volume || 0) + qty,
+                };
+              }
+
+              currentCandleRef.current = nextCandle;
+              setCurrentCandle(nextCandle);
               setLastTickTimestamp(Date.now());
             }
           } catch (err) {
