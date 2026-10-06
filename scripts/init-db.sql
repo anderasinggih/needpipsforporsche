@@ -61,6 +61,20 @@ CREATE TABLE IF NOT EXISTS api_credentials (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3b. Table 20-Agent Council Key Slots (Centralized server vault for multi-device sync)
+CREATE TABLE IF NOT EXISTS council_key_slots (
+    id VARCHAR(50) PRIMARY KEY,
+    label VARCHAR(100) NOT NULL,
+    role_title VARCHAR(200),
+    provider VARCHAR(50) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    encrypted_secret TEXT,
+    iv VARCHAR(32),
+    tag VARCHAR(32),
+    enabled BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 4. Table Trade Journal
 CREATE TABLE IF NOT EXISTS trade_journals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

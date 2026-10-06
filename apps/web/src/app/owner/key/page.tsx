@@ -148,6 +148,32 @@ export default function OwnerKeyPage() {
           return s;
         })
       );
+
+      // Load authoritative encrypted keys from PostgreSQL database (Server-wide across all browsers/devices)
+      fetch("/api/vault?type=slots")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.slots) && data.slots.length > 0) {
+            setSlots((prev) =>
+              DEFAULT_SLOTS.map((defSlot) => {
+                const serverSlot = data.slots.find((s: any) => s.id === defSlot.id);
+                const localSlot = prev.find((s) => s.id === defSlot.id);
+                if (serverSlot && serverSlot.apiKey) {
+                  return {
+                    ...defSlot,
+                    ...serverSlot,
+                    enabled: serverSlot.enabled !== undefined ? Boolean(serverSlot.enabled) : true,
+                  };
+                }
+                if (localSlot && localSlot.apiKey) {
+                  return localSlot;
+                }
+                return serverSlot ? { ...defSlot, ...serverSlot } : defSlot;
+              })
+            );
+          }
+        })
+        .catch((err) => console.warn("Failed to fetch keys from PostgreSQL vault:", err));
     }
   }, []);
 
@@ -223,6 +249,13 @@ export default function OwnerKeyPage() {
 
       const openrouterSlot = slots.find((s) => s.provider === "openrouter" && s.apiKey.trim());
       if (openrouterSlot) localStorage.setItem("openrouter_api_key", openrouterSlot.apiKey.trim());
+
+      // 2. Persist to PostgreSQL Database Server (Encrypted AES-256-GCM across all browsers)
+      fetch("/api/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slots }),
+      }).catch((dbErr) => console.warn("Failed to save keys to PostgreSQL database:", dbErr));
     }
 
     setIsSaved(true);
