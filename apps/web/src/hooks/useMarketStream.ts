@@ -47,7 +47,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     setHistoricalCandles([]);
     setCurrentCandle(null);
       try {
-        const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=150`);
+        const res = await fetch(`/api/market/candles?symbol=${encodeURIComponent(activeSymbol)}&interval=${encodeURIComponent(timeframe)}&limit=1000`);
         if (res.ok) {
           const data = await res.json();
           if (data.candles && Array.isArray(data.candles) && data.candles.length > 0) {
@@ -81,7 +81,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         next.push(candle);
         return next;
       }
-      return [...prev, candle].slice(-150);
+      return [...prev, candle].slice(-2000);
     });
   }, []);
 

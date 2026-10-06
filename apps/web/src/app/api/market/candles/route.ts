@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const rawSymbol = searchParams.get("symbol") || "BTCUSD";
   const interval = searchParams.get("interval") || "1m";
-  const limit = searchParams.get("limit") || "150";
+  const limit = Math.min(Number(searchParams.get("limit") || 1000), 1000);
 
   const binanceSymbol = normalizeBinanceSymbol(rawSymbol);
 

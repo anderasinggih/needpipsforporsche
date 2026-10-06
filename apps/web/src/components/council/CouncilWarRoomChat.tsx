@@ -43,9 +43,34 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUpRef = useRef<boolean>(false);
 
+  // Load persisted user messages from localStorage when symbol changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem(`council_chat_${symbol}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setUserMessages(parsed);
+          return;
+        }
+      }
+    } catch {}
+    setUserMessages([]);
+  }, [symbol]);
+
+  // Save user messages to localStorage whenever they update
+  const persistUserMessages = (updated: Array<{ sender: string; text: string; time: number; targetAgent?: string }>) => {
+    setUserMessages(updated);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`council_chat_${symbol}`, JSON.stringify(updated.slice(-30)));
+      } catch {}
+    }
+  };
+
   // Stream discussion messages sequentially so the trader can read the AI debate unfold step by step
   useEffect(() => {
-    setUserMessages([]);
     isUserScrolledUpRef.current = false;
 
     if (isEvaluating) {
@@ -108,11 +133,9 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
     const query = userQuery.trim();
     setUserQuery("");
 
-    // Add user message to chat stream
-    setUserMessages((prev) => [
-      ...prev,
-      { sender: "Trader", text: query, time: Date.now() },
-    ]);
+    const newTraderMsg = { sender: "Trader", text: query, time: Date.now() };
+    const updatedWithTrader = [...userMessages, newTraderMsg];
+    persistUserMessages(updatedWithTrader);
 
     setIsAskingAi(true);
 
@@ -140,13 +163,14 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
           keySlots,
           agentOpinions,
           signal,
+          chatHistory: updatedWithTrader.slice(-8),
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setUserMessages((prev) => [
-          ...prev,
+        persistUserMessages([
+          ...updatedWithTrader,
           {
             sender: "System",
             text: `[Error: ${data.error || "Gagal menghubungi model AI"}]`,
@@ -156,8 +180,8 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
         return;
       }
 
-      setUserMessages((prev) => [
-        ...prev,
+      persistUserMessages([
+        ...updatedWithTrader,
         {
           sender: data.sender || "Council AI",
           text: data.text,
@@ -166,8 +190,8 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
         },
       ]);
     } catch (err: any) {
-      setUserMessages((prev) => [
-        ...prev,
+      persistUserMessages([
+        ...updatedWithTrader,
         {
           sender: "System",
           text: `[Network Error: ${err?.message || "Tidak dapat terhubung"}]`,

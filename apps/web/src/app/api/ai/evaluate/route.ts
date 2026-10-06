@@ -632,17 +632,25 @@ const buildTrajectory = (o: {
   tpDistance: number;
   currentUnix: number;
   tfSeconds: number;
+  targetPrice?: number;
+  entryPrice?: number;
 }) => {
   const steps = 6;
   const long = o.direction === "BULLISH";
-  const target = long ? o.price + o.tpDistance : o.price - o.tpDistance;
+  const startPrice = typeof o.entryPrice === "number" ? o.entryPrice : o.price;
+  const target = typeof o.targetPrice === "number"
+    ? o.targetPrice
+    : (long ? startPrice + o.tpDistance : startPrice - o.tpDistance);
   const traj: Array<{ time: number; price: number }> = [];
   for (let i = 0; i <= steps; i++) {
     const progress = i / steps;
     const wiggle = i === 1 ? (long ? -o.slDistance * 0.15 : o.slDistance * 0.15) : 0;
+    const currentPrice = i === steps
+      ? target
+      : round(startPrice + (target - startPrice) * progress + wiggle);
     traj.push({
       time: o.currentUnix + Math.floor((o.tfSeconds * 12 * i) / steps),
-      price: round(o.price + (target - o.price) * progress + wiggle),
+      price: currentPrice,
     });
   }
   return traj;
@@ -754,6 +762,7 @@ const structuralStopPips = (
   atrValue: number,
   pipValue: number,
   candles: Candle[] = [],
+  harmonic?: ReturnType<typeof detectHarmonic>,
 ): number | null => {
   const long = direction === "BULLISH";
   const recentCandles = candles.slice(-15);
@@ -763,13 +772,39 @@ const structuralStopPips = (
   const pivot = [...pivots].reverse().find((p) => (long ? p.kind === "LOW" : p.kind === "HIGH"));
   const buffer = Math.max(atrValue * 0.35, pipValue * 5);
 
+  // If a valid Harmonic pattern is active, ensure stop loss invalidation protects beyond Point X and Point D!
+  let harmonicInvalidation: number | null = null;
+  if (harmonic && harmonic.points && harmonic.points.length >= 5) {
+    const pointX = harmonic.points[0]?.price;
+    const pointD = harmonic.points[4]?.price;
+    if (long) {
+      harmonicInvalidation = Math.min(
+        Number.isFinite(pointX) ? pointX : Infinity,
+        Number.isFinite(pointD) ? pointD : Infinity,
+      );
+      if (!Number.isFinite(harmonicInvalidation)) harmonicInvalidation = null;
+    } else {
+      harmonicInvalidation = Math.max(
+        Number.isFinite(pointX) ? pointX : -Infinity,
+        Number.isFinite(pointD) ? pointD : -Infinity,
+      );
+      if (!Number.isFinite(harmonicInvalidation)) harmonicInvalidation = null;
+    }
+  }
+
   if (long) {
-    const structuralRef = pivot ? Math.min(pivot.price, lowestRecent) : lowestRecent;
+    let structuralRef = pivot ? Math.min(pivot.price, lowestRecent) : lowestRecent;
+    if (harmonicInvalidation !== null) {
+      structuralRef = Math.min(structuralRef, harmonicInvalidation);
+    }
     const dist = price - structuralRef;
     if (dist <= 0) return Math.ceil((Math.abs(dist) + buffer) / pipValue);
     return Math.ceil((dist + buffer) / pipValue);
   } else {
-    const structuralRef = pivot ? Math.max(pivot.price, highestRecent) : highestRecent;
+    let structuralRef = pivot ? Math.max(pivot.price, highestRecent) : highestRecent;
+    if (harmonicInvalidation !== null) {
+      structuralRef = Math.max(structuralRef, harmonicInvalidation);
+    }
     const dist = structuralRef - price;
     if (dist <= 0) return Math.ceil((Math.abs(dist) + buffer) / pipValue);
     return Math.ceil((dist + buffer) / pipValue);
@@ -874,7 +909,7 @@ export async function POST(request: NextRequest) {
       atrValue,
       volatility,
       mtfVerdict: confluence.verdict,
-      structuralSlPips: structuralStopPips(pivots, price, baselineDirectionValue, atrValue, spec.pipValue, candles),
+      structuralSlPips: structuralStopPips(pivots, price, baselineDirectionValue, atrValue, spec.pipValue, candles, harmonic),
       spec,
       targetRr,
     });
@@ -1151,7 +1186,7 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
 
     // Smart Entry Level Determination (Limit / Pullback vs Market):
     // Rather than blindly executing at current candle close or an obsolete breached pivot,
-    // calculate if market is stretched or if optimal entry requires a pullback to Golden Pocket / key pivot.
+    // calculate if market is stretched or if optimal entry requires a pullback to Harmonic PRZ (Point D) / Golden Pocket / key pivot.
     let targetEntryPrice = round(price);
     let orderType: "MARKET" | "LIMIT" | "PULLBACK" = "MARKET";
     let entryTrigger = `Market Execution @ $${round(price)}`;
@@ -1159,7 +1194,35 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
     const isLong = direction === "BULLISH";
     const pocket = fib?.goldenPocket;
 
-    if (decision !== "WAIT") {
+    // Harmonic PRZ level (Point D)
+    const harmonicD = harmonic && harmonic.points && harmonic.points.length >= 5 ? harmonic.points[4] : undefined;
+    const isHarmonicAligned = harmonic && ((harmonic.type === "BULLISH" && isLong) || (harmonic.type === "BEARISH" && !isLong));
+
+    if (isHarmonicAligned && harmonicD && Number.isFinite(harmonicD.price)) {
+      const dPrice = round(harmonicD.price);
+      const distToD = Math.abs(price - dPrice);
+      const distDPips = toPips(distToD, spec);
+
+      if (distDPips <= 15) {
+        // Price is close to or at PRZ Point D -> Valid immediate execution at PRZ
+        targetEntryPrice = round(price);
+        orderType = "MARKET";
+        entryTrigger = `Harmonic PRZ Execution: Harga berada di zona pembalikan Point D ${harmonic.name} ($${dPrice})`;
+      } else {
+        // Price has moved away from Point D
+        const isPullbackPossible = isLong ? price > dPrice : price < dPrice;
+        if (isPullbackPossible) {
+          targetEntryPrice = dPrice;
+          orderType = "LIMIT";
+          entryTrigger = `Harmonic Retest Limit: Menunggu harga retest ke zona PRZ Point D ${harmonic.name} ($${dPrice})`;
+        } else {
+          // Point D was breached or overextended
+          targetEntryPrice = round(price);
+          orderType = "MARKET";
+          entryTrigger = `Harmonic Momentum: Pola ${harmonic.name} aktif di $${round(price)}`;
+        }
+      }
+    } else if (decision !== "WAIT") {
       if (pocket) {
         if (pocket.priceInside) {
           // Price is currently inside Golden Pocket (0.5 - 0.618) -> Valid immediate entry!
@@ -1218,7 +1281,7 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
       atrValue,
       volatility,
       mtfVerdict: confluence.verdict,
-      structuralSlPips: structuralStopPips(pivots, targetEntryPrice, direction, atrValue, spec.pipValue, candles),
+      structuralSlPips: structuralStopPips(pivots, targetEntryPrice, direction, atrValue, spec.pipValue, candles, harmonic),
       spec,
       targetRr,
     });
@@ -1498,6 +1561,8 @@ ANATOMI MIKRO (25 BAR TERAKHIR):
         tpDistance: fromPips(riskPlan.tpPips, spec),
         currentUnix,
         tfSeconds,
+        entryPrice: targetEntryPrice,
+        targetPrice: riskPlan.tpPrice,
       }),
       generatedAt: Date.now(),
       triggeredAt: null,
