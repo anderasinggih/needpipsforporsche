@@ -8,6 +8,7 @@ import {
   AISignalOverlay,
   PositionBox,
 } from "@/components/chart/TradingViewChart";
+import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
@@ -171,8 +172,10 @@ export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState<string>("1m");
   const [isClientLoaded, setIsClientLoaded] = useState(false);
 
-  const { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp } =
+  const { currentCandle, historicalCandles, positions, recentTrades, isConnected, lastTickTimestamp } =
     useMarketStream(activeSymbol, timeframe);
+
+  const [showOrderbookTape, setShowOrderbookTape] = useState<boolean>(true);
 
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
@@ -551,6 +554,39 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Navigation to Possibility & Neural Mind Pages */}
+            <Link
+              href="/possibility"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-950/40 border border-cyan-800/80 text-[11px] font-mono text-cyan-300 hover:text-cyan-200 hover:bg-cyan-900/40 transition-colors"
+            >
+              <TrendingUp className="h-3 w-3 text-cyan-400" />
+              <span className="hidden sm:inline">POSSIBILITY CHART</span>
+              <span className="sm:hidden">FORECAST</span>
+            </Link>
+
+            <Link
+              href="/neural-mind"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-950/40 border border-purple-800/80 text-[11px] font-mono text-purple-300 hover:text-purple-200 hover:bg-purple-900/40 transition-colors"
+            >
+              <BrainCircuit className="h-3 w-3 text-purple-400" />
+              <span className="hidden sm:inline">NEURAL MIND</span>
+              <span className="sm:hidden">HIVE</span>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setShowOrderbookTape((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono border transition-colors ${
+                showOrderbookTape
+                  ? "bg-zinc-800 text-emerald-400 border-zinc-700 font-semibold"
+                  : "bg-zinc-950 text-zinc-400 border-zinc-850 hover:text-zinc-200"
+              }`}
+              title="Toggle Live Running Trades Orderbook Tape"
+            >
+              <Activity className="h-3 w-3 text-emerald-400" />
+              <span className="hidden md:inline">TAPE</span>
+            </button>
+
             <Badge
               variant="outline"
               className="flex items-center gap-1.5 py-0.5 sm:py-1 px-2 sm:px-2.5 text-[10px] sm:text-[11px] font-mono border-zinc-800 bg-zinc-950 text-zinc-400"
@@ -566,45 +602,59 @@ export default function DashboardPage() {
 
       {/* Main Full-Width Terminal Content - Responsive padding */}
       <div className="w-full px-2 sm:px-4 md:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
-        {/* Full-Width TradingView Chart */}
-        <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden">
-          <TradingViewChart
-            currentCandle={currentCandle}
-            historicalCandles={historicalCandles}
-            positions={positions}
-            symbol={activeSymbol}
-            timeframe={timeframe}
-            lastTickTimestamp={lastTickTimestamp}
-            onSymbolChange={handleSymbolChange}
-            onTimeframeChange={handleTimeframeChange}
-            aiMapping={
-              evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                ? evaluation.chartMapping
-                : null
-            }
-            aiSignal={
-              evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                ? {
-                    signal: evaluation.signal,
-                    direction: evaluation.direction,
-                    entryPrice: evaluation.entryPrice,
-                    stopLoss: evaluation.stopLoss,
-                    takeProfit: evaluation.takeProfit,
-                    slPips: evaluation.slPips,
-                    tpPips: evaluation.tpPips,
-                    riskRewardRatio: evaluation.riskRewardRatio,
-                    positionBox: evaluation.positionBox,
-                    predictiveTrajectory: evaluation.predictiveTrajectory,
-                    possibilityScenarios: evaluation.possibilityScenarios,
-                    orderType: evaluation.orderType,
-                    entryTrigger: evaluation.entryTrigger,
-                    setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
-                    note: evaluation.calculations,
-                  }
-                : null
-            }
-          />
-        </Card>
+        {/* TradingView Chart + Optional Live Running Trades Orderbook Tape */}
+        <div className={`grid grid-cols-1 ${showOrderbookTape ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
+          <div className={showOrderbookTape ? "lg:col-span-3" : "w-full"}>
+            <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-full">
+              <TradingViewChart
+                currentCandle={currentCandle}
+                historicalCandles={historicalCandles}
+                positions={positions}
+                symbol={activeSymbol}
+                timeframe={timeframe}
+                lastTickTimestamp={lastTickTimestamp}
+                onSymbolChange={handleSymbolChange}
+                onTimeframeChange={handleTimeframeChange}
+                aiMapping={
+                  evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                    ? evaluation.chartMapping
+                    : null
+                }
+                aiSignal={
+                  evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                    ? {
+                        signal: evaluation.signal,
+                        direction: evaluation.direction,
+                        entryPrice: evaluation.entryPrice,
+                        stopLoss: evaluation.stopLoss,
+                        takeProfit: evaluation.takeProfit,
+                        slPips: evaluation.slPips,
+                        tpPips: evaluation.tpPips,
+                        riskRewardRatio: evaluation.riskRewardRatio,
+                        positionBox: evaluation.positionBox,
+                        predictiveTrajectory: evaluation.predictiveTrajectory,
+                        possibilityScenarios: evaluation.possibilityScenarios,
+                        orderType: evaluation.orderType,
+                        entryTrigger: evaluation.entryTrigger,
+                        setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
+                        note: evaluation.calculations,
+                      }
+                    : null
+                }
+              />
+            </Card>
+          </div>
+
+          {showOrderbookTape && (
+            <div className="lg:col-span-1 h-[640px]">
+              <LiveOrderbookTape
+                trades={recentTrades}
+                symbol={activeSymbol}
+                currentPrice={currentCandle?.close}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Council strip: consensus verdict + collective emotional state */}
         {(isEvaluating || Boolean(evaluation?.agentOpinions?.length)) && (

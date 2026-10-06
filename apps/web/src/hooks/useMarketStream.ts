@@ -16,6 +16,15 @@ export interface Position {
   time: number;
 }
 
+export interface LiveTradeTick {
+  id: string;
+  time: number; // Unix ms
+  price: number;
+  qty: number;
+  isBuyerMaker: boolean; // if true -> seller initiated (taker sell = RED), if false -> buyer initiated (taker buy = GREEN)
+  side: "BUY" | "SELL";
+}
+
 export function normalizeBinanceStreamSymbol(symbol: string): string {
   const upper = symbol.toUpperCase().trim();
   if (upper === "XAUUSD" || upper === "GOLD") return "paxgusdt";
@@ -32,6 +41,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
   const [currentCandle, setCurrentCandle] = useState<CandleData | null>(null);
   const [historicalCandles, setHistoricalCandles] = useState<CandleData[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [recentTrades, setRecentTrades] = useState<LiveTradeTick[]>([]);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastTickTimestamp, setLastTickTimestamp] = useState<number>(Date.now());
   const wsRef = useRef<WebSocket | null>(null);
@@ -146,6 +156,20 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
             // Handle individual real-time trade tick event (@trade)
             else if (eventType === "trade" && payload.p) {
               const tradePrice = parseFloat(payload.p);
+              const qty = parseFloat(payload.q || "0");
+              const isBuyerMaker = Boolean(payload.m); // true: seller initiated (taker sell), false: buyer initiated (taker buy)
+              const side: "BUY" | "SELL" = isBuyerMaker ? "SELL" : "BUY";
+              const tick: LiveTradeTick = {
+                id: String(payload.t || Date.now() + Math.random()),
+                time: Number(payload.T || Date.now()),
+                price: tradePrice,
+                qty,
+                isBuyerMaker,
+                side,
+              };
+
+              setRecentTrades((prev) => [tick, ...prev].slice(0, 50));
+
               setCurrentCandle((prev) => {
                 if (!prev) return null;
                 return {
@@ -214,5 +238,5 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     };
   }, [binanceStream, timeframe, activeSymbol]);
 
-  return { currentCandle, historicalCandles, positions, isConnected, lastTickTimestamp };
+  return { currentCandle, historicalCandles, positions, recentTrades, isConnected, lastTickTimestamp };
 }
