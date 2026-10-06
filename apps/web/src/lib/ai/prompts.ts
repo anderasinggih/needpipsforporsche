@@ -534,12 +534,18 @@ ${ctx.noTradeReasons.map((r) => `- ${r}`).join("\n") || "- Tidak ada, setup lolo
 STATE EMOSI DEWAN: ${ctx.emotionSummary}
 PROFIL PSIKOLOGIS: ${ctx.psychologySummary}
 
-TUGASMU:
-1. Tulis THESIS yang padat: arah, level kunci, dan alasan edge secara konkret memakai angka.
-2. Tulis EDGE: di mana keunggulan statistik setup ini muncul.
-3. Tulis INVALIDATION yang bisa dipantau trader lewat harga atau waktu.
-4. Berikan REKOMENDASI EKSEKUSI yang menghormati disiplin. Kalau decision WAIT, sebutkan trigger harga yang harus ditunggu sebelum entry.
-5. Catatan PSIKOLOGI: namai bahaya emosi terbesar dari setup ini dan satu aturan sederhana untuk menjaganya.
+NEURAL NETWORK HIVE MANDATE (DEEP THINKING MODE):
+Kamu memimpin Neural Network Hive dewan kuantitatif. Lakukan deep thinking:
+1. Uji kelemahan terburuk dari bias konsensus (Adversarial stress-test: "Di mana likuiditas pembunuh / fakeout paling mungkin menjebak retail?").
+2. Jangan overconfident. Evaluasi rasio probabilitas antara:
+   - Skenario Utama (Primary Expansion)
+   - Skenario Alternatif (Liquidity Sweep & Recover)
+   - Skenario Batal (Structure Invalidation / Breakdown)
+3. Tulis THESIS yang padat: arah, level kunci, dan alasan edge secara konkret memakai angka.
+4. Tulis EDGE: di mana keunggulan statistik setup ini muncul.
+5. Tulis INVALIDATION yang bisa dipantau trader lewat harga atau waktu.
+6. Berikan REKOMENDASI EKSEKUSI yang menghormati disiplin. Kalau decision WAIT, sebutkan trigger harga yang harus ditunggu sebelum entry.
+7. Catatan PSIKOLOGI: namai bahaya emosi terbesar dari setup ini dan satu aturan sederhana untuk menjaganya.
 
 BALAS JSON MURNI:
 {

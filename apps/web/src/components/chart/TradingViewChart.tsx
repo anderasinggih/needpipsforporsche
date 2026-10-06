@@ -82,6 +82,14 @@ export interface AISignalOverlay {
   riskRewardRatio?: string;
   positionBox?: PositionBox;
   predictiveTrajectory?: Array<{ time: number; price: number }>;
+  possibilityScenarios?: Array<{
+    id: "primary" | "alternative_sweep" | "invalidation";
+    name: string;
+    probability: number;
+    color: string;
+    description: string;
+    points: Array<{ time: number; price: number }>;
+  }>;
   orderType?: "MARKET" | "LIMIT" | "PULLBACK";
   entryTrigger?: string;
   setupPrice?: number;
@@ -302,8 +310,43 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     const lastHistoricalTime =
       historicalCandles[historicalCandles.length - 1]?.time || Math.floor(Date.now() / 1000);
 
-    // 1. Predictive Trajectory Line with Directional Arrow Markers
-    if (aiSignal?.predictiveTrajectory && aiSignal.predictiveTrajectory.length > 0) {
+    // 1. Predictive Trajectory & Multi-Scenario Possibility Lines
+    if (aiSignal?.possibilityScenarios && aiSignal.possibilityScenarios.length > 0) {
+      aiSignal.possibilityScenarios.forEach((sc) => {
+        const scId = `ai_scenario_${sc.id}`;
+        activeOverlayIds.add(scId);
+        if (!lineMap.has(scId) && sc.points && sc.points.length > 0) {
+          const isPrimary = sc.id === "primary";
+          const isSweep = sc.id === "alternative_sweep";
+          const line = chartRef.current.addLineSeries({
+            color: sc.color,
+            lineWidth: isPrimary ? 2 : 1,
+            lineStyle: isPrimary ? LineStyle.Solid : isSweep ? LineStyle.Dotted : LineStyle.Dashed,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          const sorted = [...sc.points].sort((a, b) => a.time - b.time);
+          const unique = sorted.filter((pt, idx, arr) => idx === 0 || pt.time > arr[idx - 1].time);
+          line.setData(unique.map((pt) => ({ time: pt.time as any, value: pt.price })));
+
+          if (unique.length > 0) {
+            const lastPt = unique[unique.length - 1];
+            const isBuy = resolveSide(aiSignal.signal, aiSignal.direction) === "BUY";
+            line.setMarkers([
+              {
+                time: lastPt.time as any,
+                position: isBuy ? "aboveBar" : "belowBar",
+                color: sc.color,
+                shape: isPrimary ? (isBuy ? "arrowUp" : "arrowDown") : "circle",
+                text: `${sc.name}`,
+              },
+            ]);
+          }
+          lineMap.set(scId, line);
+        }
+      });
+    } else if (aiSignal?.predictiveTrajectory && aiSignal.predictiveTrajectory.length > 0) {
       const trajId = "ai_predictive_trajectory";
       activeOverlayIds.add(trajId);
       if (!lineMap.has(trajId)) {
@@ -915,6 +958,26 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-amber-400 border border-amber-900/50">
               Wait (Plan: {resolveSide(aiSignal.signal, aiSignal.direction) === "BUY" ? "Buy" : "Sell"} Limit @ ${aiSignal.entryPrice ? Number(aiSignal.entryPrice).toFixed(aiSignal.entryPrice > 100 ? 2 : 4) : "-"})
             </span>
+          )}
+
+          {aiSignal?.possibilityScenarios && aiSignal.possibilityScenarios.length > 0 && (
+            <div className="hidden md:flex items-center gap-1.5 pl-1">
+              {aiSignal.possibilityScenarios.map((sc) => (
+                <span
+                  key={sc.id}
+                  className="rounded px-2 py-0.5 text-[10px] font-mono font-medium border flex items-center gap-1"
+                  style={{
+                    backgroundColor: `${sc.color}15`,
+                    borderColor: `${sc.color}40`,
+                    color: sc.color,
+                  }}
+                  title={sc.description}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc.color }} />
+                  {sc.name}
+                </span>
+              ))}
+            </div>
           )}
 
           {aiMapping?.fibonacciRetracement && (

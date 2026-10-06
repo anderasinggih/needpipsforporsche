@@ -304,6 +304,15 @@ export interface DiscussionMessage {
   timestamp: number;
 }
 
+export interface PossibilityScenario {
+  id: "primary" | "alternative_sweep" | "invalidation";
+  name: string;
+  probability: number; // 0 - 100%
+  color: string;
+  description: string;
+  points: Array<{ time: number; price: number }>;
+}
+
 export interface EvaluationResult {
   /** Client-side archive id, assigned by the dashboard after each run. */
   id?: string;
@@ -358,6 +367,7 @@ export interface EvaluationResult {
     takeProfit: number;
   };
   predictiveTrajectory: Array<{ time: number; price: number }>;
+  possibilityScenarios?: PossibilityScenario[];
   recommendation: string;
   notes: string;
   emotionalState: EmotionalState;
