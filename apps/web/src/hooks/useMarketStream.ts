@@ -185,8 +185,8 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     const klineStream = `${binanceStream}@kline_${binanceInterval}`;
     const depthStream = `${binanceStream}@depth20@100ms`;
 
-    // Direct combined stream endpoint with trade tick stream (@trade)
-    const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade/${depthStream}`;
+    // Direct combined stream endpoint with trade tick (@trade), orderbook ticker (@bookTicker), and depth (@depth20@100ms)
+    const streamUrl = `wss://data-stream.binance.vision/stream?streams=${klineStream}/${binanceStream}@trade/${binanceStream}@bookTicker/${depthStream}`;
 
     const connect = () => {
       if (!isMounted) return;
@@ -201,6 +201,54 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
         ws.onopen = () => {
           if (!isMounted) return;
           setIsConnected(true);
+        };
+
+        // Instant price tick dispatcher: updates forming candle at sub-millisecond precision
+        const applyPriceTick = (tickPrice: number, tickTimeMs: number, tickQty: number = 0) => {
+          const tickSec = Math.floor(tickTimeMs / 1000);
+          const currentBarTime = Math.floor(tickSec / intervalSeconds) * intervalSeconds;
+          const prevCandle = currentCandleRef.current;
+          let nextCandle: CandleData;
+
+          if (!prevCandle) {
+            nextCandle = {
+              time: currentBarTime,
+              open: tickPrice,
+              high: tickPrice,
+              low: tickPrice,
+              close: tickPrice,
+              volume: tickQty,
+              is_closed: false,
+            };
+          } else if (currentBarTime > prevCandle.time) {
+            const closedPrev: CandleData = {
+              ...prevCandle,
+              is_closed: true,
+            };
+            foldStreamedBar(closedPrev);
+
+            nextCandle = {
+              time: currentBarTime,
+              open: tickPrice,
+              high: tickPrice,
+              low: tickPrice,
+              close: tickPrice,
+              volume: tickQty,
+              is_closed: false,
+            };
+          } else {
+            nextCandle = {
+              ...prevCandle,
+              high: Math.max(prevCandle.high, tickPrice),
+              low: Math.min(prevCandle.low, tickPrice),
+              close: tickPrice,
+              volume: (prevCandle.volume || 0) + tickQty,
+            };
+          }
+
+          currentCandleRef.current = nextCandle;
+          setCurrentCandle(nextCandle);
+          setLastTickTimestamp(Date.now());
         };
 
         ws.onmessage = (event) => {
@@ -256,6 +304,22 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
                 spread,
                 imbalancePct: imbalance,
               });
+
+              // When best bid/ask is present, tick the chart price immediately if spread is tight
+              if (bestBid > 0 && bestAsk > 0) {
+                const midPrice = Number(((bestBid + bestAsk) / 2).toFixed(2));
+                applyPriceTick(midPrice, Date.now(), 0);
+              }
+            }
+
+            // Handle Book Ticker stream (@bookTicker) - FASTEST BID/ASK UPDATE IN BINANCE (10-100+ updates/sec)
+            else if (streamName.includes("@bookTicker") || (payload.b && payload.a && !payload.bids)) {
+              const bPrice = parseFloat(payload.b) + currentOffset;
+              const aPrice = parseFloat(payload.a) + currentOffset;
+              if (bPrice > 0 && aPrice > 0) {
+                const midPrice = Number(((bPrice + aPrice) / 2).toFixed(2));
+                applyPriceTick(midPrice, Date.now(), 0);
+              }
             }
 
             // Handle kline stream
@@ -293,58 +357,7 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
               };
 
               setRecentTrades((prev) => [tick, ...prev].slice(0, 50));
-
-              // Compute the exact bar open time according to timeframe
-              const tickSec = Math.floor(tickTimeMs / 1000);
-              const currentBarTime = Math.floor(tickSec / intervalSeconds) * intervalSeconds;
-
-              const prevCandle = currentCandleRef.current;
-              let nextCandle: CandleData;
-
-              if (!prevCandle) {
-                // First tick initialization
-                nextCandle = {
-                  time: currentBarTime,
-                  open: tradePrice,
-                  high: tradePrice,
-                  low: tradePrice,
-                  close: tradePrice,
-                  volume: qty,
-                  is_closed: false,
-                };
-              } else if (currentBarTime > prevCandle.time) {
-                // New candle period started by this trade tick!
-                // Close previous candle
-                const closedPrev: CandleData = {
-                  ...prevCandle,
-                  is_closed: true,
-                };
-                foldStreamedBar(closedPrev);
-
-                // Start new active candle
-                nextCandle = {
-                  time: currentBarTime,
-                  open: tradePrice,
-                  high: tradePrice,
-                  low: tradePrice,
-                  close: tradePrice,
-                  volume: qty,
-                  is_closed: false,
-                };
-              } else {
-                // Same forming candle: update high, low, close immediately on every trade tick!
-                nextCandle = {
-                  ...prevCandle,
-                  high: Math.max(prevCandle.high, tradePrice),
-                  low: Math.min(prevCandle.low, tradePrice),
-                  close: tradePrice,
-                  volume: (prevCandle.volume || 0) + qty,
-                };
-              }
-
-              currentCandleRef.current = nextCandle;
-              setCurrentCandle(nextCandle);
-              setLastTickTimestamp(Date.now());
+              applyPriceTick(tradePrice, tickTimeMs, qty);
             }
           } catch (err) {
             console.error("Error parsing Binance stream message:", err);

@@ -269,23 +269,20 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
   useEffect(() => {
     if (candleSeriesRef.current && historicalCandles.length > 0) {
-      const sorted = [...historicalCandles].sort((a, b) => a.time - b.time);
-      const unique = sorted.filter((item, index, self) =>
-        index === 0 || item.time > self[index - 1].time
-      );
+      // setData is an expensive full canvas rebuild in lightweight-charts.
+      // We only call it once on initial load or when changing symbol/timeframe.
+      // Subsequent live bars and ticks are fed seamlessly via candleSeries.update().
+      if (!isDataSetRef.current) {
+        const sorted = [...historicalCandles].sort((a, b) => a.time - b.time);
+        const unique = sorted.filter((item, index, self) =>
+          index === 0 || item.time > self[index - 1].time
+        );
 
-      // Preserve user viewport scroll position if they are viewing past candles
-      const timeScale = chartRef.current?.timeScale();
-      const prevRange = timeScale?.getVisibleLogicalRange();
-
-      candleSeriesRef.current.setData(unique as any);
-
-      if (chartRef.current && !isDataSetRef.current) {
-        chartRef.current.timeScale().fitContent();
+        candleSeriesRef.current.setData(unique as any);
+        if (chartRef.current) {
+          chartRef.current.timeScale().fitContent();
+        }
         isDataSetRef.current = true;
-      } else if (prevRange && timeScale) {
-        // Restore range so chart does not snap forward
-        timeScale.setVisibleLogicalRange(prevRange);
       }
     }
   }, [historicalCandles, symbol, timeframe]);
