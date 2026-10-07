@@ -100,7 +100,7 @@ export default function OwnerKeyPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
   const [testingStatus, setTestingStatus] = useState<Record<string, { loading: boolean; ok?: boolean; msg?: string }>>({});
-  const [brokerOffsets, setBrokerOffsets] = useState<Record<string, number>>({ XAUUSD: 0, BTCUSD: 0 });
+  const [brokerOffsets, setBrokerOffsets] = useState<Record<string, string>>({ XAUUSD: "0", BTCUSD: "0" });
   const [isSavingOffsets, setIsSavingOffsets] = useState(false);
   const [offsetsSavedToast, setOffsetsSavedToast] = useState(false);
 
@@ -309,15 +309,33 @@ export default function OwnerKeyPage() {
         })
         .catch((err) => console.warn("Failed to fetch keys from PostgreSQL vault:", err));
 
-      // Load broker price offsets from PostgreSQL
+      // Load broker price offsets from localStorage cache first, then PostgreSQL
+      const cachedOffsets = localStorage.getItem("mt_broker_offsets");
+      if (cachedOffsets) {
+        try {
+          const parsed = JSON.parse(cachedOffsets);
+          if (parsed && typeof parsed === "object") {
+            setBrokerOffsets((prev) => ({
+              ...prev,
+              ...parsed,
+            }));
+          }
+        } catch (e) {}
+      }
+
       fetch("/api/vault?type=offsets")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.offsets) {
+            const formatted: Record<string, string> = {};
+            for (const [k, v] of Object.entries(data.offsets)) {
+              formatted[k] = String(v ?? 0);
+            }
             setBrokerOffsets((prev) => ({
               ...prev,
-              ...data.offsets,
+              ...formatted,
             }));
+            localStorage.setItem("mt_broker_offsets", JSON.stringify(formatted));
           }
         })
         .catch((err) => console.warn("Failed to fetch broker offsets:", err));
@@ -403,6 +421,18 @@ export default function OwnerKeyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slots }),
       }).catch((dbErr) => console.warn("Failed to save keys to PostgreSQL database:", dbErr));
+
+      // Persist broker offsets along with slots if form submitted
+      const parsedOffsets: Record<string, number> = {};
+      for (const [sym, val] of Object.entries(brokerOffsets)) {
+        parsedOffsets[sym] = parseFloat(String(val)) || 0;
+      }
+      localStorage.setItem("mt_broker_offsets", JSON.stringify(brokerOffsets));
+      fetch("/api/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offsets: parsedOffsets }),
+      }).catch((dbErr) => console.warn("Failed to save broker offsets to PostgreSQL:", dbErr));
     }
 
     setIsSaved(true);
@@ -412,15 +442,31 @@ export default function OwnerKeyPage() {
   const handleSaveBrokerOffsets = async () => {
     setIsSavingOffsets(true);
     try {
-      await fetch("/api/vault", {
+      const parsedOffsets: Record<string, number> = {};
+      for (const [sym, val] of Object.entries(brokerOffsets)) {
+        parsedOffsets[sym] = parseFloat(String(val)) || 0;
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("mt_broker_offsets", JSON.stringify(brokerOffsets));
+        window.dispatchEvent(new Event("storage"));
+      }
+
+      const res = await fetch("/api/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offsets: brokerOffsets }),
+        body: JSON.stringify({ offsets: parsedOffsets }),
       });
-      setOffsetsSavedToast(true);
-      setTimeout(() => setOffsetsSavedToast(false), 3000);
-    } catch (err) {
+      if (res.ok) {
+        setOffsetsSavedToast(true);
+        setTimeout(() => setOffsetsSavedToast(false), 3000);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Gagal menyimpan offset: ${errData.error || "Server error"}`);
+      }
+    } catch (err: any) {
       console.error("Failed to save broker offsets", err);
+      alert(`Gagal menyimpan offset: ${err.message || "Network error"}`);
     } finally {
       setIsSavingOffsets(false);
     }
@@ -501,15 +547,15 @@ export default function OwnerKeyPage() {
                     <span className="text-[10px] font-mono text-zinc-500">e.g. +2.50 or -1.80</span>
                   </div>
                   <Input
-                    type="number"
-                    step="0.01"
-                    value={brokerOffsets["XAUUSD"] ?? 0}
-                    onChange={(e) =>
+                    type="text"
+                    value={brokerOffsets["XAUUSD"] ?? "0"}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setBrokerOffsets((prev) => ({
                         ...prev,
-                        XAUUSD: parseFloat(e.target.value) || 0,
-                      }))
-                    }
+                        XAUUSD: val,
+                      }));
+                    }}
                     placeholder="0.00"
                     className="font-mono text-xs h-8 bg-black border-zinc-800 text-amber-300"
                   />
@@ -524,15 +570,15 @@ export default function OwnerKeyPage() {
                     <span className="text-[10px] font-mono text-zinc-500">e.g. +15.0 or -20.0</span>
                   </div>
                   <Input
-                    type="number"
-                    step="0.1"
-                    value={brokerOffsets["BTCUSD"] ?? 0}
-                    onChange={(e) =>
+                    type="text"
+                    value={brokerOffsets["BTCUSD"] ?? "0"}
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setBrokerOffsets((prev) => ({
                         ...prev,
-                        BTCUSD: parseFloat(e.target.value) || 0,
-                      }))
-                    }
+                        BTCUSD: val,
+                      }));
+                    }}
                     placeholder="0.00"
                     className="font-mono text-xs h-8 bg-black border-zinc-800 text-amber-300"
                   />

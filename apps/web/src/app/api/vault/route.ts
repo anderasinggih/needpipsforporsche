@@ -8,6 +8,13 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
     try {
       if (type === 'offsets') {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS broker_price_offsets (
+            symbol VARCHAR(32) PRIMARY KEY,
+            offset_value NUMERIC(16, 4) NOT NULL DEFAULT 0.0,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          )
+        `);
         const result = await client.query('SELECT symbol, offset_value FROM broker_price_offsets');
         const offsets: Record<string, number> = {};
         for (const row of result.rows) {
@@ -87,6 +94,13 @@ export async function POST(request: NextRequest) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS broker_price_offsets (
+            symbol VARCHAR(32) PRIMARY KEY,
+            offset_value NUMERIC(16, 4) NOT NULL DEFAULT 0.0,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          )
+        `);
         for (const [sym, val] of Object.entries(body.offsets)) {
           const numVal = parseFloat(String(val)) || 0.0;
           await client.query(

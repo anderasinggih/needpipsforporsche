@@ -91,9 +91,27 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
     currentCandleRef.current = currentCandle;
   }, [currentCandle]);
 
-  // 0. Load Broker Price Offset from PostgreSQL
+  // 0. Load Broker Price Offset from PostgreSQL & LocalStorage Cache
   useEffect(() => {
     let isSubscribed = true;
+
+    const loadLocal = () => {
+      try {
+        const cached = localStorage.getItem("mt_broker_offsets");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const symKey = activeSymbol.toUpperCase();
+          if (parsed && parsed[symKey] !== undefined) {
+            const val = parseFloat(String(parsed[symKey])) || 0;
+            setPriceOffset(val);
+            offsetRef.current = val;
+          }
+        }
+      } catch (e) {}
+    };
+
+    loadLocal();
+
     fetch("/api/vault?type=offsets")
       .then((res) => res.json())
       .then((data) => {
@@ -107,8 +125,14 @@ export function useMarketStream(activeSymbol: string = "BTCUSD", timeframe: stri
       })
       .catch(() => {});
 
+    const handleStorage = () => {
+      loadLocal();
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       isSubscribed = false;
+      window.removeEventListener("storage", handleStorage);
     };
   }, [activeSymbol]);
 
