@@ -4,7 +4,7 @@ import crypto from "crypto";
 export interface AppUser {
   id: number;
   username: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "admin" | "member" | "viewer";
   created_at: string;
 }
 
@@ -82,13 +82,13 @@ export function verifyPassword(password: string, hash: string): boolean {
 
 export interface SessionTokenPayload {
   username: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "admin" | "member" | "viewer";
   exp: number;
 }
 
 const JWT_SECRET = process.env.ENCRYPTION_MASTER_KEY || "npfp_auth_token_key_secret_2026";
 
-export function createSessionToken(username: string, role: "owner" | "admin" | "member"): string {
+export function createSessionToken(username: string, role: "owner" | "admin" | "member" | "viewer"): string {
   const payload: SessionTokenPayload = {
     username,
     role,

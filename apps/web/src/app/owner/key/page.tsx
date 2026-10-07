@@ -108,7 +108,7 @@ export default function OwnerKeyPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"owner" | "admin" | "member">("member");
+  const [newRole, setNewRole] = useState<"owner" | "admin" | "member" | "viewer">("member");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userMsg, setUserMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
@@ -926,6 +926,7 @@ export default function OwnerKeyPage() {
                   className="w-full bg-black border border-zinc-800 rounded-md text-xs font-mono h-8 mt-1 px-2 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="member">member (Normal Trader Access)</option>
+                  <option value="viewer">viewer (Read-Only / Spectator - No Generation)</option>
                   <option value="admin">admin (Full Trade & Chat)</option>
                   <option value="owner">owner (Owner Privilege - Manage & Purge Logs)</option>
                 </select>

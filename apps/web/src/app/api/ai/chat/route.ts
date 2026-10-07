@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProviderWithRetry, sanitizeSlots, type KeySlotPayload } from "@/lib/ai/providers";
+import { verifySessionToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
+    // Restrict viewer role from chatting/generating AI responses
+    const token = req.cookies.get("npfp_session")?.value;
+    const user = token ? verifySessionToken(token) : null;
+    if (user && user.role === "viewer") {
+      return NextResponse.json(
+        { error: "Akun viewer hanya memiliki izin pantau (read-only). Tidak diizinkan mengirim pesan ke AI." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { userQuery, symbol, price, timeframe, keySlots, agentOpinions, signal, chatHistory } = body;
 

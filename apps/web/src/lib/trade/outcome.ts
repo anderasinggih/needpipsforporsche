@@ -65,15 +65,18 @@ export const resolveTradeOutcome = (
   const isLong = levels.signal === "BUY";
   const { entryPrice, stopLoss, takeProfit, anchorTime } = levels;
 
-  // For a BUY/Long pullback order (setupPrice >= entryPrice): price must drop to or below entry (low <= entryPrice).
-  // For a BUY/Long breakout order (setupPrice < entryPrice): price must rise to or above entry (high >= entryPrice).
-  // For a SELL/Short pullback order (setupPrice <= entryPrice): price must bounce up to or above entry (high >= entryPrice).
-  // For a SELL/Short breakdown order (setupPrice > entryPrice): price must drop to or below entry (low <= entryPrice).
+  // Strict Entry Determination:
+  // For BUY/Long pullback limit (market price setupPrice >= entryPrice): price must drop to or below entry (low <= entryPrice).
+  // For BUY/Long breakout stop (market price setupPrice < entryPrice): price must rise to or above entry (high >= entryPrice).
+  // For SELL/Short pullback limit (market price setupPrice <= entryPrice): price must bounce up to or above entry (high >= entryPrice).
+  // For SELL/Short breakdown stop (market price setupPrice > entryPrice): price must drop to or below entry (low <= entryPrice).
+  const isPendingOrder = levels.setupPrice !== undefined && Math.abs(levels.setupPrice - entryPrice) > Math.max(0.05, entryPrice * 0.0001);
   const isPullback = levels.setupPrice !== undefined
     ? (isLong ? levels.setupPrice >= entryPrice : levels.setupPrice <= entryPrice)
     : false;
 
   const touchedEntry = (high: number, low: number) => {
+    if (!isPendingOrder) return true; // Immediate market fill
     if (isLong) {
       return isPullback ? low <= entryPrice : high >= entryPrice;
     } else {
@@ -86,20 +89,26 @@ export const resolveTradeOutcome = (
 
   let extremeHigh = -Infinity;
   let extremeLow = Infinity;
-  // A setup is only considered filled at inception if market price was essentially already touching entry price
-  // AND it wasn't a designated pullback/limit order waiting away from current market price.
-  let entryFilled = levels.setupPrice !== undefined
-    ? Math.abs(levels.setupPrice - entryPrice) <= Math.max(0.1, entryPrice * 0.0003)
-    : false;
+
+  // A setup is only considered filled at inception if market was essentially already touching entry price (Market Order)
+  let entryFilled = !isPendingOrder;
   let filledTime: number | undefined = entryFilled ? anchorTime : undefined;
   let resolvedAt: { outcome: "WIN" | "LOSE"; price: number; time: number } | undefined;
 
   const track = (high: number, low: number, time: number) => {
+    // 1. If entry hasn't been touched yet, check if this bar triggered the entry
     if (!entryFilled) {
-      if (!touchedEntry(high, low)) return;
+      if (!touchedEntry(high, low)) {
+        // Price NEVER hit entry in this bar!
+        // IMPORTANT: We do NOT track SL or TP if entry was never filled!
+        // Setup remains waiting for entry trigger.
+        return;
+      }
       entryFilled = true;
       filledTime = time;
     }
+
+    // 2. Once entry is filled, track extremes and TP/SL hits
     if (high > extremeHigh) extremeHigh = high;
     if (low < extremeLow) extremeLow = low;
 
@@ -115,8 +124,6 @@ export const resolveTradeOutcome = (
   // 1. Historical completed bars:
   // ONLY bars STRICTLY AFTER anchorTime (time > anchorTime) represent market action
   // that took place after the trade was generated!
-  // Any bar where time <= anchorTime occurred before or during setup creation;
-  // evaluating its historical high/low leaks pre-setup wicks into the trade lifecycle.
   const ordered = bars
     .filter(isUsableBar)
     .filter((b) => b.time > anchorTime)
@@ -128,23 +135,26 @@ export const resolveTradeOutcome = (
   }
 
   // 2. The live forming bar / current tick:
-  // If the live candle opened strictly after anchorTime:
-  // we check the live price (close) and extreme wicks.
-  // If the live candle is the anchor candle itself (time === anchorTime), ONLY its live close/current price
-  // matters — its low/high from earlier minutes before the user clicked evaluate is pre-trade history!
   if (!resolvedAt && isUsableBar(liveBar)) {
     if (liveBar!.time > anchorTime) {
       track(liveBar!.high, liveBar!.low, liveBar!.time);
     } else if (liveBar!.time === anchorTime) {
-      // Only track current price (close) of the anchor bar, NEVER its prior wick
+      // Only track current price (close) of the anchor bar, NEVER its prior historical wick
       track(liveBar!.close, liveBar!.close, liveBar!.time);
     }
   }
 
+  // GUARANTEE: Outcome CANNOT be WIN or LOSE unless entry was genuinely filled!
+  const finalOutcome: TradeOutcome = (entryFilled && resolvedAt)
+    ? resolvedAt.outcome
+    : entryFilled
+    ? "ACTIVE"
+    : "WAIT";
+
   return {
-    outcome: resolvedAt ? resolvedAt.outcome : "ACTIVE",
-    resolvedPrice: resolvedAt?.price,
-    resolvedTime: resolvedAt?.time,
+    outcome: finalOutcome,
+    resolvedPrice: entryFilled ? resolvedAt?.price : undefined,
+    resolvedTime: entryFilled ? resolvedAt?.time : undefined,
     entryFilled,
     filledTime,
     extremeHigh: Number.isFinite(extremeHigh) ? extremeHigh : entryPrice,

@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const validRoles = ["owner", "admin", "member"];
+    const validRoles = ["owner", "admin", "member", "viewer"];
     const targetRole = validRoles.includes(role) ? role : "member";
 
     const client = await pool.connect();

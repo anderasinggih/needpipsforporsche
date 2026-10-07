@@ -38,10 +38,21 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   const [userQuery, setUserQuery] = useState("");
   const [isAskingAi, setIsAskingAi] = useState(false);
   const [userMessages, setUserMessages] = useState<Array<{ sender: string; text: string; time: number; targetAgent?: string }>>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; role: string } | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "pitch" | "rebuttal" | "ruling">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUpRef = useRef<boolean>(false);
+
+  // Fetch current user session
+  useEffect(() => {
+    fetch("/api/auth")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.user) setCurrentUser(data.user);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load persisted user messages from localStorage when symbol changes
   useEffect(() => {
@@ -429,18 +440,26 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
           type="text"
           value={userQuery}
           onChange={(e) => setUserQuery(e.target.value)}
-          disabled={isAskingAi}
-          placeholder="Tanyakan / debatkan langsung ke dewan AI (misal: '@Agent 5 kenapa SL gak dilebarin?')..."
+          disabled={isAskingAi || currentUser?.role === "viewer"}
+          placeholder={
+            currentUser?.role === "viewer"
+              ? "[Viewer Mode] Akun penonton tidak diizinkan mengirim pesan ke AI dewan."
+              : "Tanyakan / debatkan langsung ke dewan AI (misal: '@Agent 5 kenapa SL gak dilebarin?')..."
+          }
           className="flex-1 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-600 font-sans disabled:opacity-50"
         />
         <Button
           type="submit"
           size="sm"
-          disabled={!userQuery.trim() || isAskingAi}
-          className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
+          disabled={!userQuery.trim() || isAskingAi || currentUser?.role === "viewer"}
+          className={`h-8 px-3 text-xs font-medium ${
+            currentUser?.role === "viewer"
+              ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+              : "bg-emerald-600 hover:bg-emerald-500 text-white"
+          }`}
         >
           <Send className="h-3 w-3 mr-1" />
-          {isAskingAi ? "Menjawab..." : "Kirim"}
+          {currentUser?.role === "viewer" ? "Locked" : isAskingAi ? "Menjawab..." : "Kirim"}
         </Button>
       </form>
     </div>

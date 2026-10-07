@@ -42,8 +42,18 @@ export default function NeuralMindPage() {
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isThinking, setIsThinking] = useState<boolean>(false);
   const [deepThinkingLog, setDeepThinkingLog] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; role: string } | null>(null);
 
   const { currentCandle, recentTrades, isConnected } = useMarketStream(activeSymbol, timeframe);
+
+  useEffect(() => {
+    fetch("/api/auth")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.user) setCurrentUser(data.user);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load latest evaluation
   useEffect(() => {
@@ -156,12 +166,16 @@ export default function NeuralMindPage() {
 
             <Button
               onClick={triggerDeepThinking}
-              disabled={isThinking}
+              disabled={isThinking || currentUser?.role === "viewer"}
               size="sm"
-              className="bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs h-7 gap-1.5"
+              className={`font-mono font-bold text-xs h-7 gap-1.5 ${
+                currentUser?.role === "viewer"
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  : "bg-purple-600 hover:bg-purple-500 text-white"
+              }`}
             >
               <RefreshCw className={`h-3 w-3 ${isThinking ? "animate-spin" : ""}`} />
-              <span>{isThinking ? "DELIBERATING..." : "TRIGGER DEEP THINKING"}</span>
+              <span>{currentUser?.role === "viewer" ? "VIEWER READ-ONLY" : isThinking ? "DELIBERATING..." : "TRIGGER DEEP THINKING"}</span>
             </Button>
           </div>
         </div>

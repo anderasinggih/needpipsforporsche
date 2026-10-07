@@ -46,6 +46,7 @@ import {
   type SymbolSpec,
 } from "@/lib/ai/technical";
 import pool from "@/lib/db";
+import { verifySessionToken } from "@/lib/auth";
 import type {
   AgentOpinion,
   Bias,
@@ -930,6 +931,16 @@ const structuralStopPips = (
 // -------------------------------------------------------------------- POST --
 
 export async function POST(request: NextRequest) {
+  // Enforce viewer role restriction: Viewer is strictly read-only
+  const token = request.cookies.get("npfp_session")?.value;
+  const user = token ? verifySessionToken(token) : null;
+  if (user && user.role === "viewer") {
+    return NextResponse.json(
+      { error: "Akun role viewer hanya memiliki izin pantau (read-only). Tidak diizinkan melakukan generate evaluasi AI." },
+      { status: 403 }
+    );
+  }
+
   const startedAt = Date.now();
   const warnings: string[] = [];
 

@@ -31,11 +31,21 @@ export default function PossibilityPage() {
   const [sideTab, setSideTab] = useState<"heatmap" | "tape">("heatmap");
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; role: string } | null>(null);
 
   const { currentCandle, historicalCandles, recentTrades, marketDepth, isConnected } = useMarketStream(
     activeSymbol,
     timeframe
   );
+
+  useEffect(() => {
+    fetch("/api/auth")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data?.user) setCurrentUser(data.user);
+      })
+      .catch(() => {});
+  }, []);
 
   // Load latest cached evaluation or load from localStorage
   useEffect(() => {
@@ -194,12 +204,16 @@ export default function PossibilityPage() {
 
             <Button
               onClick={runDeepSimulation}
-              disabled={isEvaluating}
+              disabled={isEvaluating || currentUser?.role === "viewer"}
               size="sm"
-              className="bg-cyan-600 hover:bg-cyan-500 text-black font-mono font-bold text-xs h-7 gap-1.5"
+              className={`font-mono font-bold text-xs h-7 gap-1.5 ${
+                currentUser?.role === "viewer"
+                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  : "bg-cyan-600 hover:bg-cyan-500 text-black"
+              }`}
             >
               <RefreshCw className={`h-3 w-3 ${isEvaluating ? "animate-spin" : ""}`} />
-              <span>{isEvaluating ? "CALCULATING..." : "RE-CALCULATE FORECAST"}</span>
+              <span>{currentUser?.role === "viewer" ? "VIEWER READ-ONLY" : isEvaluating ? "CALCULATING..." : "RE-CALCULATE FORECAST"}</span>
             </Button>
           </div>
         </div>

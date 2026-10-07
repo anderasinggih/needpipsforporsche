@@ -107,24 +107,30 @@ const setupAnchorSec = (log: StoredEvaluation): number => {
 
 /**
  * Re-open archived logs whose outcome was marked LOSE prematurely.
- * If price never truly pierced or touched stopLoss, recover it to "ACTIVE"
- * so resolveTradeOutcome can track it honestly while the trade is breathing.
+ * If price never filled entry (entryFilled === false), or price never truly
+ * pierced stopLoss, recover it to "WAIT" or "ACTIVE" so resolveTradeOutcome
+ * can track it honestly while the trade is pending or breathing.
  */
 const migrateLegacyOutcome = (log: StoredEvaluation): StoredEvaluation => {
   if (!log || typeof log !== "object") return log;
-  if (!log.signal || log.signal === "WAIT") return log;
   if (!log.entryPrice || !log.stopLoss || !log.takeProfit) return log;
 
-  const isLong = log.signal === "BUY";
+  const isLong = log.signal === "BUY" || log.direction === "BULLISH";
 
   // Recover false LOSE:
   if (log.outcome === "LOSE") {
-    // If resolvedPrice was recorded but didn't actually cross SL:
+    // 1. If entry was NEVER filled, it could never be a trade LOSS!
+    if (log.entryFilled === false) {
+      const { resolvedPrice, resolvedAt, ...rest } = log;
+      return { ...rest, outcome: log.signal === "WAIT" ? "WAIT" : "WAIT", entryFilled: false };
+    }
+
+    // 2. If resolvedPrice was recorded but didn't actually cross SL:
     if (log.resolvedPrice !== undefined) {
       const isTrueSlHit = isLong ? log.resolvedPrice <= log.stopLoss : log.resolvedPrice >= log.stopLoss;
       if (!isTrueSlHit) {
         const { resolvedPrice, resolvedAt, ...rest } = log;
-        return { ...rest, outcome: "ACTIVE" };
+        return { ...rest, outcome: log.entryFilled ? "ACTIVE" : "WAIT" };
       }
     }
   }
@@ -200,6 +206,9 @@ export default function DashboardPage() {
   // Persistent AI Evaluation History Log
   const [evalLogs, setEvalLogs] = useState<StoredEvaluation[]>([]);
 
+  // Current Logged-in User (role: owner | admin | member | viewer)
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; role: string } | null>(null);
+
   const rules = selectedSkill?.rules_checklist ?? [];
   const allRequiredMet =
     rules.length === 0 ||
@@ -251,6 +260,16 @@ export default function DashboardPage() {
       } catch (e) {
         console.warn("Failed to load evaluation logs", e);
       }
+
+      // Fetch active user session
+      fetch("/api/auth")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.authenticated && data?.user) {
+            setCurrentUser(data.user);
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -283,13 +302,7 @@ export default function DashboardPage() {
       );
 
       // If entry has been filled (or price traded entry level), transition outcome from WAIT to ACTIVE or WIN/LOSE
-      const nextOutcome: EvaluationOutcome = state.outcome !== "ACTIVE"
-        ? state.outcome
-        : state.entryFilled
-        ? "ACTIVE"
-        : log.signal === "WAIT"
-        ? "WAIT"
-        : "ACTIVE";
+      const nextOutcome: EvaluationOutcome = state.outcome;
 
       if (nextOutcome === log.outcome && state.entryFilled === log.entryFilled) return log;
 
@@ -374,6 +387,10 @@ export default function DashboardPage() {
   };
 
   const handleEvaluate = async () => {
+    if (currentUser?.role === "viewer") {
+      showToast("Akun Anda berstatus [VIEWER / READ-ONLY]. Tidak dapat men-generate evaluasi AI.");
+      return;
+    }
     if (!currentCandle) {
       showToast("Waiting for live market data feed...");
       return;
@@ -612,6 +629,22 @@ export default function DashboardPage() {
               <Radio className={`h-2.5 w-2.5 ${isConnected ? "text-emerald-400" : "text-zinc-500"}`} />
               <span>{isConnected ? "LIVE" : "SYNC"}</span>
             </Badge>
+
+            {currentUser && (
+              <Badge
+                variant="outline"
+                className={`py-0.5 px-2 text-[10px] font-mono uppercase shrink-0 border ${
+                  currentUser.role === "viewer"
+                    ? "bg-amber-950/40 text-amber-300 border-amber-800/80"
+                    : currentUser.role === "owner"
+                    ? "bg-purple-950/40 text-purple-300 border-purple-800/80"
+                    : "bg-zinc-900 text-zinc-300 border-zinc-800"
+                }`}
+                title={`Logged in as ${currentUser.username} (${currentUser.role})`}
+              >
+                {currentUser.role === "viewer" ? "👁️ VIEWER" : currentUser.username}
+              </Badge>
+            )}
 
             {/* Logout button */}
             <button
@@ -1577,10 +1610,19 @@ export default function DashboardPage() {
                     </p>
                     <Button
                       onClick={handleEvaluate}
-                      disabled={isEvaluating}
-                      className="mt-4 bg-zinc-100 text-black hover:bg-white font-medium text-xs border-0 shadow-none px-5"
+                      disabled={isEvaluating || currentUser?.role === "viewer"}
+                      className={`mt-4 font-medium text-xs border-0 shadow-none px-5 ${
+                        currentUser?.role === "viewer"
+                          ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
+                          : "bg-zinc-100 text-black hover:bg-white"
+                      }`}
                     >
-                      {isEvaluating ? (
+                      {currentUser?.role === "viewer" ? (
+                        <>
+                          <Compass className="h-3.5 w-3.5 mr-1.5 opacity-50" />
+                          [Viewer Mode] Read-Only Access
+                        </>
+                      ) : isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                           10 Minds Deliberating &amp; Synthesizing...
@@ -1678,10 +1720,16 @@ export default function DashboardPage() {
                   <div className="pt-2">
                     <Button
                       onClick={handleEvaluate}
-                      disabled={isEvaluating}
-                      className="w-full flex items-center justify-center gap-2 bg-zinc-100 text-black hover:bg-white font-medium text-xs shadow-none border-0"
+                      disabled={isEvaluating || currentUser?.role === "viewer"}
+                      className={`w-full flex items-center justify-center gap-2 font-medium text-xs shadow-none border-0 ${
+                        currentUser?.role === "viewer"
+                          ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
+                          : "bg-zinc-100 text-black hover:bg-white"
+                      }`}
                     >
-                      {isEvaluating ? (
+                      {currentUser?.role === "viewer" ? (
+                        <span>[Viewer Mode] Read-Only Spectator</span>
+                      ) : isEvaluating ? (
                         <>
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           <span>Deliberating Active AI Minds...</span>
