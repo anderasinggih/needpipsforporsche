@@ -45,9 +45,8 @@ function LoginForm() {
         throw new Error(data.error || "Login gagal.");
       }
 
-      // Success redirect
-      router.push(redirectTarget);
-      router.refresh();
+      // Hard redirect to target so Next.js middleware and browser cookies synchronize cleanly
+      window.location.href = redirectTarget;
     } catch (err: any) {
       setErrorMsg(err.message || "Terjadi kesalahan saat login.");
     } finally {

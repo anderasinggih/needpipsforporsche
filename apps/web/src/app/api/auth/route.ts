@@ -119,9 +119,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      const isHttps = req.headers.get("x-forwarded-proto") === "https" || req.nextUrl.protocol === "https:";
       response.cookies.set("npfp_session", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isHttps,
         sameSite: "lax",
         path: "/",
         maxAge: 60 * 60 * 24 * 7, // 7 days
