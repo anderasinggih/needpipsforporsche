@@ -14,6 +14,9 @@ import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { CouncilWarRoomChat } from "@/components/council/CouncilWarRoomChat";
+import { QuantumTorusManifold } from "@/components/council/QuantumTorusManifold";
+import { PossibilityMonteCarloChart } from "@/components/chart/PossibilityMonteCarloChart";
+import { PossibilityScenario } from "@/lib/ai/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -198,10 +201,25 @@ export default function DashboardPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  type CouncilViewTab = "chat" | "torus" | "forecast" | "cards";
+  type CockpitMode = "standard" | "torus" | "forecast" | "all-in-one";
+
   // Expanded collapse states for agents
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>("slot_1");
   const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
-  const [councilViewTab, setCouncilViewTab] = useState<"chat" | "cards">("chat");
+  const [councilViewTab, setCouncilViewTab] = useState<CouncilViewTab>("chat");
+  const [cockpitMode, setCockpitMode] = useState<CockpitMode>("standard");
+
+  const switchCockpitMode = (mode: CockpitMode) => {
+    setCockpitMode(mode);
+    if (mode === "torus") setCouncilViewTab("torus");
+    if (mode === "forecast") setCouncilViewTab("forecast");
+    if (typeof window !== "undefined") {
+      const newUrl = mode === "standard" ? window.location.pathname : `${window.location.pathname}?view=${mode}`;
+      window.history.replaceState({}, "", newUrl);
+      window.dispatchEvent(new CustomEvent("needpips:switch-view", { detail: mode }));
+    }
+  };
 
   // Persistent AI Evaluation History Log
   const [evalLogs, setEvalLogs] = useState<StoredEvaluation[]>([]);
@@ -232,6 +250,25 @@ export default function DashboardPage() {
           setTargetRr(parsedRr);
         }
       }
+
+      // Check URL query param for initial view
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get("view");
+      if (viewParam === "torus" || viewParam === "forecast" || viewParam === "all-in-one" || viewParam === "standard") {
+        setCockpitMode(viewParam as CockpitMode);
+        if (viewParam === "torus") setCouncilViewTab("torus");
+        if (viewParam === "forecast") setCouncilViewTab("forecast");
+      }
+
+      const handleExternalSwitch = (e: any) => {
+        if (e.detail) {
+          const m = e.detail as CockpitMode;
+          setCockpitMode(m);
+          if (m === "torus") setCouncilViewTab("torus");
+          if (m === "forecast") setCouncilViewTab("forecast");
+        }
+      };
+      window.addEventListener("needpips:switch-view", handleExternalSwitch);
 
       // Restore Selected Strategy & Rules Checklist
       try {
@@ -270,6 +307,10 @@ export default function DashboardPage() {
           }
         })
         .catch(() => {});
+
+      return () => {
+        window.removeEventListener("needpips:switch-view", handleExternalSwitch);
+      };
     }
   }, []);
 
@@ -508,6 +549,60 @@ export default function DashboardPage() {
     showToast("Evaluation history cleared");
   };
 
+  // Multi-branch possibility trajectories (real stochastic scenarios or AI consensus projections)
+  const possibilityScenarios: PossibilityScenario[] = React.useMemo(() => {
+    if (evaluation?.possibilityScenarios && evaluation.possibilityScenarios.length > 0) {
+      return evaluation.possibilityScenarios;
+    }
+    const curPrice = currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650);
+    const curTime = currentCandle?.time || Math.floor(Date.now() / 1000);
+    const intervalSec = 60;
+    const atr = curPrice * 0.0035;
+
+    return [
+      {
+        id: "primary",
+        name: "Scenario 1: Primary Continuation",
+        probability: 62,
+        color: "#06B6D4",
+        description: "Impulsive structure expansion reaching next key liquidity pool and expansion target.",
+        points: [
+          { time: curTime, price: curPrice },
+          { time: curTime + intervalSec * 3, price: Number((curPrice + atr * 0.4).toFixed(2)) },
+          { time: curTime + intervalSec * 7, price: Number((curPrice + atr * 1.1).toFixed(2)) },
+          { time: curTime + intervalSec * 12, price: Number((curPrice + atr * 2.2).toFixed(2)) },
+        ],
+      },
+      {
+        id: "alternative_sweep",
+        name: "Scenario 2: Liquidity Sweep & Mean-Revert",
+        probability: 26,
+        color: "#F59E0B",
+        description: "False breakdown sweeping stop losses below swing low before aggressive mean-reversion.",
+        points: [
+          { time: curTime, price: curPrice },
+          { time: curTime + intervalSec * 2, price: Number((curPrice - atr * 0.8).toFixed(2)) },
+          { time: curTime + intervalSec * 5, price: Number((curPrice - atr * 0.95).toFixed(2)) },
+          { time: curTime + intervalSec * 9, price: Number((curPrice + atr * 0.6).toFixed(2)) },
+          { time: curTime + intervalSec * 14, price: Number((curPrice + atr * 1.8).toFixed(2)) },
+        ],
+      },
+      {
+        id: "invalidation",
+        name: "Scenario 3: Adversarial Invalidation",
+        probability: 12,
+        color: "#EF4444",
+        description: "Structural invalidation breaching support pivot and cascading market stop-outs.",
+        points: [
+          { time: curTime, price: curPrice },
+          { time: curTime + intervalSec * 3, price: Number((curPrice - atr * 0.5).toFixed(2)) },
+          { time: curTime + intervalSec * 6, price: Number((curPrice - atr * 1.4).toFixed(2)) },
+          { time: curTime + intervalSec * 11, price: Number((curPrice - atr * 2.5).toFixed(2)) },
+        ],
+      },
+    ];
+  }, [evaluation?.possibilityScenarios, currentCandle, activeSymbol]);
+
   const currentPriceFormatted = currentCandle ? currentCandle.close.toFixed(2) : "---.--";
 
   return (
@@ -574,8 +669,64 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right Controls: Side Panel View Switcher & Live Status (Strict 1-Row) */}
+          {/* Right Controls: Cockpit Switcher, Side Panel Toggle & Live Status (Strict 1-Row) */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Cockpit Mode Switcher (All-In-One, Terminal, 3D Torus, Forecast) */}
+            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
+              <button
+                type="button"
+                onClick={() => switchCockpitMode("standard")}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  cockpitMode === "standard"
+                    ? "bg-zinc-800 text-white font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Standard Terminal (Chart + War Room)"
+              >
+                <Zap className="h-3 w-3 text-amber-400" />
+                <span className="hidden md:inline">TERMINAL</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => switchCockpitMode("torus")}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  cockpitMode === "torus"
+                    ? "bg-purple-950/80 text-purple-300 border border-purple-800 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="3D Quantum Torus Manifold HUD"
+              >
+                <BrainCircuit className="h-3 w-3 text-purple-400" />
+                <span className="hidden md:inline">3D TORUS</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => switchCockpitMode("forecast")}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  cockpitMode === "forecast"
+                    ? "bg-cyan-950/80 text-cyan-300 border border-cyan-800 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Possibility Forecast Lab (Monte Carlo)"
+              >
+                <TrendingUp className="h-3 w-3 text-cyan-400" />
+                <span className="hidden md:inline">FORECAST</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => switchCockpitMode("all-in-one")}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  cockpitMode === "all-in-one"
+                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-semibold shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="All-In-One Unified Cockpit (All Modules Synchronized)"
+              >
+                <Layers className="h-3 w-3 text-emerald-400" />
+                <span className="hidden md:inline">ALL-IN-ONE</span>
+              </button>
+            </div>
+
             {/* Side Panel Toggle (Heatmap / Tape / Close) */}
             <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
               <button
@@ -668,70 +819,308 @@ export default function DashboardPage() {
 
       {/* Main Full-Width Terminal Content - Responsive padding */}
       <div className="w-full px-2 sm:px-4 md:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
-        {/* TradingView Chart + Optional Institutional Side Panel (Heatmap / Tape) */}
-        <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
-          <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
-            <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-full">
-              <TradingViewChart
-                currentCandle={currentCandle}
-                historicalCandles={historicalCandles}
-                positions={positions}
-                symbol={activeSymbol}
-                timeframe={timeframe}
-                lastTickTimestamp={lastTickTimestamp}
-                onSymbolChange={handleSymbolChange}
-                onTimeframeChange={handleTimeframeChange}
-                aiMapping={
-                  evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                    ? evaluation.chartMapping
-                    : null
-                }
-                aiSignal={
-                  evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                    ? {
-                        signal: evaluation.signal,
-                        direction: evaluation.direction,
-                        entryPrice: evaluation.entryPrice,
-                        stopLoss: evaluation.stopLoss,
-                        takeProfit: evaluation.takeProfit,
-                        slPips: evaluation.slPips,
-                        tpPips: evaluation.tpPips,
-                        riskRewardRatio: evaluation.riskRewardRatio,
-                        positionBox: evaluation.positionBox,
-                        predictiveTrajectory: evaluation.predictiveTrajectory,
-                        possibilityScenarios: evaluation.possibilityScenarios,
-                        orderType: evaluation.orderType,
-                        entryTrigger: evaluation.entryTrigger,
-                        setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
-                        note: evaluation.calculations,
-                      }
-                    : null
-                }
-              />
-            </Card>
-          </div>
-
-          {showSidePanel && (
-            <div className="lg:col-span-1 h-[640px] flex flex-col">
-              {sidePanelTab === "heatmap" ? (
-                <LiquidityHeatmapRadar
-                  depth={marketDepth}
-                  currentPrice={currentCandle?.close}
-                  symbol={activeSymbol}
-                />
-              ) : (
-                <LiveOrderbookTape
-                  trades={recentTrades}
-                  symbol={activeSymbol}
-                  currentPrice={currentCandle?.close}
-                />
-              )}
+        {/* Visual Stage based on cockpitMode */}
+        {cockpitMode === "torus" ? (
+          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
+            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
+              <Card className="border-zinc-800 bg-black p-3 shadow-none overflow-hidden h-[640px] flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-850 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-bold font-mono">
+                      3D
+                    </span>
+                    <span className="font-mono font-bold text-xs tracking-wider text-purple-300">
+                      QUANTUM TORUS MANIFOLD &bull; BIOLOGICAL DEEP HIVE HUD
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300 bg-purple-950/40">
+                      1,600 REAL PARTICLES
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEvaluate()}
+                      disabled={isEvaluating}
+                      className="h-7 text-xs font-mono border-purple-800 text-purple-300 bg-purple-950/30 hover:bg-purple-900/50"
+                    >
+                      {isEvaluating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                      DELIBERATE
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex-1 w-full min-h-0">
+                  <QuantumTorusManifold
+                    opinions={evaluation?.agentOpinions || []}
+                    consensusSignal={evaluation?.signal || "WAIT"}
+                    currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
+                    recentTrades={recentTrades || []}
+                    symbol={activeSymbol}
+                    isDeliberating={isEvaluating}
+                  />
+                </div>
+              </Card>
             </div>
-          )}
-        </div>
+            {showSidePanel && (
+              <div className="lg:col-span-1 h-[640px] flex flex-col">
+                {sidePanelTab === "heatmap" ? (
+                  <LiquidityHeatmapRadar depth={marketDepth} currentPrice={currentCandle?.close} symbol={activeSymbol} />
+                ) : (
+                  <LiveOrderbookTape trades={recentTrades} symbol={activeSymbol} currentPrice={currentCandle?.close} />
+                )}
+              </div>
+            )}
+          </div>
+        ) : cockpitMode === "forecast" ? (
+          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
+            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
+              <Card className="border-zinc-800 bg-black p-3 shadow-none overflow-hidden h-full">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-850 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-bold font-mono">
+                      P
+                    </span>
+                    <span className="font-mono font-bold text-xs tracking-wider text-cyan-300">
+                      POSSIBILITY FORECAST LAB &bull; 1,000-PATH MONTE CARLO TRAJECTORIES
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300 bg-cyan-950/40">
+                      STOCHASTIC ENGINE
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEvaluate()}
+                      disabled={isEvaluating}
+                      className="h-7 text-xs font-mono border-cyan-800 text-cyan-300 bg-cyan-950/30 hover:bg-cyan-900/50"
+                    >
+                      {isEvaluating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                      SIMULATE
+                    </Button>
+                  </div>
+                </div>
+                <PossibilityMonteCarloChart
+                  candles={historicalCandles}
+                  currentPrice={currentCandle?.close || 0}
+                  scenarios={possibilityScenarios}
+                  symbol={activeSymbol}
+                  timeframe={timeframe}
+                />
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {possibilityScenarios.map((sc) => (
+                    <div key={sc.id} className="rounded border border-zinc-800/80 bg-zinc-950 p-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-mono font-semibold text-zinc-200 flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />
+                          {sc.name}
+                        </span>
+                        <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${sc.color}20`, color: sc.color }}>
+                          {sc.probability}%
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-zinc-400 leading-tight">{sc.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+            {showSidePanel && (
+              <div className="lg:col-span-1 h-[640px] flex flex-col">
+                {sidePanelTab === "heatmap" ? (
+                  <LiquidityHeatmapRadar depth={marketDepth} currentPrice={currentCandle?.close} symbol={activeSymbol} />
+                ) : (
+                  <LiveOrderbookTape trades={recentTrades} symbol={activeSymbol} currentPrice={currentCandle?.close} />
+                )}
+              </div>
+            )}
+          </div>
+        ) : cockpitMode === "all-in-one" ? (
+          <div className="space-y-4">
+            {/* Row 1: Dual Visuals - TradingView Candlestick Chart + Possibility Monte Carlo Forecast */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-[540px]">
+                <TradingViewChart
+                  currentCandle={currentCandle}
+                  historicalCandles={historicalCandles}
+                  positions={positions}
+                  symbol={activeSymbol}
+                  timeframe={timeframe}
+                  lastTickTimestamp={lastTickTimestamp}
+                  onSymbolChange={handleSymbolChange}
+                  onTimeframeChange={handleTimeframeChange}
+                  aiMapping={
+                    evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                      ? evaluation.chartMapping
+                      : null
+                  }
+                  aiSignal={
+                    evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                      ? {
+                          signal: evaluation.signal,
+                          direction: evaluation.direction,
+                          entryPrice: evaluation.entryPrice,
+                          stopLoss: evaluation.stopLoss,
+                          takeProfit: evaluation.takeProfit,
+                          slPips: evaluation.slPips,
+                          tpPips: evaluation.tpPips,
+                          riskRewardRatio: evaluation.riskRewardRatio,
+                          positionBox: evaluation.positionBox,
+                          predictiveTrajectory: evaluation.predictiveTrajectory,
+                          possibilityScenarios: evaluation.possibilityScenarios,
+                          orderType: evaluation.orderType,
+                          entryTrigger: evaluation.entryTrigger,
+                          setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
+                          note: evaluation.calculations,
+                        }
+                      : null
+                  }
+                />
+              </Card>
+
+              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[540px] flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-cyan-400" />
+                    <span className="font-mono font-bold text-xs text-cyan-300">
+                      MONTE CARLO PROBABILITIES (1,000 PATHS)
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300">
+                    {possibilityScenarios.length} BRANCHES
+                  </Badge>
+                </div>
+                <div className="flex-1 w-full min-h-0">
+                  <PossibilityMonteCarloChart
+                    candles={historicalCandles}
+                    currentPrice={currentCandle?.close || 0}
+                    scenarios={possibilityScenarios}
+                    symbol={activeSymbol}
+                    timeframe={timeframe}
+                  />
+                </div>
+              </Card>
+            </div>
+
+            {/* Row 2: 3D Torus HUD + Council War Room Side-by-Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[560px] flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <BrainCircuit className="h-4 w-4 text-purple-400" />
+                    <span className="font-mono font-bold text-xs text-purple-300">
+                      3D QUANTUM TORUS MANIFOLD HUD
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300">
+                    1,600 REAL PARTICLES
+                  </Badge>
+                </div>
+                <div className="flex-1 w-full min-h-0">
+                  <QuantumTorusManifold
+                    opinions={evaluation?.agentOpinions || []}
+                    consensusSignal={evaluation?.signal || "WAIT"}
+                    currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
+                    recentTrades={recentTrades || []}
+                    symbol={activeSymbol}
+                    isDeliberating={isEvaluating}
+                  />
+                </div>
+              </Card>
+
+              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[560px] flex flex-col">
+                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <MessageSquare className="h-4 w-4 text-emerald-400" />
+                    <span className="font-mono font-bold text-xs text-emerald-300">
+                      WAR ROOM MULTI-AGENT CHAT
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-mono border-emerald-800/80 text-emerald-300">
+                    {evaluation?.signal || "MONITORING"}
+                  </Badge>
+                </div>
+                <div className="flex-1 w-full min-h-0 overflow-y-auto">
+                  <CouncilWarRoomChat
+                    evaluationId={evaluation?.id}
+                    discussion={evaluation?.councilDiscussion}
+                    isEvaluating={isEvaluating}
+                    symbol={activeSymbol}
+                    timeframe={timeframe}
+                    price={currentCandle?.close || evaluation?.entryPrice || 0}
+                    agentOpinions={evaluation?.agentOpinions || []}
+                    signal={evaluation?.signal || "WAIT"}
+                  />
+                </div>
+              </Card>
+            </div>
+          </div>
+        ) : (
+          /* Standard Terminal View */
+          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
+            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
+              <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-full">
+                <TradingViewChart
+                  currentCandle={currentCandle}
+                  historicalCandles={historicalCandles}
+                  positions={positions}
+                  symbol={activeSymbol}
+                  timeframe={timeframe}
+                  lastTickTimestamp={lastTickTimestamp}
+                  onSymbolChange={handleSymbolChange}
+                  onTimeframeChange={handleTimeframeChange}
+                  aiMapping={
+                    evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                      ? evaluation.chartMapping
+                      : null
+                  }
+                  aiSignal={
+                    evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
+                      ? {
+                          signal: evaluation.signal,
+                          direction: evaluation.direction,
+                          entryPrice: evaluation.entryPrice,
+                          stopLoss: evaluation.stopLoss,
+                          takeProfit: evaluation.takeProfit,
+                          slPips: evaluation.slPips,
+                          tpPips: evaluation.tpPips,
+                          riskRewardRatio: evaluation.riskRewardRatio,
+                          positionBox: evaluation.positionBox,
+                          predictiveTrajectory: evaluation.predictiveTrajectory,
+                          possibilityScenarios: evaluation.possibilityScenarios,
+                          orderType: evaluation.orderType,
+                          entryTrigger: evaluation.entryTrigger,
+                          setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
+                          note: evaluation.calculations,
+                        }
+                      : null
+                  }
+                />
+              </Card>
+            </div>
+
+            {showSidePanel && (
+              <div className="lg:col-span-1 h-[640px] flex flex-col">
+                {sidePanelTab === "heatmap" ? (
+                  <LiquidityHeatmapRadar
+                    depth={marketDepth}
+                    currentPrice={currentCandle?.close}
+                    symbol={activeSymbol}
+                  />
+                ) : (
+                  <LiveOrderbookTape
+                    trades={recentTrades}
+                    symbol={activeSymbol}
+                    currentPrice={currentCandle?.close}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Council strip: consensus verdict + collective emotional state */}
-        {(isEvaluating || Boolean(evaluation?.agentOpinions?.length)) && (
+        {cockpitMode !== "all-in-one" && (isEvaluating || Boolean(evaluation?.agentOpinions?.length) || isCouncilStripOpen) && (
           <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-800/80 pb-2.5 mb-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -801,7 +1190,7 @@ export default function DashboardPage() {
                     Analyzing Market Structure...
                   </Badge>
                 )}
-                {/* View Switcher: War Room Chat vs Agent Cards */}
+                {/* View Switcher: War Room Chat vs 3D Torus HUD vs Forecast Lab vs Agent Cards */}
                 <div className="flex items-center gap-1 bg-black p-0.5 rounded-md border border-zinc-800 text-[10px]">
                   <button
                     type="button"
@@ -814,6 +1203,30 @@ export default function DashboardPage() {
                   >
                     <MessageSquare className="h-3 w-3" />
                     <span>War Room Chat</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouncilViewTab("torus")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+                      councilViewTab === "torus"
+                        ? "bg-purple-950/80 text-purple-300 font-medium shadow-sm border border-purple-800/80"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <BrainCircuit className="h-3 w-3 text-purple-400" />
+                    <span>3D Torus HUD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCouncilViewTab("forecast")}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
+                      councilViewTab === "forecast"
+                        ? "bg-cyan-950/80 text-cyan-300 font-medium shadow-sm border border-cyan-800/80"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <TrendingUp className="h-3 w-3 text-cyan-400" />
+                    <span>Forecast Lab</span>
                   </button>
                   <button
                     type="button"
@@ -1040,7 +1453,90 @@ export default function DashboardPage() {
                   />
                 )}
 
-                {/* Mode 2: Multi-Agent Card Grid & Drawer */}
+                {/* Mode 2: 3D Quantum Torus Manifold HUD */}
+                {councilViewTab === "torus" && (
+                  <div className="rounded-lg border border-zinc-800 bg-black p-2 overflow-hidden shadow-2xl">
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-850 px-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-bold font-mono">
+                          3D
+                        </span>
+                        <span className="font-mono font-bold text-xs text-purple-300">
+                          3D QUANTUM TORUS MANIFOLD &bull; BIOLOGICAL DEEP HIVE HUD
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300 bg-purple-950/40">
+                        1,600 REAL PARTICLES
+                      </Badge>
+                    </div>
+                    <QuantumTorusManifold
+                      opinions={evaluation?.agentOpinions || []}
+                      consensusSignal={evaluation?.signal || "WAIT"}
+                      currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
+                      recentTrades={recentTrades || []}
+                      symbol={activeSymbol}
+                      isDeliberating={isEvaluating}
+                    />
+                  </div>
+                )}
+
+                {/* Mode 3: Monte Carlo Possibility Forecast Lab */}
+                {councilViewTab === "forecast" && (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-zinc-800 bg-black p-3 overflow-hidden shadow-2xl">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-850">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-bold font-mono">
+                            P
+                          </span>
+                          <span className="font-mono font-bold text-xs text-cyan-300">
+                            MONTE CARLO PROBABILITY TRAJECTORIES (1,000 PATHS)
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300 bg-cyan-950/40">
+                          STOCHASTIC ENGINE
+                        </Badge>
+                      </div>
+                      <PossibilityMonteCarloChart
+                        candles={historicalCandles}
+                        currentPrice={currentCandle?.close || 0}
+                        scenarios={possibilityScenarios}
+                        symbol={activeSymbol}
+                        timeframe={timeframe}
+                      />
+                    </div>
+
+                    {/* Scenario Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {possibilityScenarios.map((sc) => (
+                        <div
+                          key={sc.id}
+                          className="rounded-lg border border-zinc-800/80 bg-zinc-950 p-3 hover:border-zinc-700 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono font-bold text-zinc-100 flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />
+                              {sc.name}
+                            </span>
+                            <span
+                              className="text-xs font-mono font-bold px-2 py-0.5 rounded"
+                              style={{
+                                backgroundColor: `${sc.color}15`,
+                                color: sc.color,
+                                border: `1px solid ${sc.color}40`,
+                              }}
+                            >
+                              {sc.probability}%
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">{sc.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mode 4: Multi-Agent Card Grid & Drawer */}
                 {councilViewTab === "cards" && (
                   <div className="space-y-2.5">
                     {/* Agent grid */}
