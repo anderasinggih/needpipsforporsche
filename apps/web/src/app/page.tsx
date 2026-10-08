@@ -201,23 +201,17 @@ export default function DashboardPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  type CouncilViewTab = "chat" | "torus" | "forecast" | "cards";
-  type CockpitMode = "standard" | "torus" | "forecast" | "all-in-one";
+  type WorkspaceView = "chart" | "forecast" | "warroom" | "agents" | "journal";
 
-  // Expanded collapse states for agents
+  // Active Workspace View (Single source of truth)
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("chart");
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>("slot_1");
-  const [isCouncilStripOpen, setIsCouncilStripOpen] = useState(true);
-  const [councilViewTab, setCouncilViewTab] = useState<CouncilViewTab>("chat");
-  const [cockpitMode, setCockpitMode] = useState<CockpitMode>("standard");
 
-  const switchCockpitMode = (mode: CockpitMode) => {
-    setCockpitMode(mode);
-    if (mode === "torus") setCouncilViewTab("torus");
-    if (mode === "forecast") setCouncilViewTab("forecast");
+  const switchWorkspaceView = (view: WorkspaceView) => {
+    setWorkspaceView(view);
     if (typeof window !== "undefined") {
-      const newUrl = mode === "standard" ? window.location.pathname : `${window.location.pathname}?view=${mode}`;
+      const newUrl = view === "chart" ? window.location.pathname : `${window.location.pathname}?view=${view}`;
       window.history.replaceState({}, "", newUrl);
-      window.dispatchEvent(new CustomEvent("needpips:switch-view", { detail: mode }));
     }
   };
 
@@ -254,21 +248,9 @@ export default function DashboardPage() {
       // Check URL query param for initial view
       const params = new URLSearchParams(window.location.search);
       const viewParam = params.get("view");
-      if (viewParam === "torus" || viewParam === "forecast" || viewParam === "all-in-one" || viewParam === "standard") {
-        setCockpitMode(viewParam as CockpitMode);
-        if (viewParam === "torus") setCouncilViewTab("torus");
-        if (viewParam === "forecast") setCouncilViewTab("forecast");
+      if (viewParam === "forecast" || viewParam === "warroom" || viewParam === "agents" || viewParam === "chart" || viewParam === "journal") {
+        setWorkspaceView(viewParam as WorkspaceView);
       }
-
-      const handleExternalSwitch = (e: any) => {
-        if (e.detail) {
-          const m = e.detail as CockpitMode;
-          setCockpitMode(m);
-          if (m === "torus") setCouncilViewTab("torus");
-          if (m === "forecast") setCouncilViewTab("forecast");
-        }
-      };
-      window.addEventListener("needpips:switch-view", handleExternalSwitch);
 
       // Restore Selected Strategy & Rules Checklist
       try {
@@ -307,10 +289,6 @@ export default function DashboardPage() {
           }
         })
         .catch(() => {});
-
-      return () => {
-        window.removeEventListener("needpips:switch-view", handleExternalSwitch);
-      };
     }
   }, []);
 
@@ -438,10 +416,9 @@ export default function DashboardPage() {
     }
     try {
       setIsEvaluating(true);
-      // Immediately clear previous evaluation session so War Room Chat switches to live pending mode
+      // Immediately clear previous evaluation session and switch to War Room Chat
       setEvaluation(null);
-      setCouncilViewTab("chat");
-      setIsCouncilStripOpen(true);
+      switchWorkspaceView("warroom");
 
       // Load 10-key slots from localStorage if available
       let keySlots = [];
@@ -669,64 +646,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right Controls: Cockpit Switcher, Side Panel Toggle & Live Status (Strict 1-Row) */}
+          {/* Right Controls: Side Panel Toggle & Live Status (Strict 1-Row) */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Cockpit Mode Switcher (All-In-One, Terminal, 3D Torus, Forecast) */}
-            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
-              <button
-                type="button"
-                onClick={() => switchCockpitMode("standard")}
-                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
-                  cockpitMode === "standard"
-                    ? "bg-zinc-800 text-white font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="Standard Terminal (Chart + War Room)"
-              >
-                <Zap className="h-3 w-3 text-amber-400" />
-                <span className="hidden md:inline">TERMINAL</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => switchCockpitMode("torus")}
-                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
-                  cockpitMode === "torus"
-                    ? "bg-purple-950/80 text-purple-300 border border-purple-800 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="3D Quantum Torus Manifold HUD"
-              >
-                <BrainCircuit className="h-3 w-3 text-purple-400" />
-                <span className="hidden md:inline">3D TORUS</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => switchCockpitMode("forecast")}
-                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
-                  cockpitMode === "forecast"
-                    ? "bg-cyan-950/80 text-cyan-300 border border-cyan-800 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="Possibility Forecast Lab (Monte Carlo)"
-              >
-                <TrendingUp className="h-3 w-3 text-cyan-400" />
-                <span className="hidden md:inline">FORECAST</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => switchCockpitMode("all-in-one")}
-                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
-                  cockpitMode === "all-in-one"
-                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-semibold shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="All-In-One Unified Cockpit (All Modules Synchronized)"
-              >
-                <Layers className="h-3 w-3 text-emerald-400" />
-                <span className="hidden md:inline">ALL-IN-ONE</span>
-              </button>
-            </div>
-
             {/* Side Panel Toggle (Heatmap / Tape / Close) */}
             <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
               <button
@@ -817,999 +738,319 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Full-Width Terminal Content - Responsive padding */}
-      <div className="w-full px-2 sm:px-4 md:px-5 py-3 sm:py-4 space-y-3 sm:space-y-4">
-        {/* Visual Stage based on cockpitMode */}
-        {cockpitMode === "torus" ? (
-          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
-            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
-              <Card className="border-zinc-800 bg-black p-3 shadow-none overflow-hidden h-[640px] flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-2 border-b border-zinc-850 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-bold font-mono">
-                      3D
-                    </span>
-                    <span className="font-mono font-bold text-xs tracking-wider text-purple-300">
-                      QUANTUM TORUS MANIFOLD &bull; BIOLOGICAL DEEP HIVE HUD
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300 bg-purple-950/40">
-                      1,600 REAL PARTICLES
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEvaluate()}
-                      disabled={isEvaluating}
-                      className="h-7 text-xs font-mono border-purple-800 text-purple-300 bg-purple-950/30 hover:bg-purple-900/50"
-                    >
-                      {isEvaluating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                      DELIBERATE
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex-1 w-full min-h-0">
-                  <QuantumTorusManifold
-                    opinions={evaluation?.agentOpinions || []}
-                    consensusSignal={evaluation?.signal || "WAIT"}
-                    currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
-                    recentTrades={recentTrades || []}
-                    symbol={activeSymbol}
-                    isDeliberating={isEvaluating}
-                  />
-                </div>
-              </Card>
+            {/* Main Spacious Institutional Workspace - Max Width 1780px */}
+      <div className="w-full max-w-[1780px] mx-auto px-3 sm:px-6 py-4 space-y-4">
+        {/* Unified Institutional Workspace Navigation Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950 border border-zinc-800/90 rounded-xl p-2.5">
+          {/* Main 5 Workspace Tabs (Single Source of Truth) */}
+          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("chart")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "chart"
+                  ? "bg-zinc-800 text-emerald-400 font-semibold shadow-sm border border-zinc-700"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <Activity className="h-3.5 w-3.5 text-emerald-400" />
+              <span>LIVE CHART</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("forecast")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "forecast"
+                  ? "bg-cyan-950/70 text-cyan-300 font-semibold shadow-sm border border-cyan-800"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+              <span>QUANT FORECAST</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("warroom")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "warroom"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
+              <span>WAR ROOM CHAT</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("agents")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "agents"
+                  ? "bg-purple-950/70 text-purple-300 font-semibold shadow-sm border border-purple-800"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <Users className="h-3.5 w-3.5 text-purple-400" />
+              <span>AI COUNCIL &amp; PLAN</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("journal")}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "journal"
+                  ? "bg-amber-950/60 text-amber-300 font-semibold shadow-sm border border-amber-800"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5 text-amber-400" />
+              <span>TRADE JOURNAL ({evalLogs.length})</span>
+            </button>
+          </div>
+
+          {/* Right Action: Target RR + Quick Verdict + Single Deliberate Trigger */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            {/* Target RR Selector */}
+            <div className="flex items-center gap-1 rounded-md bg-black border border-zinc-800 p-1 text-xs font-mono">
+              <span className="text-zinc-500 text-[10px] uppercase px-1">RR:</span>
+              {[1.5, 2.0, 2.5, 3.0].map((rrVal) => (
+                <button
+                  key={rrVal}
+                  type="button"
+                  onClick={() => handleTargetRrChange(rrVal)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium transition-colors ${
+                    targetRr === rrVal
+                      ? "bg-zinc-800 text-emerald-400 border border-zinc-700"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  1:{rrVal.toFixed(1)}
+                </button>
+              ))}
             </div>
-            {showSidePanel && (
-              <div className="lg:col-span-1 h-[640px] flex flex-col">
-                {sidePanelTab === "heatmap" ? (
-                  <LiquidityHeatmapRadar depth={marketDepth} currentPrice={currentCandle?.close} symbol={activeSymbol} />
-                ) : (
-                  <LiveOrderbookTape trades={recentTrades} symbol={activeSymbol} currentPrice={currentCandle?.close} />
-                )}
+
+            {/* Quick Verdict Badge */}
+            {evaluation?.signal && (
+              <Badge
+                variant="outline"
+                className={`text-xs font-mono px-2.5 py-1 ${
+                  evaluation.signal === "BUY"
+                    ? "border-emerald-800 text-emerald-400 bg-emerald-950/30"
+                    : evaluation.signal === "SELL"
+                    ? "border-red-800 text-red-400 bg-red-950/30"
+                    : "border-amber-800 text-amber-400 bg-amber-950/30"
+                }`}
+              >
+                {evaluation.signal} ({evaluation.confidence}%) &bull; SL {evaluation.slPips}p &bull; TP {evaluation.tpPips}p
+              </Badge>
+            )}
+
+            {/* Single Prominent Deliberate Button */}
+            <Button
+              size="sm"
+              onClick={() => handleEvaluate()}
+              disabled={isEvaluating}
+              className="h-8 px-3 text-xs font-mono font-semibold bg-emerald-600 hover:bg-emerald-500 text-black border-0 shadow-lg shadow-emerald-950/40"
+            >
+              {isEvaluating ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ANALYZING...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3.5 w-3.5 mr-1.5 fill-black" />
+                  DELIBERATE
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* 1. LIVE CHART VIEW (Clean, Spacious, Zero Underneath Clutter) */}
+        {workspaceView === "chart" && (
+          <div className="space-y-3">
+            {/* Planned Order Status Strip (If exists) */}
+            {evaluation?.plannedOrder && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span className="font-bold text-amber-300">
+                    {evaluation.plannedOrder.type === "BUY_LIMIT" ? "PLANNED BUY LIMIT" : "PLANNED SELL LIMIT"}
+                  </span>
+                  <span className="text-zinc-200 font-semibold">${evaluation.plannedOrder.price}</span>
+                  <span className="text-red-400">SL: ${evaluation.plannedOrder.sl} (-{evaluation.plannedOrder.slPips}p)</span>
+                  <span className="text-emerald-400">TP: ${evaluation.plannedOrder.tp} (+{evaluation.plannedOrder.tpPips}p)</span>
+                  <span className="text-zinc-400">RR: {evaluation.plannedOrder.rr}</span>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="text-amber-200/90">{evaluation.plannedOrder.status || evaluation.entryTrigger || "ARMED"}</span>
+                  <button
+                    type="button"
+                    onClick={() => switchWorkspaceView("agents")}
+                    className="text-cyan-400 hover:underline font-semibold"
+                  >
+                    View Plan &amp; Council &rarr;
+                  </button>
+                </div>
               </div>
             )}
-          </div>
-        ) : cockpitMode === "forecast" ? (
-          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
-            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
-              <Card className="border-zinc-800 bg-black p-3 shadow-none overflow-hidden h-full">
-                <div className="flex items-center justify-between pb-2 border-b border-zinc-850 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-bold font-mono">
-                      P
-                    </span>
-                    <span className="font-mono font-bold text-xs tracking-wider text-cyan-300">
-                      POSSIBILITY FORECAST LAB &bull; 1,000-PATH MONTE CARLO TRAJECTORIES
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300 bg-cyan-950/40">
-                      STOCHASTIC ENGINE
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEvaluate()}
-                      disabled={isEvaluating}
-                      className="h-7 text-xs font-mono border-cyan-800 text-cyan-300 bg-cyan-950/30 hover:bg-cyan-900/50"
-                    >
-                      {isEvaluating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                      SIMULATE
-                    </Button>
-                  </div>
-                </div>
-                <PossibilityMonteCarloChart
-                  candles={historicalCandles}
-                  currentPrice={currentCandle?.close || 0}
-                  scenarios={possibilityScenarios}
-                  symbol={activeSymbol}
-                  timeframe={timeframe}
-                />
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {possibilityScenarios.map((sc) => (
-                    <div key={sc.id} className="rounded border border-zinc-800/80 bg-zinc-950 p-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-mono font-semibold text-zinc-200 flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />
-                          {sc.name}
-                        </span>
-                        <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: `${sc.color}20`, color: sc.color }}>
-                          {sc.probability}%
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-zinc-400 leading-tight">{sc.description}</p>
+
+            {/* TradingView Chart + Optional Side Panel */}
+            <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-4`}>
+              <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
+                <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-[700px]">
+                  <TradingViewChart
+                    currentCandle={currentCandle}
+                    historicalCandles={historicalCandles}
+                    symbol={activeSymbol}
+                    timeframe={timeframe}
+                    onTimeframeChange={handleTimeframeChange}
+                    positions={positions}
+                    lastTickTimestamp={lastTickTimestamp}
+                    aiMapping={(evaluation?.chartMapping as AIMapping | null) ?? null}
+                    aiSignal={
+                      evaluation
+                        ? {
+                            signal: evaluation.signal,
+                            direction: evaluation.direction,
+                            entryPrice: evaluation.entryPrice,
+                            stopLoss: evaluation.stopLoss,
+                            takeProfit: evaluation.takeProfit,
+                            slPips: evaluation.slPips,
+                            tpPips: evaluation.tpPips,
+                            riskRewardRatio: evaluation.riskRewardRatio,
+                            positionBox: evaluation.positionBox,
+                            predictiveTrajectory: evaluation.predictiveTrajectory,
+                            possibilityScenarios: evaluation.possibilityScenarios,
+                            orderType: evaluation.orderType,
+                            entryTrigger: evaluation.entryTrigger,
+                            setupPrice: (evaluation as any).setupPrice ?? evaluation.entryPrice,
+                            note: evaluation.notes,
+                          }
+                        : null
+                    }
+                  />
+                </Card>
+              </div>
+
+              {/* Integrated Side Panel (Tape or Heatmap) */}
+              {showSidePanel && (
+                <div className="lg:col-span-1 h-[700px] flex flex-col gap-2">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <div className="flex items-center gap-2 text-xs font-mono font-medium text-zinc-300">
+                      {sidePanelTab === "tape" ? (
+                        <>
+                          <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>LIVE L2 ORDERFLOW TAPE</span>
+                        </>
+                      ) : (
+                        <>
+                          <Layers className="h-3.5 w-3.5 text-cyan-400" />
+                          <span>LIQUIDITY HEATMAP RADAR</span>
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-            {showSidePanel && (
-              <div className="lg:col-span-1 h-[640px] flex flex-col">
-                {sidePanelTab === "heatmap" ? (
-                  <LiquidityHeatmapRadar depth={marketDepth} currentPrice={currentCandle?.close} symbol={activeSymbol} />
-                ) : (
-                  <LiveOrderbookTape trades={recentTrades} symbol={activeSymbol} currentPrice={currentCandle?.close} />
-                )}
-              </div>
-            )}
-          </div>
-        ) : cockpitMode === "all-in-one" ? (
-          <div className="space-y-4">
-            {/* Row 1: Dual Visuals - TradingView Candlestick Chart + Possibility Monte Carlo Forecast */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-[540px]">
-                <TradingViewChart
-                  currentCandle={currentCandle}
-                  historicalCandles={historicalCandles}
-                  positions={positions}
-                  symbol={activeSymbol}
-                  timeframe={timeframe}
-                  lastTickTimestamp={lastTickTimestamp}
-                  onSymbolChange={handleSymbolChange}
-                  onTimeframeChange={handleTimeframeChange}
-                  aiMapping={
-                    evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                      ? evaluation.chartMapping
-                      : null
-                  }
-                  aiSignal={
-                    evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                      ? {
-                          signal: evaluation.signal,
-                          direction: evaluation.direction,
-                          entryPrice: evaluation.entryPrice,
-                          stopLoss: evaluation.stopLoss,
-                          takeProfit: evaluation.takeProfit,
-                          slPips: evaluation.slPips,
-                          tpPips: evaluation.tpPips,
-                          riskRewardRatio: evaluation.riskRewardRatio,
-                          positionBox: evaluation.positionBox,
-                          predictiveTrajectory: evaluation.predictiveTrajectory,
-                          possibilityScenarios: evaluation.possibilityScenarios,
-                          orderType: evaluation.orderType,
-                          entryTrigger: evaluation.entryTrigger,
-                          setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
-                          note: evaluation.calculations,
-                        }
-                      : null
-                  }
-                />
-              </Card>
-
-              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[540px] flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <TrendingUp className="h-4 w-4 text-cyan-400" />
-                    <span className="font-mono font-bold text-xs text-cyan-300">
-                      MONTE CARLO PROBABILITIES (1,000 PATHS)
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSidePanelTab(sidePanelTab === "tape" ? "heatmap" : "tape")}
+                        className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
+                      >
+                        {sidePanelTab === "tape" ? "Show Heatmap" : "Show Tape"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSidePanel(false)}
+                        className="p-1 text-zinc-500 hover:text-zinc-300 text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300">
-                    {possibilityScenarios.length} BRANCHES
-                  </Badge>
-                </div>
-                <div className="flex-1 w-full min-h-0">
-                  <PossibilityMonteCarloChart
-                    candles={historicalCandles}
-                    currentPrice={currentCandle?.close || 0}
-                    scenarios={possibilityScenarios}
-                    symbol={activeSymbol}
-                    timeframe={timeframe}
-                  />
-                </div>
-              </Card>
-            </div>
 
-            {/* Row 2: 3D Torus HUD + Council War Room Side-by-Side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[560px] flex flex-col justify-between">
-                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <BrainCircuit className="h-4 w-4 text-purple-400" />
-                    <span className="font-mono font-bold text-xs text-purple-300">
-                      3D QUANTUM TORUS MANIFOLD HUD
-                    </span>
+                  <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-850 bg-black">
+                    {sidePanelTab === "tape" ? (
+                      <LiveOrderbookTape
+                        trades={recentTrades}
+                        symbol={activeSymbol}
+                        currentPrice={currentCandle?.close}
+                      />
+                    ) : (
+                      <LiquidityHeatmapRadar
+                        depth={marketDepth}
+                        currentPrice={currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650)}
+                        symbol={activeSymbol}
+                      />
+                    )}
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300">
-                    1,600 REAL PARTICLES
-                  </Badge>
                 </div>
-                <div className="flex-1 w-full min-h-0">
-                  <QuantumTorusManifold
-                    opinions={evaluation?.agentOpinions || []}
-                    consensusSignal={evaluation?.signal || "WAIT"}
-                    currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
-                    recentTrades={recentTrades || []}
-                    symbol={activeSymbol}
-                    isDeliberating={isEvaluating}
-                  />
-                </div>
-              </Card>
-
-              <Card className="border-zinc-800 bg-black p-2.5 shadow-none overflow-hidden h-[560px] flex flex-col">
-                <div className="flex items-center justify-between pb-1.5 border-b border-zinc-850 mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <MessageSquare className="h-4 w-4 text-emerald-400" />
-                    <span className="font-mono font-bold text-xs text-emerald-300">
-                      WAR ROOM MULTI-AGENT CHAT
-                    </span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] font-mono border-emerald-800/80 text-emerald-300">
-                    {evaluation?.signal || "MONITORING"}
-                  </Badge>
-                </div>
-                <div className="flex-1 w-full min-h-0 overflow-y-auto">
-                  <CouncilWarRoomChat
-                    evaluationId={evaluation?.id}
-                    discussion={evaluation?.councilDiscussion}
-                    isEvaluating={isEvaluating}
-                    symbol={activeSymbol}
-                    timeframe={timeframe}
-                    price={currentCandle?.close || evaluation?.entryPrice || 0}
-                    agentOpinions={evaluation?.agentOpinions || []}
-                    signal={evaluation?.signal || "WAIT"}
-                  />
-                </div>
-              </Card>
+              )}
             </div>
-          </div>
-        ) : (
-          /* Standard Terminal View */
-          <div className={`grid grid-cols-1 ${showSidePanel ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 sm:gap-4`}>
-            <div className={showSidePanel ? "lg:col-span-3" : "w-full"}>
-              <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-full">
-                <TradingViewChart
-                  currentCandle={currentCandle}
-                  historicalCandles={historicalCandles}
-                  positions={positions}
-                  symbol={activeSymbol}
-                  timeframe={timeframe}
-                  lastTickTimestamp={lastTickTimestamp}
-                  onSymbolChange={handleSymbolChange}
-                  onTimeframeChange={handleTimeframeChange}
-                  aiMapping={
-                    evaluation?.chartMapping && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                      ? evaluation.chartMapping
-                      : null
-                  }
-                  aiSignal={
-                    evaluation?.signal && (!evaluation.symbol || evaluation.symbol === activeSymbol) && (!evaluation.timeframe || evaluation.timeframe === timeframe)
-                      ? {
-                          signal: evaluation.signal,
-                          direction: evaluation.direction,
-                          entryPrice: evaluation.entryPrice,
-                          stopLoss: evaluation.stopLoss,
-                          takeProfit: evaluation.takeProfit,
-                          slPips: evaluation.slPips,
-                          tpPips: evaluation.tpPips,
-                          riskRewardRatio: evaluation.riskRewardRatio,
-                          positionBox: evaluation.positionBox,
-                          predictiveTrajectory: evaluation.predictiveTrajectory,
-                          possibilityScenarios: evaluation.possibilityScenarios,
-                          orderType: evaluation.orderType,
-                          entryTrigger: evaluation.entryTrigger,
-                          setupPrice: (evaluation as any).setupPrice ?? evaluation.positionBox?.entryPrice,
-                          note: evaluation.calculations,
-                        }
-                      : null
-                  }
-                />
-              </Card>
-            </div>
-
-            {showSidePanel && (
-              <div className="lg:col-span-1 h-[640px] flex flex-col">
-                {sidePanelTab === "heatmap" ? (
-                  <LiquidityHeatmapRadar
-                    depth={marketDepth}
-                    currentPrice={currentCandle?.close}
-                    symbol={activeSymbol}
-                  />
-                ) : (
-                  <LiveOrderbookTape
-                    trades={recentTrades}
-                    symbol={activeSymbol}
-                    currentPrice={currentCandle?.close}
-                  />
-                )}
-              </div>
-            )}
           </div>
         )}
 
-        {/* Council strip: consensus verdict + collective emotional state */}
-        {cockpitMode !== "all-in-one" && (isEvaluating || Boolean(evaluation?.agentOpinions?.length) || isCouncilStripOpen) && (
-          <Card className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-800/80 pb-2.5 mb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-200">
-                  Multi-Agent Scalping Council
-                </span>
-                <span className="text-[10px] sm:text-[11px] text-zinc-500">
-                  {isEvaluating
-                    ? "(Deliberating in Progress...)"
-                    : `(${evaluation?.activeAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "active").length ?? 0} Active • ${evaluation?.offlineAgentCount ?? evaluation?.agentOpinions?.filter((a) => a.status === "not_contributed").length ?? 0} Offline)`}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                {/* Interactive Target RR Selector */}
-                <div className="flex items-center gap-1 rounded-md bg-black border border-zinc-800 p-0.5 sm:p-1">
-                  <span className="text-[9px] sm:text-[10px] font-mono text-zinc-500 uppercase px-1">RR:</span>
-                  {[1.5, 2.0, 2.5, 3.0].map((rrVal) => (
-                    <button
-                      key={rrVal}
-                      type="button"
-                      onClick={() => handleTargetRrChange(rrVal)}
-                      className={`px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-mono font-medium transition-colors ${
-                        targetRr === rrVal
-                          ? "bg-zinc-800 text-emerald-400 border border-zinc-700 shadow-sm"
-                          : "text-zinc-400 hover:text-zinc-200"
-                      }`}
-                    >
-                      1:{rrVal.toFixed(1)}
-                    </button>
-                  ))}
-                </div>
+        {/* 2. QUANT FORECAST VIEW (Monte Carlo Simulation & Scenarios) */}
+        {workspaceView === "forecast" && (
+          <div className="space-y-4">
+            <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-[620px]">
+              <PossibilityMonteCarloChart
+                candles={historicalCandles || []}
+                currentPrice={currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650)}
+                scenarios={possibilityScenarios}
+                symbol={activeSymbol}
+                timeframe={timeframe}
+              />
+            </Card>
 
-                {evaluation ? (() => {
-                  const isFilled = (evaluation as any).entryFilled === true;
-                  const isWaitPlan = evaluation.signal === "WAIT";
-                  const activeDir = evaluation.direction === "BULLISH" ? "Buy" : evaluation.direction === "BEARISH" ? "Sell" : "Trade";
-                  const badgeColor = isWaitPlan && !isFilled
-                    ? "border-amber-800 text-amber-400"
-                    : (evaluation.signal === "BUY" || evaluation.direction === "BULLISH")
-                    ? "border-emerald-800 text-emerald-400"
-                    : "border-red-800 text-red-400";
-
-                  const labelText = isWaitPlan
-                    ? isFilled
-                      ? `● Triggered ${activeDir}`
-                      : `Wait (${evaluation.confidence}%)`
-                    : evaluation.signal === "BUY"
-                    ? "Buy"
-                    : evaluation.signal === "SELL"
-                    ? "Sell"
-                    : "Wait";
-
-                  return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {possibilityScenarios.map((sc) => (
+                <Card key={sc.id} className="border-zinc-800 bg-zinc-950 p-3.5 shadow-none space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-semibold text-zinc-200">{sc.name}</span>
                     <Badge
                       variant="outline"
-                      className={`text-[10px] sm:text-[11px] font-mono ${badgeColor}`}
+                      className="font-mono text-[11px]"
+                      style={{ color: sc.color, borderColor: `${sc.color}40`, backgroundColor: `${sc.color}15` }}
                     >
-                      {labelText}{" "}
-                      {isWaitPlan && isFilled ? `(Entry Filled)` : `(${evaluation.confidence}%)`} &bull; SL {evaluation.slPips ?? 35}p &bull; {evaluation.riskRewardRatio ?? `1:${targetRr}`}
+                      {sc.probability}% Prob
                     </Badge>
-                  );
-                })() : (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] sm:text-[11px] font-mono border-amber-800/80 text-amber-400 animate-pulse"
-                  >
-                    Analyzing Market Structure...
-                  </Badge>
-                )}
-                {/* View Switcher: War Room Chat vs 3D Torus HUD vs Forecast Lab vs Agent Cards */}
-                <div className="flex items-center gap-1 bg-black p-0.5 rounded-md border border-zinc-800 text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setCouncilViewTab("chat")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      councilViewTab === "chat"
-                        ? "bg-zinc-800 text-emerald-400 font-medium shadow-sm"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    <span>War Room Chat</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCouncilViewTab("torus")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      councilViewTab === "torus"
-                        ? "bg-purple-950/80 text-purple-300 font-medium shadow-sm border border-purple-800/80"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <BrainCircuit className="h-3 w-3 text-purple-400" />
-                    <span>3D Torus HUD</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCouncilViewTab("forecast")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      councilViewTab === "forecast"
-                        ? "bg-cyan-950/80 text-cyan-300 font-medium shadow-sm border border-cyan-800/80"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <TrendingUp className="h-3 w-3 text-cyan-400" />
-                    <span>Forecast Lab</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCouncilViewTab("cards")}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      councilViewTab === "cards"
-                        ? "bg-zinc-800 text-zinc-100 font-medium shadow-sm"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Users className="h-3 w-3" />
-                    <span>Agent Cards</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsCouncilStripOpen(!isCouncilStripOpen)}
-                  className="text-zinc-500 hover:text-zinc-300 text-xs font-mono flex items-center gap-1 ml-auto sm:ml-0"
-                >
-                  {isCouncilStripOpen ? "Minimize" : "Expand All"}
-                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isCouncilStripOpen ? "rotate-180" : ""}`} />
-                </button>
-              </div>
+                  </div>
+                  <p className="text-xs text-zinc-400 font-sans leading-relaxed">{sc.description}</p>
+                </Card>
+              ))}
             </div>
+          </div>
+        )}
 
-            {evaluation?.emotionalState && (
-              <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-                {/* Overall council emotion + meter */}
-                <div className="rounded border border-zinc-800 bg-black p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
-                      State Emosi Dewan
-                    </span>
-                    <span
-                      className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${
-                        EMOTION_TONE_CLASS[evaluation.emotionalState.dominantEmotionTone]
-                      }`}
-                    >
-                      {evaluation.emotionalState.dominantEmotionIcon}{" "}
-                      {evaluation.emotionalState.dominantEmotionLabel}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="font-mono text-2xl leading-none">
-                      {evaluation.emotionalState.dominantEmotionIcon}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                        <span>Emotion meter</span>
-                        <span className="text-zinc-300">{evaluation.emotionalState.emotionMeter}/100</span>
-                      </div>
-                      <MeterBar
-                        value={evaluation.emotionalState.emotionMeter}
-                        tone={evaluation.emotionalState.dominantEmotionTone}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                    {[
-                      { label: "Mood", value: `${evaluation.emotionalState.moodIndex > 0 ? "+" : ""}${evaluation.emotionalState.moodIndex}` },
-                      { label: "Kohesif", value: `${evaluation.emotionalState.coherence}%` },
-                      { label: "Dispersi", value: `${evaluation.emotionalState.emotionSpread}%` },
-                    ].map((m) => (
-                      <div key={m.label} className="rounded bg-zinc-900/60 px-1 py-1">
-                        <div className="text-[9px] font-mono text-zinc-500">{m.label}</div>
-                        <div className="text-[11px] font-mono text-zinc-200">{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
-                    {evaluation.emotionalState.councilMood}
-                  </p>
-                </div>
-
-                {/* Emotion distribution + psychology profile */}
-                <div className="rounded border border-zinc-800 bg-black p-3">
-                  <div className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
-                    Komposisi Emosi &amp; Profil Psikologis
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {evaluation.emotionalState.breakdown.map((entry) => (
-                      <span
-                        key={entry.emotion}
-                        className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${EMOTION_TONE_CLASS[entry.tone]}`}
-                        title={`${entry.count} agen, intensitas rata-rata ${entry.avgIntensity}`}
-                      >
-                        {entry.icon} {entry.label} &middot; {entry.count} &middot; {entry.weight}%
-                      </span>
-                    ))}
-                    {evaluation.emotionalState.breakdown.length === 0 && (
-                      <span className="text-[10px] font-mono text-zinc-600">Tidak ada data emosi</span>
-                    )}
-                  </div>
-                  <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[
-                      { label: "Disiplin", value: evaluation.emotionalState.psychology.discipline },
-                      { label: "Kesabaran", value: evaluation.emotionalState.psychology.patience },
-                      { label: "Anti FOMO", value: evaluation.emotionalState.psychology.fomoResistance },
-                      { label: "Siap eksekusi", value: evaluation.emotionalState.psychology.executionReadiness },
-                    ].map((m) => (
-                      <div key={m.label}>
-                        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-500">
-                          <span>{m.label}</span>
-                          <span className="text-zinc-300">{m.value}</span>
-                        </div>
-                        <MeterBar
-                          value={m.value}
-                          tone={m.value >= 70 ? "constructive" : m.value >= 50 ? "neutral" : m.value >= 35 ? "caution" : "destructive"}
-                          className="mt-1"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
-                    {evaluation.emotionalState.psychology.summary}
-                  </p>
-                  {evaluation.emotionalState.warning && (
-                    <p className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-amber-300/90">
-                      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                      <span>{evaluation.emotionalState.warning}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {evaluation?.consensus && (
-              <div className="mb-3 flex flex-wrap items-center gap-2 rounded border border-zinc-800 bg-black px-3 py-2 text-[10px] font-mono text-zinc-400">
-                <span className="text-zinc-300">Weighted voting:</span>
-                <span className="text-emerald-400">bull {evaluation.consensus.bullishWeight}</span>
-                <span className="text-red-400">bear {evaluation.consensus.bearishWeight}</span>
-                <span className="text-zinc-500">netral {evaluation.consensus.neutralWeight}</span>
-                <span className="text-zinc-700">|</span>
-                <span>kesesuaian {(evaluation.consensus.agreement * 100).toFixed(0)}%</span>
-                <span className="text-zinc-700">|</span>
-                <span>partisipasi {(evaluation.consensus.participation * 100).toFixed(0)}%</span>
-                <span className="text-zinc-700">|</span>
-                <span>veto {evaluation.consensus.vetoes.length}</span>
-                {evaluation.expectancy && (
-                  <>
-                    <span className="text-zinc-700">|</span>
-                    <span
-                      className={
-                        evaluation.expectancy.verdict === "POSITIVE_EDGE"
-                          ? "text-emerald-400"
-                          : evaluation.expectancy.verdict === "THIN_EDGE"
-                          ? "text-amber-400"
-                          : "text-red-400"
-                      }
-                    >
-                      EV {evaluation.expectancy.expectedValuePips} pips @ WR{" "}
-                      {(evaluation.expectancy.winProbability * 100).toFixed(0)}% (BE{" "}
-                      {(evaluation.expectancy.breakEvenWinRate * 100).toFixed(0)}%)
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Smart Planned Order Card (Even if WAIT / PENDING RETEST) */}
-            {evaluation?.plannedOrder && (
-              <div className="mb-3 rounded border border-amber-900/60 bg-amber-950/20 px-3.5 py-2.5 font-mono text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-900/40 pb-1.5 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                    </span>
-                    <span className="font-semibold text-amber-300">
-                      {evaluation.plannedOrder.type === "BUY_LIMIT" ? "🎯 PLANNED BUY LIMIT" : "🎯 PLANNED SELL LIMIT"}
-                    </span>
-                    <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-400 border border-zinc-800">
-                      {evaluation.signal === "WAIT" ? "Pending Pullback Trigger" : "Armed for Execution"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-zinc-400">Target RR:</span>
-                    <span className="font-bold text-emerald-400">{evaluation.plannedOrder.rr}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]">
-                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
-                    <span className="text-[10px] text-zinc-500 block">Pending Limit</span>
-                    <span className="font-bold text-zinc-100">${evaluation.plannedOrder.price}</span>
-                  </div>
-                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
-                    <span className="text-[10px] text-red-400/90 block">Stop Loss</span>
-                    <span className="font-bold text-red-300">${evaluation.plannedOrder.sl} ({evaluation.plannedOrder.slPips}p)</span>
-                  </div>
-                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80">
-                    <span className="text-[10px] text-emerald-400/90 block">Take Profit</span>
-                    <span className="font-bold text-emerald-300">${evaluation.plannedOrder.tp} ({evaluation.plannedOrder.tpPips}p)</span>
-                  </div>
-                  <div className="rounded bg-black/60 p-1.5 border border-zinc-800/80 flex flex-col justify-center">
-                    <span className="text-[9px] text-zinc-500 block">Status Trigger</span>
-                    <span className="text-[10px] text-amber-400 truncate">{evaluation.entryTrigger || evaluation.plannedOrder.rationale}</span>
-                  </div>
-                </div>
-
-                {evaluation.plannedOrder.rationale && (
-                  <p className="mt-2 text-[10px] text-zinc-400 font-sans italic">
-                    💡 Rationale Dewan: {evaluation.plannedOrder.rationale}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {isCouncilStripOpen && (
-              <div className="space-y-3">
-                {/* Mode 1: War Room Interactive Chat */}
-                {councilViewTab === "chat" && (
-                  <CouncilWarRoomChat
-                    evaluationId={evaluation?.id}
-                    discussion={evaluation?.councilDiscussion}
-                    isEvaluating={isEvaluating}
-                    symbol={activeSymbol}
-                    timeframe={timeframe}
-                    price={currentCandle?.close || evaluation?.entryPrice || 0}
-                    agentOpinions={evaluation?.agentOpinions || []}
-                    signal={evaluation?.signal || "WAIT"}
-                  />
-                )}
-
-                {/* Mode 2: 3D Quantum Torus Manifold HUD */}
-                {councilViewTab === "torus" && (
-                  <div className="rounded-lg border border-zinc-800 bg-black p-2 overflow-hidden shadow-2xl">
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-850 px-2">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-[10px] font-bold font-mono">
-                          3D
-                        </span>
-                        <span className="font-mono font-bold text-xs text-purple-300">
-                          3D QUANTUM TORUS MANIFOLD &bull; BIOLOGICAL DEEP HIVE HUD
-                        </span>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] font-mono border-purple-800/80 text-purple-300 bg-purple-950/40">
-                        1,600 REAL PARTICLES
-                      </Badge>
-                    </div>
-                    <QuantumTorusManifold
-                      opinions={evaluation?.agentOpinions || []}
-                      consensusSignal={evaluation?.signal || "WAIT"}
-                      currentPrice={currentCandle?.close || evaluation?.entryPrice || 0}
-                      recentTrades={recentTrades || []}
-                      symbol={activeSymbol}
-                      isDeliberating={isEvaluating}
-                    />
-                  </div>
-                )}
-
-                {/* Mode 3: Monte Carlo Possibility Forecast Lab */}
-                {councilViewTab === "forecast" && (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-zinc-800 bg-black p-3 overflow-hidden shadow-2xl">
-                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-zinc-850">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 items-center justify-center rounded bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-bold font-mono">
-                            P
-                          </span>
-                          <span className="font-mono font-bold text-xs text-cyan-300">
-                            MONTE CARLO PROBABILITY TRAJECTORIES (1,000 PATHS)
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] font-mono border-cyan-800/80 text-cyan-300 bg-cyan-950/40">
-                          STOCHASTIC ENGINE
-                        </Badge>
-                      </div>
-                      <PossibilityMonteCarloChart
-                        candles={historicalCandles}
-                        currentPrice={currentCandle?.close || 0}
-                        scenarios={possibilityScenarios}
-                        symbol={activeSymbol}
-                        timeframe={timeframe}
-                      />
-                    </div>
-
-                    {/* Scenario Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      {possibilityScenarios.map((sc) => (
-                        <div
-                          key={sc.id}
-                          className="rounded-lg border border-zinc-800/80 bg-zinc-950 p-3 hover:border-zinc-700 transition-colors"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-mono font-bold text-zinc-100 flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />
-                              {sc.name}
-                            </span>
-                            <span
-                              className="text-xs font-mono font-bold px-2 py-0.5 rounded"
-                              style={{
-                                backgroundColor: `${sc.color}15`,
-                                color: sc.color,
-                                border: `1px solid ${sc.color}40`,
-                              }}
-                            >
-                              {sc.probability}%
-                            </span>
-                          </div>
-                          <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">{sc.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Mode 4: Multi-Agent Card Grid & Drawer */}
-                {councilViewTab === "cards" && (
-                  <div className="space-y-2.5">
-                    {/* Agent grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                      {(evaluation?.agentOpinions || []).map((agent) => {
-                        const isExpanded = expandedAgentId === agent.agentId;
-                    const isChief = agent.agentId === "slot_1";
-                    const isNotContributed = agent.status === "not_contributed";
-
-                    return (
-                      <div
-                        key={agent.agentId}
-                        onClick={() => toggleAgentCollapse(agent.agentId)}
-                        className={`cursor-pointer rounded border p-2 text-xs transition-all select-none ${
-                          isNotContributed
-                            ? "border-zinc-900 bg-black/40 opacity-60 hover:opacity-100"
-                            : isChief
-                            ? isExpanded
-                              ? "border-emerald-700 bg-emerald-950/25 ring-1 ring-emerald-600/40"
-                              : "border-emerald-900/60 bg-emerald-950/10 hover:border-emerald-700"
-                            : isExpanded
-                            ? "border-zinc-600 bg-zinc-900 ring-1 ring-zinc-500/30"
-                            : "border-zinc-800/90 bg-black hover:border-zinc-700"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-mono text-[10px] font-semibold text-zinc-200 truncate pr-1">
-                            {agent.agentName}
-                          </span>
-                          {isNotContributed ? (
-                            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-amber-500 border border-amber-900/40">
-                              Offline
-                            </span>
-                          ) : (
-                            <span
-                              className={`text-[9px] font-mono font-medium px-1.5 py-0.5 rounded ${
-                                agent.bias === "BULLISH"
-                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
-                                  : agent.bias === "BEARISH"
-                                  ? "bg-red-950/60 text-red-400 border border-red-900/50"
-                                  : "bg-zinc-800 text-zinc-400"
-                              }`}
-                            >
-                              {BIAS_LABEL[agent.bias]}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Emotion chip with intensity meter */}
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          <span
-                            className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-mono ${
-                              EMOTION_TONE_CLASS[agent.emotionTone || "neutral"]
-                            }`}
-                            title={agent.emotionReason || agent.emotionLabel}
-                          >
-                            <span className="text-[11px] leading-none">{agent.emotionIcon || "😐"}</span>
-                            {agent.emotionLabel || "Netral"}
-                          </span>
-                          <div className="flex-1">
-                            <MeterBar
-                              value={agent.emotionIntensity ?? 0}
-                              tone={agent.emotionTone || "neutral"}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="text-[9px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
-                          <span className="truncate">{agent.provider}</span>
-                          <span className="text-[8px] text-zinc-600 truncate">{agent.modelUsed}</span>
-                        </div>
-
-                        <p className="mt-1 text-[10px] text-zinc-400 leading-tight line-clamp-2">
-                          {isNotContributed ? "Not Contributed (API Key empty/offline)" : agent.keyObservation}
-                        </p>
-
-                        <div className="mt-1.5 pt-1 border-t border-zinc-900 flex items-center justify-between text-[9px] font-mono text-zinc-500">
-                          <span className="flex items-center gap-1.5">
-                            {!isNotContributed && (
-                              <span className="text-zinc-600">qual {agent.reasoningQuality ?? 0}</span>
-                            )}
-                            {agent.voteVetoed && <span className="text-red-400">veto</span>}
-                            <span>{isNotContributed ? "Detail Offline" : isExpanded ? "Tutup" : "Detail"}</span>
-                          </span>
-                          <ChevronDown className={`h-2.5 w-2.5 transition-transform ${isExpanded ? "rotate-180 text-emerald-400" : ""}`} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Expanded Detail Drawer for Selected Agent */}
-                {expandedAgentId && (() => {
-                  const selectedAgent = evaluation?.agentOpinions?.find((a) => a.agentId === expandedAgentId);
-                  if (!selectedAgent) return null;
-                  const isChief = selectedAgent.agentId === "slot_1";
-                  const isOffline = selectedAgent.status === "not_contributed";
-
-                  return (
-                    <div className={`rounded-lg border p-3.5 transition-all text-xs font-sans ${
-                      isOffline
-                        ? "border-amber-900/40 bg-zinc-950/90"
-                        : isChief
-                        ? "border-emerald-800/80 bg-black/95"
-                        : "border-zinc-800 bg-black/95"
-                    }`}>
-                      <div className="flex flex-wrap items-center justify-between border-b border-zinc-800/80 pb-2 mb-2.5">
-                        <div className="flex items-center gap-2">
-                          {isOffline ? (
-                            <AlertCircle className="h-4 w-4 text-amber-500" />
-                          ) : (
-                            <Bot className={`h-4 w-4 ${isChief ? "text-emerald-400" : "text-zinc-400"}`} />
-                          )}
-                          <span className="font-semibold text-zinc-100 font-mono text-xs">
-                            {selectedAgent.agentName}
-                          </span>
-                          <span className="text-zinc-500 font-mono text-[11px]">&bull; {selectedAgent.role}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                            {selectedAgent.provider} ({selectedAgent.modelUsed})
-                          </Badge>
-                          {isOffline ? (
-                            <Badge className="text-[10px] font-mono font-medium bg-amber-950/40 text-amber-400 border border-amber-900/50">
-                              Tidak Berkontribusi
-                            </Badge>
-                          ) : (
-                            <>
-                              <Badge className={`text-[10px] font-mono font-medium ${
-                                selectedAgent.bias === "BULLISH"
-                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800"
-                                  : selectedAgent.bias === "BEARISH"
-                                  ? "bg-red-950/60 text-red-400 border border-red-800"
-                                  : "bg-zinc-900 text-zinc-300"
-                              }`}>
-                                Bias: {BIAS_LABEL[selectedAgent.bias]} ({selectedAgent.confidence}%)
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] font-mono ${EMOTION_TONE_CLASS[selectedAgent.emotionTone || "neutral"]}`}
-                              >
-                                {selectedAgent.emotionIcon || "😐"} {selectedAgent.emotionLabel || "Netral"}{" "}
-                                {selectedAgent.emotionIntensity ?? 0}%
-                              </Badge>
-                              {selectedAgent.voteVetoed && (
-                                <Badge className="text-[10px] font-mono bg-red-950/60 text-red-300 border border-red-900/60">
-                                  Vote Dibatalkan
-                                </Badge>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        {!isOffline && selectedAgent.emotionReason && (
-                          <div className="rounded border border-zinc-800 bg-zinc-950/60 px-2.5 py-2">
-                            <div className="text-[10px] font-mono uppercase tracking-wide text-zinc-500">
-                              Why this emotion
-                            </div>
-                            <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-300">
-                              {selectedAgent.emotionReason}
-                            </p>
-                          </div>
-                        )}
-
-                        <div>
-                          <div className="text-[11px] text-zinc-500 mb-1">
-                            {isOffline ? "Status Agen AI:" : "Analisis Mendalam Scalping:"}
-                          </div>
-                          <p className={`text-xs leading-relaxed ${isOffline ? "text-amber-300/80 font-mono" : "text-zinc-200"}`}>
-                            {selectedAgent.detailedAnalysis || selectedAgent.keyObservation}
-                          </p>
-                        </div>
-
-                        {!isOffline && selectedAgent.psychology && (
-                          <div className="pt-2 border-t border-zinc-900">
-                            <div className="text-[11px] text-zinc-500 mb-1.5 flex items-center gap-1.5">
-                              <BrainCircuit className="h-3.5 w-3.5 text-cyan-400" />
-                              Psikologi &amp; Disiplin Agen
-                              {typeof selectedAgent.reasoningQuality === "number" && (
-                                <span className="font-mono text-[10px] text-zinc-600">
-                                  reasoning quality {selectedAgent.reasoningQuality}/100 &middot; bobot vote{" "}
-                                  {selectedAgent.voteWeight ?? 0}
-                                </span>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                              {[
-                                { label: "Disiplin", value: selectedAgent.psychology.discipline },
-                                { label: "Kesabaran", value: selectedAgent.psychology.patience },
-                                { label: "Anti FOMO", value: selectedAgent.psychology.fomoResistance },
-                                { label: "Siap eksekusi", value: selectedAgent.psychology.executionReadiness },
-                              ].map((m) => (
-                                <div key={m.label} className="rounded bg-zinc-950 border border-zinc-900 p-2">
-                                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                                    <span>{m.label}</span>
-                                    <span className="text-zinc-300">{m.value}</span>
-                                  </div>
-                                  <MeterBar
-                                    value={m.value}
-                                    tone={m.value >= 70 ? "constructive" : m.value >= 50 ? "neutral" : m.value >= 35 ? "caution" : "destructive"}
-                                    className="mt-1"
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                            {selectedAgent.psychology.read && (
-                              <p className="mt-2 text-[11px] leading-relaxed text-zinc-300">
-                                {selectedAgent.psychology.read}
-                              </p>
-                            )}
-                            {selectedAgent.psychology.riskFlags?.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {selectedAgent.psychology.riskFlags.map((flag, i) => (
-                                  <span
-                                    key={i}
-                                    className="rounded border border-amber-900/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] font-mono text-amber-300"
-                                  >
-                                    {flag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {selectedAgent.vetoReason && (
-                              <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-relaxed text-red-300/90">
-                                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                                <span>{selectedAgent.vetoReason}</span>
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {selectedAgent.evidence && selectedAgent.evidence.length > 0 && (
-                          <div className="pt-2 border-t border-zinc-900">
-                            <div className="text-[11px] text-zinc-500 mb-1.5">
-                              Bukti &amp; Dasar Pertimbangan:
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                              {selectedAgent.evidence.map((ev, i) => (
-                                <div key={i} className="flex items-start gap-2 rounded bg-zinc-950 border border-zinc-900 p-2 text-[11px] text-zinc-300">
-                                  {isOffline ? (
-                                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                                  ) : (
-                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
-                                  )}
-                                  <span>{ev}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-              </div>
-            )}
+        {/* 3. WAR ROOM CHAT VIEW (Live Council Discussion) */}
+        {workspaceView === "warroom" && (
+          <Card className="border-zinc-800 bg-black p-0 shadow-none overflow-hidden h-[750px]">
+            <CouncilWarRoomChat
+              evaluationId={evaluation?.id}
+              discussion={evaluation?.councilDiscussion}
+              isEvaluating={isEvaluating}
+              symbol={activeSymbol}
+              timeframe={timeframe}
+              price={currentCandle?.close || 0}
+              agentOpinions={evaluation?.agentOpinions}
+              signal={evaluation?.signal}
+            />
           </Card>
         )}
 
-        {/* Analytical Workspace Layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          {/* Left Column: AI Technical Breakdown & Analysis (7 cols) */}
-          <div className="space-y-4 lg:col-span-7">
+        {/* 4. AI COUNCIL & PLAN VIEW (Synthesis, Specialist Breakdown & Rationale) */}
+        {workspaceView === "agents" && (
+          <div className="space-y-4">
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[11px] text-zinc-500">
-                  SL Adaptif
-                </div>
+                <div className="text-[11px] text-zinc-500">SL Adaptif</div>
                 <div className="mt-1 font-mono text-xs font-semibold text-red-400">
                   {evaluation?.slPips ?? 35} Pips
                 </div>
@@ -1818,9 +1059,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[11px] text-zinc-500">
-                  TP &amp; Rasio Risiko
-                </div>
+                <div className="text-[11px] text-zinc-500">TP &amp; Rasio Risiko</div>
                 <div className="mt-1 font-mono text-xs font-semibold text-emerald-400">
                   {evaluation?.tpPips ?? 88} Pips ({evaluation?.riskRewardRatio ?? "1:2.5"})
                 </div>
@@ -1836,9 +1075,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[11px] text-zinc-500">
-                  Regime Volatilitas
-                </div>
+                <div className="text-[11px] text-zinc-500">Regime Volatilitas</div>
                 <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
                   {evaluation?.technicalContext?.volatility?.regime ?? "-"}
                 </div>
@@ -1847,9 +1084,7 @@ export default function DashboardPage() {
                 </div>
               </Card>
               <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
-                <div className="text-[11px] text-zinc-500">
-                  Dewan &amp; Veto
-                </div>
+                <div className="text-[11px] text-zinc-500">Dewan &amp; Veto</div>
                 <div className="mt-1 font-mono text-xs font-semibold text-zinc-200">
                   {evaluation ? `${evaluation.activeAgentCount ?? 0} aktif` : "Menunggu"}
                 </div>
@@ -1859,7 +1094,55 @@ export default function DashboardPage() {
               </Card>
             </div>
 
-            {/* AI Technical Analysis & Evaluation Card */}
+            {/* Smart Planned Order Card */}
+            {evaluation?.plannedOrder && (
+              <div className="rounded-xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 font-mono text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-900/40 pb-2 mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    </span>
+                    <span className="font-bold text-sm text-amber-300">
+                      {evaluation.plannedOrder.type === "BUY_LIMIT" ? "🎯 PLANNED BUY LIMIT" : "🎯 PLANNED SELL LIMIT"}
+                    </span>
+                    <span className="rounded bg-black/60 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800">
+                      {evaluation.signal === "WAIT" ? "Pending Pullback Retest Trigger" : "Armed for Execution"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-zinc-400">Target RR:</span>
+                    <span className="font-bold text-emerald-400">{evaluation.plannedOrder.rr}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                    <span className="text-[10px] text-zinc-500 block">Pending Limit Price</span>
+                    <span className="font-bold text-zinc-100">${evaluation.plannedOrder.price}</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                    <span className="text-[10px] text-red-400 block">Stop Loss</span>
+                    <span className="font-bold text-red-300">${evaluation.plannedOrder.sl} ({evaluation.plannedOrder.slPips}p)</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                    <span className="text-[10px] text-emerald-400 block">Take Profit</span>
+                    <span className="font-bold text-emerald-300">${evaluation.plannedOrder.tp} ({evaluation.plannedOrder.tpPips}p)</span>
+                  </div>
+                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                    <span className="text-[10px] text-zinc-400 block">Status / Trigger</span>
+                    <span className="font-semibold text-amber-300 truncate block">{evaluation.plannedOrder.status || evaluation.entryTrigger || "ARMED"}</span>
+                  </div>
+                </div>
+                {evaluation.plannedOrder.rationale && (
+                  <p className="mt-2 text-xs text-zinc-400 font-sans italic">
+                    💡 Rationale Dewan: {evaluation.plannedOrder.rationale}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* AI Technical Analysis & Execution Plan Card */}
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
                 <CardTitle className="text-xs font-semibold text-zinc-200">
@@ -1884,7 +1167,7 @@ export default function DashboardPage() {
               <CardContent className="p-0 pt-3">
                 {evaluation ? (
                   <div className="space-y-3 text-xs leading-relaxed">
-                    {/* Multi-Timeframe Alignment Matrix (M1, M5, M15, H1) */}
+                    {/* Multi-Timeframe Alignment Matrix */}
                     {evaluation.mtfMatrix && Object.keys(evaluation.mtfMatrix).length > 0 && (
                       <div className="p-2.5 rounded-lg bg-black border border-zinc-800">
                         <div className="flex items-center justify-between text-[11px] mb-2 font-mono">
@@ -1933,7 +1216,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Bounded Entry, SL, and TP Level Metrics with Exact Pips */}
+                    {/* Bounded Entry, SL, and TP Level Metrics */}
                     {evaluation.entryPrice && evaluation.signal !== "WAIT" && (
                       <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black border border-zinc-800 font-mono">
                         <div className="text-center border-r border-zinc-800 pr-2">
@@ -1974,15 +1257,15 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* ALASAN MENAHAN DIRI / NO-TRADE REASONS (KETIKA STATUS WAIT) */}
+                    {/* No-Trade Reasons when WAIT */}
                     {evaluation.signal === "WAIT" && (
                       <div className="rounded-lg border border-amber-800/80 bg-amber-950/20 p-3.5 space-y-2">
                         <div className="flex items-center gap-2 text-amber-400 font-mono text-xs font-semibold pb-1.5 border-b border-amber-900/40">
                           <AlertCircle className="h-4 w-4" />
-                          <span>Status: MENAHAN DIRI (WAIT) — Jangan Masuk Pasar</span>
+                          <span>Status: MENAHAN DIRI (WAIT) — Edge Belum Terpenuhi</span>
                         </div>
                         <p className="text-xs text-zinc-300 leading-relaxed font-sans">
-                          AI secara cerdas memilih <strong className="text-amber-300">TIDAK MEMAKSAKAN ENTRY</strong> karena kondisi saat ini belum memiliki edge probabilitas tinggi.
+                          AI dewan memilih <strong className="text-amber-300">TIDAK MEMAKSAKAN ENTRY</strong> karena kondisi saat ini belum memiliki probabilitas edge yang memadai.
                         </p>
                         {evaluation.noTradeReasons && evaluation.noTradeReasons.length > 0 && (
                           <div className="mt-2 space-y-1.5 pt-1">
@@ -2000,7 +1283,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Mathematical Calculations & Volatility Metrics */}
+                    {/* Calculations */}
                     {evaluation.calculations && (
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[11px]">
@@ -2012,7 +1295,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* KESIMPULAN MENDALAM DARI AI PENYIMPUL */}
+                    {/* Kesimpulan Akhir */}
                     {evaluation.detailedVerdict && (
                       <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-3.5">
                         <div className="font-semibold text-emerald-400 font-mono text-[11px] pb-1 border-b border-emerald-900/40">
@@ -2024,7 +1307,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Detailed Indonesian Market Thesis Synthesized by Council */}
+                    {/* Tesis Konsensus */}
                     <div className="rounded border border-zinc-800 bg-black p-3">
                       <div className="font-semibold text-zinc-400 font-mono text-[11px]">
                         Tesis Konsensus Dewan AI ({activeSymbol} &bull; {timeframe.toUpperCase()})
@@ -2058,7 +1341,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Risk Invalidation & Tactical Instructions */}
+                    {/* Invalidation & Recommendation */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[11px]">
@@ -2077,332 +1360,360 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center space-y-2">
+                    <Users className="mx-auto h-8 w-8 text-zinc-600" />
+                    <p className="text-xs text-zinc-300 font-medium">Belum Ada Deliberasi Aktif</p>
+                    <p className="text-[11px] text-zinc-500 max-w-sm mx-auto">
+                      Klik tombol DELIBERATE di pojok kanan atas untuk menjalankan analisis dewan AI.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-                    {/* Chart Mapping Coordinates Notice */}
-                    {evaluation.chartMapping && (
-                      <div className="rounded border border-zinc-800 bg-zinc-900/40 p-2.5 text-[11px] font-mono text-zinc-300 flex items-center justify-between">
-                        <span className="text-zinc-400">Scalping Segment Lines Overlaid on Chart</span>
-                        <span>
-                          Support: <strong className="text-zinc-200">${evaluation.chartMapping.supportLevel}</strong> &bull; Resistance: <strong className="text-zinc-200">${evaluation.chartMapping.resistanceLevel}</strong>
+            {/* 20-Agent Specialist Consensus Breakdown */}
+            <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-purple-400" />
+                  <span className="font-mono font-bold text-sm tracking-wide text-white">
+                    20-AGENT SPECIALIST CONSENSUS BREAKDOWN &amp; DISCIPLINE
+                  </span>
+                </div>
+                <Badge variant="outline" className="text-xs font-mono border-zinc-800 text-zinc-400">
+                  {evaluation?.activeAgentCount ?? (evaluation?.agentOpinions?.length || 20)} CONTRIBUTORS
+                </Badge>
+              </div>
+
+              {/* Agent Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
+                {(evaluation?.agentOpinions || []).map((agent) => {
+                  const isExpanded = expandedAgentId === agent.agentId;
+                  const isChief = agent.agentId === "slot_1";
+                  const isNotContributed = agent.status === "not_contributed";
+
+                  return (
+                    <div
+                      key={agent.agentId}
+                      onClick={() => setExpandedAgentId(isExpanded ? null : agent.agentId)}
+                      className={`cursor-pointer rounded-lg border p-3 text-xs transition-all select-none ${
+                        isNotContributed
+                          ? "border-zinc-900 bg-black/40 opacity-60 hover:opacity-100"
+                          : isChief
+                          ? isExpanded
+                            ? "border-emerald-700 bg-emerald-950/25 ring-1 ring-emerald-600/40"
+                            : "border-emerald-900/60 bg-emerald-950/10 hover:border-emerald-700"
+                          : isExpanded
+                          ? "border-zinc-600 bg-zinc-900 ring-1 ring-zinc-500/30"
+                          : "border-zinc-800 bg-black hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-mono text-xs font-semibold text-zinc-200 truncate">
+                          {agent.agentName}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                            agent.bias === "BULLISH"
+                              ? "bg-emerald-950/60 text-emerald-400 border border-emerald-900/50"
+                              : agent.bias === "BEARISH"
+                              ? "bg-red-950/60 text-red-400 border border-red-900/50"
+                              : "bg-zinc-800 text-zinc-400"
+                          }`}
+                        >
+                          {agent.bias}
                         </span>
                       </div>
-                    )}
+                      <p className="mt-1.5 text-[11px] text-zinc-400 line-clamp-2">
+                        {isNotContributed ? "Offline" : agent.keyObservation || agent.detailedAnalysis}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
 
-                    {evaluation.notes && (
-                      <div className="rounded border border-zinc-800 bg-black p-3">
-                        <div className="font-semibold text-zinc-500 font-mono text-[11px]">
-                          Catatan Manajemen Lot 0.01 &amp; Psikologi
-                        </div>
-                        <p className="mt-1 text-zinc-300 font-mono text-[11px]">{evaluation.notes}</p>
+              {/* Selected Agent Drawer / Detailed View */}
+              {expandedAgentId && (() => {
+                const selectedAgent = (evaluation?.agentOpinions || []).find((a) => a.agentId === expandedAgentId);
+                if (!selectedAgent) return null;
+
+                return (
+                  <div className="rounded-xl border border-zinc-800 bg-black p-4 space-y-3 mt-4">
+                    <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm text-zinc-100">{selectedAgent.agentName}</span>
+                        <Badge variant="outline" className="text-xs font-mono text-zinc-400">{selectedAgent.role}</Badge>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="py-12 text-center">
-                    <BrainCircuit className="mx-auto h-8 w-8 text-zinc-600" />
-                    <p className="mt-2 text-xs text-zinc-300 font-medium">Ready for 10-Agent Scalping Deliberation</p>
-                    <p className="mt-1 text-[11px] text-zinc-500 max-w-sm mx-auto">
-                      10 distinct AI minds evaluate microstructure, liquidity sweeps, and pip risks in parallel, then synthesize a 30-50 pip scalping setup.
-                    </p>
-                    <Button
-                      onClick={handleEvaluate}
-                      disabled={isEvaluating || currentUser?.role === "viewer"}
-                      className={`mt-4 font-medium text-xs border-0 shadow-none px-5 ${
-                        currentUser?.role === "viewer"
-                          ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
-                          : "bg-zinc-100 text-black hover:bg-white"
-                      }`}
-                    >
-                      {currentUser?.role === "viewer" ? (
-                        <>
-                          <Compass className="h-3.5 w-3.5 mr-1.5 opacity-50" />
-                          [Viewer Mode] Read-Only Access
-                        </>
-                      ) : isEvaluating ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          10 Minds Deliberating &amp; Synthesizing...
-                        </>
-                      ) : (
-                        <>
-                          <Compass className="h-3.5 w-3.5 mr-1.5" />
-                          Start 10-Agent Scalping Deliberation
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column: Execution Rules & Persistent Historical Analysis Log (5 cols) */}
-          <div className="space-y-4 lg:col-span-5">
-            {/* Strategy Checklist */}
-            <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <CardTitle className="text-xs font-semibold text-zinc-200">
-                  Discipline Checklist &amp; Strategy
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsSkillModalOpen(true)}
-                  className="h-7 text-[11px] px-2.5 bg-black border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-white"
-                >
-                  Select Strategy
-                </Button>
-              </CardHeader>
-
-              {!selectedSkill ? (
-                <div className="py-6 text-center">
-                  <p className="text-xs text-zinc-500">No active strategy selected.</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsSkillModalOpen(true)}
-                    className="mt-3 text-xs border-zinc-800 bg-black hover:bg-zinc-900 text-zinc-300"
-                  >
-                    Open Quantitative Strategy Library
-                  </Button>
-                </div>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  <div className="rounded border border-zinc-800 bg-black p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-zinc-200 text-xs">{selectedSkill.title}</span>
-                      <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
-                        {selectedSkill.timeframes?.join(", ") || "M1 / M5"}
+                      <Badge className={`font-mono text-xs ${selectedAgent.bias === "BULLISH" ? "bg-emerald-950 text-emerald-400" : selectedAgent.bias === "BEARISH" ? "bg-red-950 text-red-400" : "bg-zinc-800 text-zinc-300"}`}>
+                        {selectedAgent.bias} &bull; Confidence {selectedAgent.confidence}%
                       </Badge>
                     </div>
-                    <p className="mt-1.5 text-[11px] text-zinc-400 leading-normal">
-                      {selectedSkill.description}
+                    <p className="text-xs leading-relaxed text-zinc-300">
+                      {selectedAgent.detailedAnalysis || selectedAgent.keyObservation}
                     </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="text-[11px] text-zinc-500">
-                      Validation Rules ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
-                    </div>
-                    {rules.map((rule) => (
-                      <div
-                        key={rule.id}
-                        onClick={() => toggleRule(rule.id)}
-                        className={`flex cursor-pointer items-start gap-2.5 rounded border p-2.5 text-xs transition-colors ${
-                          checkedRules[rule.id]
-                            ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                            : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                        }`}
-                      >
-                        <div
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                            checkedRules[rule.id]
-                              ? "border-zinc-600 bg-zinc-700 text-white"
-                              : "border-zinc-800 bg-zinc-950"
-                          }`}
-                        >
-                          {checkedRules[rule.id] && <CheckCircle2 className="h-3.5 w-3.5 stroke-[3]" />}
-                        </div>
-                        <div className="leading-tight">
-                          <span>{rule.text}</span>
-                          {rule.required && (
-                            <span className="ml-1 text-[10px] text-zinc-400 font-mono font-medium">[Required]</span>
-                          )}
+                    {selectedAgent.evidence && selectedAgent.evidence.length > 0 && (
+                      <div className="pt-2 border-t border-zinc-850">
+                        <span className="text-xs font-mono text-zinc-500 uppercase">Bukti &amp; Dasar Pertimbangan:</span>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {selectedAgent.evidence.map((ev, i) => (
+                            <div key={i} className="flex items-start gap-2 rounded bg-zinc-950 border border-zinc-850 p-2 text-xs text-zinc-300">
+                              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                              <span>{ev}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-
-                  <div className="pt-2">
-                    <Button
-                      onClick={handleEvaluate}
-                      disabled={isEvaluating || currentUser?.role === "viewer"}
-                      className={`w-full flex items-center justify-center gap-2 font-medium text-xs shadow-none border-0 ${
-                        currentUser?.role === "viewer"
-                          ? "bg-zinc-800 text-zinc-400 cursor-not-allowed"
-                          : "bg-zinc-100 text-black hover:bg-white"
-                      }`}
-                    >
-                      {currentUser?.role === "viewer" ? (
-                        <span>[Viewer Mode] Read-Only Spectator</span>
-                      ) : isEvaluating ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Deliberating Active AI Minds...</span>
-                        </>
-                      ) : (
-                        <span>Run Multi-Agent Deliberation (Up to 20 Minds)</span>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </Card>
-
-            {/* Persistent AI Generation History Log */}
-            <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
-              <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-xs font-semibold text-zinc-200">
-                    Analysis History Log ({evalLogs.length})
-                  </CardTitle>
-                  {(() => {
-                    const decidedLogs = evalLogs.filter(
-                      (l) => l.outcome === "WIN" || l.outcome === "LOSE"
-                    );
-                    const wins = evalLogs.filter((l) => l.outcome === "WIN").length;
-                    const losses = evalLogs.filter((l) => l.outcome === "LOSE").length;
-                    const activeCount = evalLogs.filter(
-                      (l) => l.outcome === "ACTIVE" || (!l.outcome && l.signal && l.signal !== "WAIT")
-                    ).length;
-                    const winrate =
-                      decidedLogs.length > 0
-                        ? Math.round((wins / decidedLogs.length) * 100)
-                        : null;
-
-                    return (
-                      <div className="flex items-center gap-1.5">
-                        {winrate !== null ? (
-                          <Badge
-                            className={`px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
-                              winrate >= 50
-                                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800"
-                                : "bg-red-950/60 text-red-400 border-red-800"
-                            }`}
-                          >
-                            Winrate: {winrate}% ({wins}W / {losses}L)
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="px-1.5 py-0.5 text-[10px] font-mono border-zinc-800 text-zinc-400"
-                          >
-                            Winrate: Pending ({activeCount} active)
-                          </Badge>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-                {evalLogs.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearLogs}
-                    className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    Clear History
-                  </button>
-                )}
-              </CardHeader>
-
-              <CardContent className="p-0 pt-3">
-                {evalLogs.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-zinc-500">
-                    No generated analyses logged yet. Each evaluation will automatically be archived here with live WIN / LOSE / WAIT tracking.
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                    {evalLogs.map((log) => {
-                      const isCurrent = evaluation?.id === log.id;
-                      const dateStr = log.timestamp
-                        ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                        : "Recent";
-
-                      const outcomeStatus: EvaluationOutcome =
-                        log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
-                      // Armed but price has not traded the entry level yet.
-                      const awaitingEntry =
-                        outcomeStatus === "ACTIVE" &&
-                        log.signal !== "WAIT" &&
-                        log.entryFilled !== true;
-
-                      return (
-                        <div
-                          key={log.id}
-                          onClick={() => selectHistoricalLog(log)}
-                          className={`group cursor-pointer rounded border p-2.5 text-xs transition-colors ${
-                            isCurrent
-                              ? "border-zinc-700 bg-zinc-900"
-                              : "border-zinc-800/80 bg-black hover:border-zinc-700 hover:bg-zinc-950"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {/* Signal Badge */}
-                              <span
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
-                                  log.signal === "BUY"
-                                    ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
-                                    : log.signal === "SELL"
-                                    ? "bg-red-950/40 text-red-400 border-red-900/60"
-                                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                }`}
-                              >
-                                {log.signal}
-                              </span>
-
-                              {/* WIN / LOSE / ACTIVE / WAIT Outcome Status Badge */}
-                              <span
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border tracking-wider ${
-                                  outcomeStatus === "WIN"
-                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.2)]"
-                                    : outcomeStatus === "LOSE"
-                                    ? "bg-red-500/20 text-red-300 border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
-                                    : outcomeStatus === "ACTIVE"
-                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
-                                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                }`}
-                              >
-                                {outcomeStatus === "WIN"
-                                  ? "✓ WIN"
-                                  : outcomeStatus === "LOSE"
-                                  ? "✕ LOSE"
-                                  : outcomeStatus === "ACTIVE"
-                                  ? awaitingEntry
-                                    ? "◦ MENUNGGU ENTRY"
-                                    : (() => {
-                                        // Hitung floating pips real-time jika simbol cocok dengan currentCandle
-                                        const isSameSym = !log.symbol || log.symbol === activeSymbol;
-                                        if (isSameSym && currentCandle && log.entryPrice) {
-                                          const isGold = (log.symbol || activeSymbol).toUpperCase().includes("XAU") || (log.symbol || activeSymbol).toUpperCase().includes("GOLD");
-                                          const pipDiv = isGold ? 0.1 : 1;
-                                          const diff = log.signal === "BUY"
-                                            ? (currentCandle.close - log.entryPrice) / pipDiv
-                                            : (log.entryPrice - currentCandle.close) / pipDiv;
-                                          const pips = Math.round(diff);
-                                          const sign = pips >= 0 ? "+" : "";
-                                          return `● RUNNING (${sign}${pips}p)`;
-                                        }
-                                        return "● RUNNING";
-                                      })()
-                                  : "— WAIT"}
-                              </span>
-
-                              <span className="font-mono text-xs font-semibold text-zinc-200">
-                                {log.symbol || activeSymbol} &bull; {(log.timeframe || timeframe).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
-                              <Clock className="h-3 w-3" />
-                              <span>{dateStr}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                            <div>
-                              Entry: <span className="text-zinc-200">${log.entryPrice?.toFixed(2)}</span> &bull; SL: <span className="text-red-400">${log.stopLoss?.toFixed(2)} ({log.slPips ? `-${log.slPips}p` : ""})</span> &bull; TP: <span className="text-emerald-400">${log.takeProfit?.toFixed(2)} ({log.tpPips ? `+${log.tpPips}p` : ""})</span>
-                            </div>
-                            <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors" />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
+                );
+              })()}
             </Card>
           </div>
-        </div>
+        )}
+
+        {/* 5. TRADE JOURNAL & RULES VIEW (Discipline Checklist + Persistent Log) */}
+        {workspaceView === "journal" && (
+          <div className="space-y-4">
+            {/* Top Journal Overview Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[11px] text-zinc-500">Total Analisis Tercatat</div>
+                <div className="mt-1 font-mono text-lg font-bold text-zinc-100">{evalLogs.length}</div>
+              </Card>
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[11px] text-zinc-500">Winrate Historis</div>
+                <div className="mt-1 font-mono text-lg font-bold text-emerald-400">
+                  {(() => {
+                    const decided = evalLogs.filter((l) => l.outcome === "WIN" || l.outcome === "LOSE");
+                    const wins = evalLogs.filter((l) => l.outcome === "WIN").length;
+                    return decided.length > 0 ? `${Math.round((wins / decided.length) * 100)}%` : "N/A";
+                  })()}
+                </div>
+              </Card>
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[11px] text-zinc-500">Menang / Kalah</div>
+                <div className="mt-1 font-mono text-lg font-bold text-zinc-200">
+                  {evalLogs.filter((l) => l.outcome === "WIN").length}W / {evalLogs.filter((l) => l.outcome === "LOSE").length}L
+                </div>
+              </Card>
+              <Card className="p-3 bg-zinc-950 border-zinc-800 shadow-none">
+                <div className="text-[11px] text-zinc-500">Setup Aktif Berjalan</div>
+                <div className="mt-1 font-mono text-lg font-bold text-amber-400">
+                  {evalLogs.filter((l) => l.outcome === "ACTIVE").length}
+                </div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              {/* Left Column: Discipline Checklist & Strategy (4 cols) */}
+              <div className="lg:col-span-4 space-y-4">
+                <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
+                  <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
+                    <CardTitle className="text-xs font-semibold text-zinc-200">
+                      Discipline Checklist &amp; Strategy
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsSkillModalOpen(true)}
+                      className="h-7 text-[11px] px-2.5 bg-black border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-white"
+                    >
+                      Pilih Strategi
+                    </Button>
+                  </CardHeader>
+
+                  {!selectedSkill ? (
+                    <div className="py-6 text-center">
+                      <p className="text-xs text-zinc-500">Belum ada strategi aktif terpilih.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsSkillModalOpen(true)}
+                        className="mt-3 text-xs border-zinc-800 bg-black hover:bg-zinc-900 text-zinc-300"
+                      >
+                        Buka Library Strategi
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      <div className="rounded border border-zinc-800 bg-black p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-zinc-200 text-xs">{selectedSkill.title}</span>
+                          <Badge variant="outline" className="text-[10px] font-mono border-zinc-800 text-zinc-400">
+                            {selectedSkill.timeframes?.join(", ") || "M1 / M5"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1.5 text-[11px] text-zinc-400 leading-normal">
+                          {selectedSkill.description}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] text-zinc-500">
+                          Validation Rules ({Object.values(checkedRules).filter(Boolean).length}/{rules.length})
+                        </div>
+                        {rules.map((rule) => (
+                          <div
+                            key={rule.id}
+                            onClick={() => toggleRule(rule.id)}
+                            className={`flex cursor-pointer items-start gap-2.5 rounded border p-2.5 text-xs transition-colors ${
+                              checkedRules[rule.id]
+                                ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                                : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                            }`}
+                          >
+                            <div
+                              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                checkedRules[rule.id]
+                                  ? "border-zinc-600 bg-zinc-700 text-white"
+                                  : "border-zinc-800 bg-zinc-950"
+                              }`}
+                            >
+                              {checkedRules[rule.id] && <CheckCircle2 className="h-3.5 w-3.5 stroke-[3]" />}
+                            </div>
+                            <div className="leading-tight">
+                              <span>{rule.text}</span>
+                              {rule.required && (
+                                <span className="ml-1 text-[10px] text-zinc-400 font-mono font-medium">[Required]</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              {/* Right Column: Historical Analysis Log (8 cols) */}
+              <div className="lg:col-span-8">
+                <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
+                  <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
+                    <CardTitle className="text-xs font-semibold text-zinc-200">
+                      Persistent Analysis History Log ({evalLogs.length})
+                    </CardTitle>
+                    {evalLogs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearLogs}
+                        className="text-[10px] font-mono text-zinc-500 hover:text-red-400 transition-colors"
+                      >
+                        Clear History
+                      </button>
+                    )}
+                  </CardHeader>
+
+                  <CardContent className="p-0 pt-3">
+                    {evalLogs.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-zinc-500">
+                        Belum ada riwayat analisis. Setiap evaluasi dewan akan otomatis diarsipkan di sini dengan pelacakan real-time WIN / LOSE / ACTIVE.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                        {evalLogs.map((log) => {
+                          const isCurrent = evaluation?.id === log.id;
+                          const dateStr = log.timestamp
+                            ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            : "Recent";
+
+                          const outcomeStatus: EvaluationOutcome =
+                            log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
+                          const awaitingEntry =
+                            outcomeStatus === "ACTIVE" &&
+                            log.signal !== "WAIT" &&
+                            log.entryFilled !== true;
+
+                          return (
+                            <div
+                              key={log.id}
+                              onClick={() => {
+                                selectHistoricalLog(log);
+                                switchWorkspaceView("agents");
+                              }}
+                              className={`group cursor-pointer rounded-lg border p-3 text-xs transition-colors ${
+                                isCurrent
+                                  ? "border-zinc-700 bg-zinc-900"
+                                  : "border-zinc-800/80 bg-black hover:border-zinc-700 hover:bg-zinc-950"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
+                                      log.signal === "BUY"
+                                        ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
+                                        : log.signal === "SELL"
+                                        ? "bg-red-950/40 text-red-400 border-red-900/60"
+                                        : "bg-zinc-900 text-zinc-400 border-zinc-800"
+                                    }`}
+                                  >
+                                    {log.signal}
+                                  </span>
+
+                                  <span
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border tracking-wider ${
+                                      outcomeStatus === "WIN"
+                                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
+                                        : outcomeStatus === "LOSE"
+                                        ? "bg-red-500/20 text-red-300 border-red-500/50"
+                                        : outcomeStatus === "ACTIVE"
+                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
+                                        : "bg-zinc-900 text-zinc-400 border-zinc-800"
+                                    }`}
+                                  >
+                                    {outcomeStatus === "WIN"
+                                      ? "✓ WIN"
+                                      : outcomeStatus === "LOSE"
+                                      ? "✕ LOSE"
+                                      : outcomeStatus === "ACTIVE"
+                                      ? awaitingEntry
+                                        ? "◦ MENUNGGU ENTRY"
+                                        : (() => {
+                                            const isSameSym = !log.symbol || log.symbol === activeSymbol;
+                                            if (isSameSym && currentCandle && log.entryPrice) {
+                                              const isGold = (log.symbol || activeSymbol).toUpperCase().includes("XAU") || (log.symbol || activeSymbol).toUpperCase().includes("GOLD");
+                                              const pipDiv = isGold ? 0.1 : 1;
+                                              const diff = log.signal === "BUY"
+                                                ? (currentCandle.close - log.entryPrice) / pipDiv
+                                                : (log.entryPrice - currentCandle.close) / pipDiv;
+                                              const pips = Math.round(diff);
+                                              const sign = pips >= 0 ? "+" : "";
+                                              return `● RUNNING (${sign}${pips}p)`;
+                                            }
+                                            return "● RUNNING";
+                                          })()
+                                      : "— WAIT"}
+                                  </span>
+
+                                  <span className="font-mono text-xs font-semibold text-zinc-200">
+                                    {log.symbol || activeSymbol} &bull; {(log.timeframe || timeframe).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{dateStr}</span>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                                <div>
+                                  Entry: <span className="text-zinc-200">${log.entryPrice?.toFixed(2)}</span> &bull; SL: <span className="text-red-400">${log.stopLoss?.toFixed(2)} ({log.slPips ? `-${log.slPips}p` : ""})</span> &bull; TP: <span className="text-emerald-400">${log.takeProfit?.toFixed(2)} ({log.tpPips ? `+${log.tpPips}p` : ""})</span>
+                                </div>
+                                <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors" />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <SkillChecklistModal
