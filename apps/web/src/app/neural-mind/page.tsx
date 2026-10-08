@@ -26,6 +26,7 @@ import { EvaluationResult, AgentOpinion, DiscussionMessage } from "@/lib/ai/type
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
 import { NeuralSynapseCanvas } from "@/components/council/NeuralSynapseCanvas";
+import { QuantumTorusManifold } from "@/components/council/QuantumTorusManifold";
 
 const NEURAL_NODES = [
   { id: "node_smc", name: "SMC Liquidity Engine", type: "Orderflow / Liquidity", status: "ACTIVE", weight: "0.22", activation: "ReLU (0.84)" },
@@ -39,6 +40,7 @@ const NEURAL_NODES = [
 export default function NeuralMindPage() {
   const [activeSymbol, setActiveSymbol] = useState<string>("BTCUSD");
   const [timeframe, setTimeframe] = useState<string>("1m");
+  const [visualMode, setVisualMode] = useState<"torus" | "synapse">("torus");
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [isThinking, setIsThinking] = useState<boolean>(false);
   const [deepThinkingLog, setDeepThinkingLog] = useState<string[]>([]);
@@ -126,21 +128,40 @@ export default function NeuralMindPage() {
 
             <div className="h-4 w-px bg-zinc-800" />
 
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-xs font-bold font-mono">
-                N
-              </span>
-              <span className="font-mono font-bold text-sm tracking-wide text-white">
-                NEURAL MIND HIVE
-              </span>
-              <Badge
-                variant="outline"
-                className="bg-purple-950/40 text-purple-400 border-purple-800/80 text-[10px] font-mono"
-              >
-                20-AGENT SYNAPSE
-              </Badge>
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-purple-950 text-purple-400 border border-purple-800 text-xs font-bold font-mono">
+                  N
+                </span>
+                <span className="font-mono font-bold text-sm tracking-wide text-white">
+                  NEURAL MIND HIVE
+                </span>
+                {/* View Switcher: 3D Torus Manifold vs 2D Synapse Graph */}
+                <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800 ml-1">
+                  <button
+                    type="button"
+                    onClick={() => setVisualMode("torus")}
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded transition-colors ${
+                      visualMode === "torus"
+                        ? "bg-cyan-950 text-cyan-300 border border-cyan-800"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    3D TORUS MANIFOLD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisualMode("synapse")}
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded transition-colors ${
+                      visualMode === "synapse"
+                        ? "bg-purple-950 text-purple-300 border border-purple-800"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    2D BIOLOGICAL SYNAPSE
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center rounded-md bg-zinc-950 p-0.5 border border-zinc-800">
@@ -238,12 +259,23 @@ export default function NeuralMindPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Main Nodes & Deliberation (3 Cols) */}
           <div className="lg:col-span-3 space-y-4">
-            {/* Real Interactive Biological Neuron Synapse Graph */}
-            <NeuralSynapseCanvas
-              opinions={evaluation?.agentOpinions || []}
-              consensusSignal={evaluation?.signal || "WAIT"}
-              isDeliberating={isThinking}
-            />
+            {/* Real Interactive 3D Quantum Torus Manifold vs 2D Biological Neuron Synapse */}
+            {visualMode === "torus" ? (
+              <QuantumTorusManifold
+                opinions={evaluation?.agentOpinions || []}
+                consensusSignal={evaluation?.signal || "WAIT"}
+                currentPrice={currentCandle?.close || 0}
+                recentTrades={recentTrades || []}
+                symbol={activeSymbol}
+                isDeliberating={isThinking}
+              />
+            ) : (
+              <NeuralSynapseCanvas
+                opinions={evaluation?.agentOpinions || []}
+                consensusSignal={evaluation?.signal || "WAIT"}
+                isDeliberating={isThinking}
+              />
+            )}
 
             {/* Neural Layers Visualizer */}
             <Card className="bg-zinc-950 border-zinc-800">
