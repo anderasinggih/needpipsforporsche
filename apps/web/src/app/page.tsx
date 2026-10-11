@@ -21,6 +21,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   ShieldCheck,
   Loader2,
   Activity,
@@ -1024,9 +1032,14 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-xs font-semibold text-zinc-200">{sc.name}</span>
                     <Badge
-                      variant="outline"
-                      className="font-mono text-[11px]"
-                      style={{ color: sc.color, borderColor: `${sc.color}40`, backgroundColor: `${sc.color}15` }}
+                      variant={
+                        sc.id === "primary"
+                          ? "success"
+                          : sc.id === "invalidation"
+                          ? "destructive"
+                          : "warning"
+                      }
+                      className="font-mono text-[11px] tabular-nums"
                     >
                       {sc.probability}% Prob
                     </Badge>
@@ -1609,61 +1622,80 @@ export default function DashboardPage() {
 
                   <CardContent className="p-0 pt-3">
                     {evalLogs.length === 0 ? (
-                      <div className="py-12 text-center text-xs text-zinc-500">
+                      <div className="py-12 text-center text-xs text-zinc-500 font-sans">
                         Belum ada riwayat analisis. Setiap evaluasi dewan akan otomatis diarsipkan di sini dengan pelacakan real-time WIN / LOSE / ACTIVE.
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                        {evalLogs.map((log) => {
-                          const isCurrent = evaluation?.id === log.id;
-                          const dateStr = log.timestamp
-                            ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                            : "Recent";
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[85px]">TIME</TableHead>
+                            <TableHead className="w-[110px]">PAIR</TableHead>
+                            <TableHead className="w-[70px]">SIDE</TableHead>
+                            <TableHead className="w-[120px]">STATUS</TableHead>
+                            <TableHead className="text-right w-[95px]">ENTRY</TableHead>
+                            <TableHead className="text-right w-[95px]">STOP LOSS</TableHead>
+                            <TableHead className="text-right w-[95px]">TAKE PROFIT</TableHead>
+                            <TableHead className="text-right w-[80px]">R:R</TableHead>
+                            <TableHead className="w-[40px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {evalLogs.map((log) => {
+                            const isCurrent = evaluation?.id === log.id;
+                            const dateStr = log.timestamp
+                              ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                              : "Recent";
 
-                          const outcomeStatus: EvaluationOutcome =
-                            log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
-                          const awaitingEntry =
-                            outcomeStatus === "ACTIVE" &&
-                            log.signal !== "WAIT" &&
-                            log.entryFilled !== true;
+                            const outcomeStatus: EvaluationOutcome =
+                              log.outcome || (log.signal === "WAIT" ? "WAIT" : "ACTIVE");
+                            const awaitingEntry =
+                              outcomeStatus === "ACTIVE" &&
+                              log.signal !== "WAIT" &&
+                              log.entryFilled !== true;
 
-                          return (
-                            <div
-                              key={log.id}
-                              onClick={() => {
-                                selectHistoricalLog(log);
-                                switchWorkspaceView("agents");
-                              }}
-                              className={`group cursor-pointer rounded-lg border p-3 text-xs transition-colors ${
-                                isCurrent
-                                  ? "border-zinc-700 bg-zinc-900"
-                                  : "border-zinc-800/80 bg-black hover:border-zinc-700 hover:bg-zinc-950"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border ${
+                            return (
+                              <TableRow
+                                key={log.id}
+                                onClick={() => {
+                                  selectHistoricalLog(log);
+                                  switchWorkspaceView("agents");
+                                }}
+                                className={`cursor-pointer ${isCurrent ? "bg-zinc-900" : ""}`}
+                              >
+                                <TableCell className="text-zinc-500 text-[11px] whitespace-nowrap">
+                                  {dateStr}
+                                </TableCell>
+                                <TableCell className="font-semibold text-zinc-200">
+                                  {log.symbol || activeSymbol}{" "}
+                                  <span className="text-[10px] text-zinc-500 font-normal">
+                                    {(log.timeframe || timeframe).toUpperCase()}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
                                       log.signal === "BUY"
-                                        ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
+                                        ? "success"
                                         : log.signal === "SELL"
-                                        ? "bg-red-950/40 text-red-400 border-red-900/60"
-                                        : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                    }`}
+                                        ? "destructive"
+                                        : "secondary"
+                                    }
                                   >
                                     {log.signal}
-                                  </span>
-
-                                  <span
-                                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold border tracking-wider ${
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
                                       outcomeStatus === "WIN"
-                                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50"
+                                        ? "success"
                                         : outcomeStatus === "LOSE"
-                                        ? "bg-red-500/20 text-red-300 border-red-500/50"
+                                        ? "destructive"
                                         : outcomeStatus === "ACTIVE"
-                                        ? "bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse"
-                                        : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                                    }`}
+                                        ? "warning"
+                                        : "secondary"
+                                    }
                                   >
                                     {outcomeStatus === "WIN"
                                       ? "✓ WIN"
@@ -1671,7 +1703,7 @@ export default function DashboardPage() {
                                       ? "✕ LOSE"
                                       : outcomeStatus === "ACTIVE"
                                       ? awaitingEntry
-                                        ? "◦ MENUNGGU ENTRY"
+                                        ? "PENDING"
                                         : (() => {
                                             const isSameSym = !log.symbol || log.symbol === activeSymbol;
                                             if (isSameSym && currentCandle && log.entryPrice) {
@@ -1682,33 +1714,43 @@ export default function DashboardPage() {
                                                 : (log.entryPrice - currentCandle.close) / pipDiv;
                                               const pips = Math.round(diff);
                                               const sign = pips >= 0 ? "+" : "";
-                                              return `● RUNNING (${sign}${pips}p)`;
+                                              return `RUNNING ${sign}${pips}p`;
                                             }
-                                            return "● RUNNING";
+                                            return "RUNNING";
                                           })()
-                                      : "— WAIT"}
-                                  </span>
-
-                                  <span className="font-mono text-xs font-semibold text-zinc-200">
-                                    {log.symbol || activeSymbol} &bull; {(log.timeframe || timeframe).toUpperCase()}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
-                                  <Clock className="h-3 w-3" />
-                                  <span>{dateStr}</span>
-                                </div>
-                              </div>
-
-                              <div className="mt-2 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                                <div>
-                                  Entry: <span className="text-zinc-200">${log.entryPrice?.toFixed(2)}</span> &bull; SL: <span className="text-red-400">${log.stopLoss?.toFixed(2)} ({log.slPips ? `-${log.slPips}p` : ""})</span> &bull; TP: <span className="text-emerald-400">${log.takeProfit?.toFixed(2)} ({log.tpPips ? `+${log.tpPips}p` : ""})</span>
-                                </div>
-                                <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                      : "WAIT"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right text-zinc-200 font-semibold tabular-nums">
+                                  {log.entryPrice ? `$${log.entryPrice.toFixed(2)}` : "-"}
+                                </TableCell>
+                                <TableCell className="text-right text-red-400 tabular-nums">
+                                  {log.stopLoss ? `$${log.stopLoss.toFixed(2)}` : "-"}
+                                  {log.slPips && (
+                                    <span className="text-[10px] text-red-400/70 ml-1">
+                                      (-{log.slPips}p)
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right text-emerald-400 tabular-nums">
+                                  {log.takeProfit ? `$${log.takeProfit.toFixed(2)}` : "-"}
+                                  {log.tpPips && (
+                                    <span className="text-[10px] text-emerald-400/70 ml-1">
+                                      (+{log.tpPips}p)
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right text-zinc-400 tabular-nums">
+                                  {log.riskRewardRatio || "1:2.5"}
+                                </TableCell>
+                                <TableCell className="text-right pr-2">
+                                  <ChevronRight className="h-3.5 w-3.5 text-zinc-600 inline" />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     )}
                   </CardContent>
                 </Card>

@@ -2,6 +2,14 @@
 
 import React from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface JournalRow {
   id: string;
@@ -24,73 +32,76 @@ interface JournalHistoryTableProps {
 
 export const JournalHistoryTable: React.FC<JournalHistoryTableProps> = ({ entries }) => {
   return (
-    <div className="overflow-x-auto rounded-md border border-neutral-800 bg-black">
-      <table className="w-full text-left text-xs">
-        <thead className="border-b border-neutral-800 bg-neutral-950 text-[10px] font-mono uppercase tracking-wider text-neutral-400">
-          <tr>
-            <th className="px-3.5 py-2.5">Timestamp</th>
-            <th className="px-3.5 py-2.5">Symbol</th>
-            <th className="px-3.5 py-2.5">Side</th>
-            <th className="px-3.5 py-2.5">Entry</th>
-            <th className="px-3.5 py-2.5">Exit</th>
-            <th className="px-3.5 py-2.5">P&amp;L ($)</th>
-            <th className="px-3.5 py-2.5">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-900 font-mono text-neutral-300">
-          {entries.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="px-4 py-8 text-center font-sans text-xs text-neutral-500">
-                No recorded journal trades in history
-              </td>
-            </tr>
-          ) : (
-            entries.map((entry) => (
-              <tr key={entry.id} className="transition-colors hover:bg-neutral-950">
-                <td className="px-3.5 py-2 font-mono text-[11px] text-neutral-500">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-[140px]">TIMESTAMP</TableHead>
+          <TableHead className="w-[100px]">SYMBOL</TableHead>
+          <TableHead className="w-[80px]">SIDE</TableHead>
+          <TableHead className="text-right w-[100px]">ENTRY</TableHead>
+          <TableHead className="text-right w-[100px]">EXIT</TableHead>
+          <TableHead className="text-right w-[110px]">P&amp;L ($)</TableHead>
+          <TableHead className="w-[90px]">STATUS</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {entries.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="h-24 text-center font-sans text-xs text-zinc-500">
+              No recorded journal trades in history
+            </TableCell>
+          </TableRow>
+        ) : (
+          entries.map((entry) => {
+            const isBuy = entry.direction.toUpperCase() === "BUY";
+            const pnlVal = entry.pnl !== null && entry.pnl !== undefined ? Number(entry.pnl) : null;
+
+            return (
+              <TableRow key={entry.id}>
+                <TableCell className="text-zinc-500 text-[11px] whitespace-nowrap">
                   {new Date(entry.created_at).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
-                </td>
-                <td className="px-3.5 py-2 font-bold text-neutral-100">{entry.symbol}</td>
-                <td className="px-3.5 py-2 font-bold">
-                  {entry.direction === "BUY" ? (
-                    <span className="text-[#00FF66]">BUY</span>
-                  ) : (
-                    <span className="text-red-400">SELL</span>
-                  )}
-                </td>
-                <td className="px-3.5 py-2 text-neutral-300">{Number(entry.entry_price).toFixed(2)}</td>
-                <td className="px-3.5 py-2 text-neutral-500">
+                </TableCell>
+                <TableCell className="font-semibold text-zinc-100">
+                  {entry.symbol}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={isBuy ? "success" : "destructive"}>
+                    {entry.direction}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right text-zinc-300 tabular-nums">
+                  {Number(entry.entry_price).toFixed(2)}
+                </TableCell>
+                <TableCell className="text-right text-zinc-500 tabular-nums">
                   {entry.exit_price ? Number(entry.exit_price).toFixed(2) : "—"}
-                </td>
-                <td className="px-3.5 py-2 font-bold">
-                  {entry.pnl !== null && entry.pnl !== undefined ? (
-                    entry.pnl > 0 ? (
-                      <span className="text-[#00FF66]">+{Number(entry.pnl).toFixed(2)}</span>
-                    ) : (
-                      <span className="text-red-400">{Number(entry.pnl).toFixed(2)}</span>
-                    )
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {pnlVal !== null ? (
+                    <span className={pnlVal >= 0 ? "text-emerald-400" : "text-red-400"}>
+                      {pnlVal >= 0 ? `+${pnlVal.toFixed(2)}` : pnlVal.toFixed(2)}
+                    </span>
                   ) : (
-                    <span className="text-neutral-600">—</span>
+                    <span className="text-zinc-600">—</span>
                   )}
-                </td>
-                <td className="px-3.5 py-2">
+                </TableCell>
+                <TableCell>
                   <Badge
-                    variant={entry.status === "CLOSED" ? "outline" : "electric"}
+                    variant={entry.status === "CLOSED" ? "secondary" : "warning"}
                     className="text-[9px] uppercase font-mono"
                   >
                     {entry.status}
                   </Badge>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+                </TableCell>
+              </TableRow>
+            );
+          })
+        )}
+      </TableBody>
+    </Table>
   );
 };

@@ -294,13 +294,26 @@ export default function PossibilityPage() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: sc.color }} />
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          sc.id === "primary"
+                            ? "bg-emerald-400"
+                            : sc.id === "invalidation"
+                            ? "bg-red-400"
+                            : "bg-amber-400"
+                        }`}
+                      />
                       {sc.name}
                     </span>
                     <Badge
-                      variant="outline"
-                      className="text-[10px] font-bold"
-                      style={{ color: sc.color, borderColor: sc.color }}
+                      variant={
+                        sc.id === "primary"
+                          ? "success"
+                          : sc.id === "invalidation"
+                          ? "destructive"
+                          : "warning"
+                      }
+                      className="text-[10px] font-bold tabular-nums"
                     >
                       {sc.probability}%
                     </Badge>

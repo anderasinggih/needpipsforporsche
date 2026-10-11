@@ -15,6 +15,14 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EconomicEvent, NewsArticle } from "@/app/api/market/news/route";
 
 interface MarketNewsTerminalProps {
@@ -174,91 +182,88 @@ export const MarketNewsTerminal: React.FC<MarketNewsTerminalProps> = ({ activeSy
           </div>
 
           {/* Table Container */}
-          <div className="overflow-x-auto rounded-lg border border-zinc-850">
-            <table className="w-full text-left font-mono text-xs">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-black text-[11px] text-zinc-500 font-medium">
-                  <th className="py-2 px-3">DATE / TIME</th>
-                  <th className="py-2 px-2">CURRENCY</th>
-                  <th className="py-2 px-2">IMPACT</th>
-                  <th className="py-2 px-3">EVENT / RELEASE</th>
-                  <th className="py-2 px-2 text-right">FORECAST</th>
-                  <th className="py-2 px-3 text-right">PREVIOUS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-900 bg-zinc-950/40">
-                {filteredEvents.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-zinc-500 font-sans">
-                      {loading ? "Loading economic releases..." : "Tidak ada jadwal event makro."}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEvents.map((evt) => {
-                    const evtDate = new Date(evt.date);
-                    const timeStr = isNaN(evtDate.getTime())
-                      ? evt.date
-                      : evtDate.toLocaleString([], {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        });
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[140px]">DATE / TIME</TableHead>
+                <TableHead className="w-[80px]">CURRENCY</TableHead>
+                <TableHead className="w-[90px]">IMPACT</TableHead>
+                <TableHead>EVENT / RELEASE</TableHead>
+                <TableHead className="text-right w-[100px]">FORECAST</TableHead>
+                <TableHead className="text-right w-[100px]">PREVIOUS</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredEvents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-zinc-500 font-sans">
+                    {loading ? "Loading economic releases..." : "Tidak ada jadwal event makro."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredEvents.map((evt) => {
+                  const evtDate = new Date(evt.date);
+                  const timeStr = isNaN(evtDate.getTime())
+                    ? evt.date
+                    : evtDate.toLocaleString([], {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
 
-                    return (
-                      <tr
-                        key={evt.id}
-                        className={`hover:bg-zinc-900/60 transition-colors ${
-                          evt.impact === "High" ? "bg-red-950/10" : ""
-                        }`}
-                      >
-                        <td className="py-2 px-3 text-zinc-400 text-[11px] whitespace-nowrap">
-                          {timeStr}
-                        </td>
-                        <td className="py-2 px-2 font-bold text-zinc-200">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] ${
-                              evt.country === "USD"
-                                ? "bg-zinc-800 text-emerald-300"
-                                : evt.country === "EUR"
-                                ? "bg-zinc-800 text-blue-300"
-                                : evt.country === "GBP"
-                                ? "bg-zinc-800 text-purple-300"
-                                : "bg-zinc-900 text-zinc-400"
-                            }`}
-                          >
-                            {evt.country}
-                          </span>
-                        </td>
-                        <td className="py-2 px-2 whitespace-nowrap">
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
-                              evt.impact === "High"
-                                ? "bg-red-950/50 text-red-400 border-red-900/60"
-                                : evt.impact === "Medium"
-                                ? "bg-amber-950/50 text-amber-400 border-amber-900/60"
-                                : "bg-zinc-900 text-zinc-400 border-zinc-800"
-                            }`}
-                          >
-                            {evt.impact.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-zinc-100 font-sans font-medium text-xs">
-                          {evt.title}
-                        </td>
-                        <td className="py-2 px-2 text-right text-zinc-300 font-mono text-[11px]">
-                          {evt.forecast}
-                        </td>
-                        <td className="py-2 px-3 text-right text-zinc-500 font-mono text-[11px]">
-                          {evt.previous}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                  return (
+                    <TableRow
+                      key={evt.id}
+                      className={evt.impact === "High" ? "bg-red-500/5 hover:bg-red-500/10" : ""}
+                    >
+                      <TableCell className="text-zinc-400 text-[11px] whitespace-nowrap">
+                        {timeStr}
+                      </TableCell>
+                      <TableCell className="font-bold">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            evt.country === "USD"
+                              ? "text-emerald-400 border-emerald-500/20"
+                              : evt.country === "EUR"
+                              ? "text-blue-400 border-blue-500/20"
+                              : evt.country === "GBP"
+                              ? "text-purple-400 border-purple-500/20"
+                              : "text-zinc-400 border-zinc-800"
+                          }
+                        >
+                          {evt.country}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Badge
+                          variant={
+                            evt.impact === "High"
+                              ? "destructive"
+                              : evt.impact === "Medium"
+                              ? "warning"
+                              : "secondary"
+                          }
+                        >
+                          {evt.impact.toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-zinc-100 font-sans font-medium text-xs">
+                        {evt.title}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-300 font-mono text-[11px] tabular-nums">
+                        {evt.forecast || "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-500 font-mono text-[11px] tabular-nums">
+                        {evt.previous || "-"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
         </Card>
       )}
 

@@ -3,23 +3,28 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/components/ui/button"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 select-none",
+  "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-medium transition-colors select-none tabular-nums",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-neutral-900 text-neutral-200",
+          "border border-zinc-800 bg-zinc-900 text-zinc-200",
         secondary:
-          "border-neutral-800 bg-neutral-900/60 text-neutral-400",
+          "border border-zinc-800/80 bg-zinc-950 text-zinc-400",
         destructive:
-          "border-red-900/60 bg-red-950/30 text-red-400",
-        outline: "border-neutral-800 text-neutral-300",
-        electric:
-          "border-[#00FF66]/30 bg-[#00FF66]/10 text-[#00FF66] shadow-[0_0_10px_rgba(0,255,102,0.15)]",
-        live:
-          "border-[#00FF66]/40 bg-[#00FF66]/10 text-[#00FF66] animate-pulse",
+          "border border-red-500/20 bg-red-500/10 text-red-400",
         success:
-          "border-[#00FF66]/30 bg-[#00FF66]/10 text-[#00FF66]",
+          "border border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+        warning:
+          "border border-amber-500/20 bg-amber-500/10 text-amber-400",
+        info:
+          "border border-cyan-500/20 bg-cyan-500/10 text-cyan-400",
+        outline:
+          "border border-zinc-800 text-zinc-300 bg-transparent",
+        live:
+          "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+        electric:
+          "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
       },
     },
     defaultVariants: {

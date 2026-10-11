@@ -182,8 +182,13 @@ export const PossibilityMonteCarloChart: React.FC<PossibilityChartProps> = ({
                 }`}
               >
                 <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: sc.color }}
+                  className={`h-2 w-2 rounded-full ${
+                    sc.id === "primary"
+                      ? "bg-emerald-400"
+                      : sc.id === "invalidation"
+                      ? "bg-red-400"
+                      : "bg-amber-400"
+                  }`}
                 />
                 {sc.name} ({sc.probability}%)
               </button>
