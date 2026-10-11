@@ -308,10 +308,10 @@ export default function PossibilityPage() {
                     <Badge
                       variant={
                         sc.id === "primary"
-                          ? "success"
+                          ? "default"
                           : sc.id === "invalidation"
                           ? "destructive"
-                          : "warning"
+                          : "secondary"
                       }
                       className="text-[10px] font-bold tabular-nums"
                     >

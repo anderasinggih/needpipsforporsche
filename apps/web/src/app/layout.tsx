@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-background text-slate-100 antialiased">
+      <body className="antialiased">
         {children}
         <BackgroundAudioPlayer />
       </body>

@@ -171,7 +171,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-semibold text-neutral-100">{skill.title}</div>
-                      <Badge variant="electric" className="text-[10px]">
+                      <Badge variant="default" className="text-[10px]">
                         RR 1:{skill.risk_reward_min}
                       </Badge>
                     </div>
@@ -256,7 +256,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                 </div>
 
                 <div className="pt-2">
-                  <Button type="submit" variant="electric" disabled={loading} className="w-full">
+                  <Button type="submit" variant="default" disabled={loading} className="w-full">
                     Save New Strategy
                   </Button>
                 </div>
@@ -267,7 +267,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
                   <div>
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-bold text-neutral-100">{selectedPreview.title}</h3>
-                      <Badge variant="electric">R:R ≥ 1:{selectedPreview.risk_reward_min}</Badge>
+                      <Badge variant="default">R:R ≥ 1:{selectedPreview.risk_reward_min}</Badge>
                     </div>
                     <p className="mt-1 text-xs text-neutral-400 leading-relaxed">
                       {selectedPreview.description}
@@ -296,7 +296,7 @@ export const SkillChecklistModal: React.FC<SkillChecklistModalProps> = ({
 
                 <div className="pt-2">
                   <Button
-                    variant="electric"
+                    variant="default"
                     onClick={() => {
                       if (onSkillSelect && selectedPreview) {
                         onSkillSelect(selectedPreview);

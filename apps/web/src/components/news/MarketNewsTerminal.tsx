@@ -242,7 +242,7 @@ export const MarketNewsTerminal: React.FC<MarketNewsTerminalProps> = ({ activeSy
                             evt.impact === "High"
                               ? "destructive"
                               : evt.impact === "Medium"
-                              ? "warning"
+                              ? "secondary"
                               : "secondary"
                           }
                         >

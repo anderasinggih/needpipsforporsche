@@ -1050,10 +1050,10 @@ export default function DashboardPage() {
                     <Badge
                       variant={
                         sc.id === "primary"
-                          ? "success"
+                          ? "default"
                           : sc.id === "invalidation"
                           ? "destructive"
-                          : "warning"
+                          : "secondary"
                       }
                       className="font-mono text-[11px] tabular-nums"
                     >
@@ -1692,7 +1692,7 @@ export default function DashboardPage() {
                                   <Badge
                                     variant={
                                       log.signal === "BUY"
-                                        ? "success"
+                                        ? "default"
                                         : log.signal === "SELL"
                                         ? "destructive"
                                         : "secondary"
@@ -1705,11 +1705,11 @@ export default function DashboardPage() {
                                   <Badge
                                     variant={
                                       outcomeStatus === "WIN"
-                                        ? "success"
+                                        ? "default"
                                         : outcomeStatus === "LOSE"
                                         ? "destructive"
                                         : outcomeStatus === "ACTIVE"
-                                        ? "warning"
+                                        ? "secondary"
                                         : "secondary"
                                     }
                                   >

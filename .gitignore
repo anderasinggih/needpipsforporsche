@@ -22,3 +22,6 @@ apps/engine/server
 
 # Candle history store
 apps/web/data/
+
+# TS incremental build info
+*.tsbuildinfo

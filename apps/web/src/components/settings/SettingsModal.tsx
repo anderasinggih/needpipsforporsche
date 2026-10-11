@@ -173,7 +173,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <DialogFooter className="pt-2">
             <Button
               type="submit"
-              variant="electric"
+              variant="default"
               disabled={isSaving}
               className="w-full flex items-center justify-center gap-2"
             >

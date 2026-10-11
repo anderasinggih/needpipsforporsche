@@ -70,7 +70,7 @@ export const JournalHistoryTable: React.FC<JournalHistoryTableProps> = ({ entrie
                   {entry.symbol}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={isBuy ? "success" : "destructive"}>
+                  <Badge variant={isBuy ? "default" : "destructive"}>
                     {entry.direction}
                   </Badge>
                 </TableCell>
@@ -91,7 +91,7 @@ export const JournalHistoryTable: React.FC<JournalHistoryTableProps> = ({ entrie
                 </TableCell>
                 <TableCell>
                   <Badge
-                    variant={entry.status === "CLOSED" ? "secondary" : "warning"}
+                    variant={entry.status === "CLOSED" ? "secondary" : "secondary"}
                     className="text-[9px] uppercase font-mono"
                   >
                     {entry.status}
