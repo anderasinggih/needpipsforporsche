@@ -9,6 +9,7 @@ import {
   PositionBox,
 } from "@/components/chart/TradingViewChart";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
+import { TradeTape } from "@/components/ui/trade-tape";
 import { LiquidityHeatmapRadar } from "@/components/chart/LiquidityHeatmapRadar";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
@@ -992,12 +993,27 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-850 bg-black">
+                  <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-850 bg-black p-2 flex flex-col justify-start">
                     {sidePanelTab === "tape" ? (
-                      <LiveOrderbookTape
-                        trades={recentTrades}
+                      <TradeTape
                         symbol={activeSymbol}
-                        currentPrice={currentCandle?.close}
+                        base={currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650)}
+                        priceDp={activeSymbol === "BTCUSD" ? 1 : 2}
+                        sizeDp={activeSymbol === "BTCUSD" ? 3 : 1}
+                        flush
+                        fill
+                        initialLive
+                        feed={
+                          recentTrades.length > 0
+                            ? recentTrades.map((t) => ({
+                                id: t.id,
+                                time: t.time,
+                                price: t.price,
+                                size: t.qty,
+                                side: t.side.toLowerCase() as "buy" | "sell",
+                              }))
+                            : undefined
+                        }
                       />
                     ) : (
                       <LiquidityHeatmapRadar
