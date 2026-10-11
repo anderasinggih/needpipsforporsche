@@ -843,9 +843,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       const slPipsText = aiSignal.slPips ? `${aiSignal.slPips} pips` : `${(riskDist * 10).toFixed(0)} pips`;
 
       const badgeText1 = isAwaitingEntry
-        ? `[Pending Limit] ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
-        : `${isLong ? "Long" : "Short"} Target: +${tpPipsText} | Risk: -${slPipsText}`;
-      const badgeText2 = isAwaitingEntry ? `Awaiting Retest • RR 1:${rrRatio}` : `Risk/Reward Ratio: 1:${rrRatio}`;
+        ? `Limit ${isLong ? "Buy" : "Sell"}: +${tpPipsText} | -${slPipsText}`
+        : `${isLong ? "Target" : "Target"}: +${tpPipsText} | Risk: -${slPipsText}`;
+      const badgeText2 = `R:R 1:${rrRatio}${isAwaitingEntry ? " (Pending)" : ""}`;
 
       ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif";
       const w1 = ctx.measureText(badgeText1).width;
@@ -934,7 +934,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             <select
               value={timeframe}
               onChange={(e) => onTimeframeChange?.(e.target.value)}
-              className="bg-black border border-zinc-800 text-zinc-300 text-[11px] sm:text-xs font-medium rounded px-2 sm:px-2.5 py-1 focus:outline-none focus:border-zinc-600 cursor-pointer hover:bg-zinc-900 transition-colors"
+              className="bg-black border border-zinc-800 text-zinc-300 text-[11px] sm:text-xs font-medium rounded px-2 sm:px-2.5 py-1 focus:outline-none focus:border-zinc-700 cursor-pointer hover:bg-zinc-900 transition-colors"
             >
               {TIMEFRAMES.map((tf) => (
                 <option key={tf.value} value={tf.value} className="bg-black text-zinc-200">
@@ -944,16 +944,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-zinc-800 text-[10px] sm:text-[11px] text-zinc-400">
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${pulse ? "bg-emerald-400" : "bg-zinc-600"} transition-colors duration-150`}
-            />
-            <span>Feed</span>
-          </div>
-
           {aiSignal?.signal && (
             <span
-              className={`rounded px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-[11px] font-medium border ${
+              className={`rounded px-2 py-0.5 text-[11px] font-mono font-medium border ${
                 aiSignal.signal === "BUY"
                   ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60"
                   : aiSignal.signal === "SELL"
@@ -961,46 +954,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
                   : "bg-zinc-900 text-zinc-300 border-zinc-800"
               }`}
             >
-              Scalp {aiSignal.signal === "BUY" ? "Buy" : aiSignal.signal === "SELL" ? "Sell" : "Wait"}
-            </span>
-          )}
-
-          {aiSignal?.slPips && (
-            <span className="hidden sm:inline-block rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
-              SL: {aiSignal.slPips}p &bull; TP: {aiSignal.tpPips}p
-              {aiSignal.riskRewardRatio ? ` (${aiSignal.riskRewardRatio})` : ""}
-            </span>
-          )}
-
-          {aiSignal?.signal === "WAIT" && (
-            <span className="rounded bg-amber-950/40 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-amber-400 border border-amber-900/50">
-              Wait (Plan: {resolveSide(aiSignal.signal, aiSignal.direction) === "BUY" ? "Buy" : "Sell"} Limit @ ${aiSignal.entryPrice ? Number(aiSignal.entryPrice).toFixed(aiSignal.entryPrice > 100 ? 2 : 4) : "-"})
-            </span>
-          )}
-
-          {aiSignal?.possibilityScenarios && aiSignal.possibilityScenarios.length > 0 && (
-            <div className="hidden md:flex items-center gap-1.5 pl-1">
-              {aiSignal.possibilityScenarios.map((sc) => (
-                <span
-                  key={sc.id}
-                  className="rounded px-2 py-0.5 text-[10px] font-mono font-medium border flex items-center gap-1"
-                  style={{
-                    backgroundColor: `${sc.color}15`,
-                    borderColor: `${sc.color}40`,
-                    color: sc.color,
-                  }}
-                  title={sc.description}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc.color }} />
-                  {sc.name}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {aiMapping?.fibonacciRetracement && (
-            <span className="hidden sm:inline-block rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
-              Fib 0.618 Pocket
+              {aiSignal.signal}
+              {aiSignal.slPips ? ` • SL ${aiSignal.slPips}p / TP ${aiSignal.tpPips}p` : ""}
             </span>
           )}
         </div>

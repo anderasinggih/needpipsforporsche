@@ -219,27 +219,15 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
   return (
     <div className="flex flex-col h-[520px] rounded-lg border border-zinc-800 bg-zinc-950/95 overflow-hidden text-xs font-sans shadow-xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 px-3.5 py-2.5 bg-black/60 backdrop-blur">
+      <div className="flex items-center justify-between border-b border-zinc-800 px-3.5 py-2.5 bg-black/60">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-950/70 border border-emerald-800/60 text-emerald-400">
-            <MessageSquare className="h-3.5 w-3.5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-zinc-100 text-xs">Council War Room Debate</span>
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-            </div>
-            <p className="text-[10px] text-zinc-400">
-              Diskusi & Sanggahan Hingga 20 Agen AI • {symbol} ({timeframe.toUpperCase()})
-            </p>
-          </div>
+          <MessageSquare className="h-4 w-4 text-zinc-400" />
+          <span className="font-semibold text-zinc-100 text-xs font-mono">Council Discussion</span>
+          <span className="text-[10px] text-zinc-500 font-mono">• {symbol} ({timeframe.toUpperCase()})</span>
         </div>
 
         {/* Filter Round Tabs */}
-        <div className="flex items-center gap-1 bg-black p-0.5 rounded-md border border-zinc-800 text-[10px]">
+        <div className="flex items-center gap-1 bg-black p-0.5 rounded border border-zinc-800 text-[10px] font-mono">
           <button
             type="button"
             onClick={() => setActiveTab("all")}
@@ -247,7 +235,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
               activeTab === "all" ? "bg-zinc-800 text-zinc-100 font-medium" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Semua ({messages.length})
+            All ({messages.length})
           </button>
           <button
             type="button"
@@ -265,7 +253,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
               activeTab === "rebuttal" ? "bg-zinc-800 text-zinc-100 font-medium" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Debat
+            Debate
           </button>
           <button
             type="button"
@@ -274,7 +262,7 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
               activeTab === "ruling" ? "bg-zinc-800 text-zinc-100 font-medium" : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            Putusan
+            Ruling
           </button>
         </div>
       </div>
@@ -286,46 +274,23 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
         className="flex-1 overflow-y-auto p-3.5 space-y-3 font-sans"
       >
         {messages.length === 0 && !isEvaluating ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-10 px-4">
-            <div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-2.5">
-              <Users className="h-5 w-5" />
-            </div>
-            <p className="text-zinc-300 font-medium text-xs">War Room Siap Berdiskusi</p>
-            <p className="text-zinc-500 text-[11px] max-w-sm mt-1 leading-normal">
-              Klik tombol musyawarah untuk memulai sidang dewan. Seluruh agen AI akan saling melempar argumen, mendebat setup, dan menguji kelayakan risiko secara transparan.
+          <div className="flex flex-col items-center justify-center h-full text-center py-12 px-4">
+            <Users className="h-6 w-6 text-zinc-600 mb-2" />
+            <p className="text-zinc-300 font-medium text-xs">Belum Ada Diskusi</p>
+            <p className="text-zinc-500 text-[11px] max-w-sm mt-1">
+              Klik DELIBERATE untuk memulai analisa dan evaluasi dewan.
             </p>
           </div>
         ) : null}
 
-        {/* Live Multi-Stage Deliberation Status while AI Council is deliberating */}
+        {/* Live Status while AI Council is deliberating */}
         {isEvaluating && (
-          <div className="p-3.5 rounded-lg border border-emerald-900/40 bg-emerald-950/20 space-y-3 font-mono">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-2 text-emerald-400 font-semibold">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                Live Deliberation In Progress...
-              </span>
-              <span className="text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                Up to 20 AI Minds Engaged
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px]">
-              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
-                <span className="text-emerald-400 font-bold">R1:</span>
-                <span>Pitches & Technical Scans</span>
-              </div>
-              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
-                <span className="text-amber-400 font-bold">R2:</span>
-                <span>Cross-Debate & Rebuttal</span>
-              </div>
-              <div className="p-2 rounded bg-black/40 border border-zinc-800/80 flex items-center gap-2 text-zinc-300">
-                <span className="text-cyan-400 font-bold">R3:</span>
-                <span>Chief Risk Synthesis</span>
-              </div>
-            </div>
-            <p className="text-[11px] text-zinc-400 font-sans italic">
-              Sedang mengambil pembacaan live dari seluruh slot AI... argumen dan perdebatan akan segera masuk ke stream di bawah ini.
-            </p>
+          <div className="p-3 rounded-lg border border-zinc-800 bg-zinc-950 flex items-center justify-between text-xs font-mono text-zinc-300">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              Deliberasi sedang berjalan...
+            </span>
+            <span className="text-[10px] text-zinc-500">20 Agen</span>
           </div>
         )}
 
@@ -409,25 +374,25 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
 
         {/* Live Typing Indicator for Debate Stream */}
         {typingIndex >= 0 && (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-zinc-900/40 border border-zinc-800/60 text-zinc-400 text-[10px] font-mono">
+          <div className="flex items-center gap-2 p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 text-[10px] font-mono">
             <span className="flex gap-1 items-center">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce"></span>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]"></span>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
             </span>
-            <span>Dewan AI sedang menanggapi & memperdebatkan argumen...</span>
+            <span>Dewan sedang merumuskan argumen...</span>
           </div>
         )}
 
-        {/* Real Live LLM Thinking Indicator when user asks question */}
+        {/* Live LLM Thinking Indicator when user asks question */}
         {isAskingAi && (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-950/30 border border-emerald-800/50 text-emerald-300 text-[10px] font-mono animate-pulse">
+          <div className="flex items-center gap-2 p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 text-[10px] font-mono">
             <span className="flex gap-1 items-center">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce"></span>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]"></span>
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
             </span>
-            <span>Menghubungi otak model AI... sedang merumuskan jawaban kuantitatif live</span>
+            <span>Memproses pertanyaan...</span>
           </div>
         )}
 
@@ -443,23 +408,23 @@ export const CouncilWarRoomChat: React.FC<CouncilWarRoomChatProps> = ({
           disabled={isAskingAi || currentUser?.role === "viewer"}
           placeholder={
             currentUser?.role === "viewer"
-              ? "[Viewer Mode] Akun penonton tidak diizinkan mengirim pesan ke AI dewan."
-              : "Tanyakan / debatkan langsung ke dewan AI (misal: '@Agent 5 kenapa SL gak dilebarin?')..."
+              ? "Akun viewer (read-only)."
+              : "Ketik pertanyaan atau tanggapan untuk dewan..."
           }
-          className="flex-1 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-emerald-600 font-sans disabled:opacity-50"
+          className="flex-1 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700 font-sans disabled:opacity-50"
         />
         <Button
           type="submit"
           size="sm"
           disabled={!userQuery.trim() || isAskingAi || currentUser?.role === "viewer"}
-          className={`h-8 px-3 text-xs font-medium ${
+          className={`h-8 px-3 text-xs font-mono font-medium ${
             currentUser?.role === "viewer"
               ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-              : "bg-emerald-600 hover:bg-emerald-500 text-white"
+              : "bg-emerald-600 hover:bg-emerald-500 text-black"
           }`}
         >
           <Send className="h-3 w-3 mr-1" />
-          {currentUser?.role === "viewer" ? "Locked" : isAskingAi ? "Menjawab..." : "Kirim"}
+          {currentUser?.role === "viewer" ? "Locked" : isAskingAi ? "Loading" : "Send"}
         </Button>
       </form>
     </div>

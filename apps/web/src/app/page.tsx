@@ -14,7 +14,6 @@ import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { CouncilWarRoomChat } from "@/components/council/CouncilWarRoomChat";
-import { QuantumTorusManifold } from "@/components/council/QuantumTorusManifold";
 import { PossibilityMonteCarloChart } from "@/components/chart/PossibilityMonteCarloChart";
 import { PossibilityScenario } from "@/lib/ai/types";
 import { Button } from "@/components/ui/button";
@@ -747,66 +746,66 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => switchWorkspaceView("chart")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
                 workspaceView === "chart"
-                  ? "bg-zinc-800 text-emerald-400 font-semibold shadow-sm border border-zinc-700"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               <Activity className="h-3.5 w-3.5 text-emerald-400" />
-              <span>LIVE CHART</span>
+              <span>CHART</span>
             </button>
 
             <button
               type="button"
               onClick={() => switchWorkspaceView("forecast")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
                 workspaceView === "forecast"
-                  ? "bg-cyan-950/70 text-cyan-300 font-semibold shadow-sm border border-cyan-800"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
-              <span>QUANT FORECAST</span>
+              <span>FORECAST</span>
             </button>
 
             <button
               type="button"
               onClick={() => switchWorkspaceView("warroom")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
                 workspaceView === "warroom"
                   ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
-              <span>WAR ROOM CHAT</span>
+              <span>WAR ROOM</span>
             </button>
 
             <button
               type="button"
               onClick={() => switchWorkspaceView("agents")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
                 workspaceView === "agents"
-                  ? "bg-purple-950/70 text-purple-300 font-semibold shadow-sm border border-purple-800"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               <Users className="h-3.5 w-3.5 text-purple-400" />
-              <span>AI COUNCIL &amp; PLAN</span>
+              <span>PLAN</span>
             </button>
 
             <button
               type="button"
               onClick={() => switchWorkspaceView("journal")}
-              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
                 workspaceView === "journal"
-                  ? "bg-amber-950/60 text-amber-300 font-semibold shadow-sm border border-amber-800"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               <FileText className="h-3.5 w-3.5 text-amber-400" />
-              <span>TRADE JOURNAL ({evalLogs.length})</span>
+              <span>JOURNAL ({evalLogs.length})</span>
             </button>
           </div>
 
@@ -822,7 +821,7 @@ export default function DashboardPage() {
                   onClick={() => handleTargetRrChange(rrVal)}
                   className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium transition-colors ${
                     targetRr === rrVal
-                      ? "bg-zinc-800 text-emerald-400 border border-zinc-700"
+                      ? "bg-zinc-800 text-white border border-zinc-700"
                       : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
@@ -835,7 +834,7 @@ export default function DashboardPage() {
             {evaluation?.signal && (
               <Badge
                 variant="outline"
-                className={`text-xs font-mono px-2.5 py-1 ${
+                className={`text-xs font-mono px-2 py-0.5 ${
                   evaluation.signal === "BUY"
                     ? "border-emerald-800 text-emerald-400 bg-emerald-950/30"
                     : evaluation.signal === "SELL"
@@ -843,7 +842,7 @@ export default function DashboardPage() {
                     : "border-amber-800 text-amber-400 bg-amber-950/30"
                 }`}
               >
-                {evaluation.signal} ({evaluation.confidence}%) &bull; SL {evaluation.slPips}p &bull; TP {evaluation.tpPips}p
+                {evaluation.signal} ({evaluation.confidence}%) • SL {evaluation.slPips}p • TP {evaluation.tpPips}p
               </Badge>
             )}
 
@@ -852,12 +851,12 @@ export default function DashboardPage() {
               size="sm"
               onClick={() => handleEvaluate()}
               disabled={isEvaluating}
-              className="h-8 px-3 text-xs font-mono font-semibold bg-emerald-600 hover:bg-emerald-500 text-black border-0 shadow-lg shadow-emerald-950/40"
+              className="h-8 px-3 text-xs font-mono font-semibold bg-emerald-600 hover:bg-emerald-500 text-black border-0 shadow-sm"
             >
               {isEvaluating ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ANALYZING...
+                  ANALYZING
                 </>
               ) : (
                 <>
@@ -874,28 +873,24 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {/* Planned Order Status Strip (If exists) */}
             {evaluation?.plannedOrder && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-xs font-mono">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs font-mono">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  <span className="font-semibold text-zinc-300">
+                    {evaluation.plannedOrder.type === "BUY_LIMIT" ? "BUY LIMIT" : "SELL LIMIT"}
                   </span>
-                  <span className="font-bold text-amber-300">
-                    {evaluation.plannedOrder.type === "BUY_LIMIT" ? "PLANNED BUY LIMIT" : "PLANNED SELL LIMIT"}
-                  </span>
-                  <span className="text-zinc-200 font-semibold">${evaluation.plannedOrder.price}</span>
-                  <span className="text-red-400">SL: ${evaluation.plannedOrder.sl} (-{evaluation.plannedOrder.slPips}p)</span>
-                  <span className="text-emerald-400">TP: ${evaluation.plannedOrder.tp} (+{evaluation.plannedOrder.tpPips}p)</span>
-                  <span className="text-zinc-400">RR: {evaluation.plannedOrder.rr}</span>
+                  <span className="text-zinc-100 font-semibold">${evaluation.plannedOrder.price}</span>
+                  <span className="text-red-400">SL ${evaluation.plannedOrder.sl} (-{evaluation.plannedOrder.slPips}p)</span>
+                  <span className="text-emerald-400">TP ${evaluation.plannedOrder.tp} (+{evaluation.plannedOrder.tpPips}p)</span>
+                  <span className="text-zinc-400">RR {evaluation.plannedOrder.rr}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[11px]">
-                  <span className="text-amber-200/90">{evaluation.plannedOrder.status || evaluation.entryTrigger || "ARMED"}</span>
+                  <span className="text-zinc-400">{evaluation.plannedOrder.status || evaluation.entryTrigger || "PENDING"}</span>
                   <button
                     type="button"
                     onClick={() => switchWorkspaceView("agents")}
-                    className="text-cyan-400 hover:underline font-semibold"
+                    className="text-zinc-300 hover:text-white underline font-medium"
                   >
-                    View Plan &amp; Council &rarr;
+                    View Plan &rarr;
                   </button>
                 </div>
               </div>
@@ -1096,47 +1091,43 @@ export default function DashboardPage() {
 
             {/* Smart Planned Order Card */}
             {evaluation?.plannedOrder && (
-              <div className="rounded-xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 font-mono text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-900/40 pb-2 mb-2.5">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 font-mono text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2 mb-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-2.5 w-2.5 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                    <span className="font-semibold text-zinc-100">
+                      {evaluation.plannedOrder.type === "BUY_LIMIT" ? "BUY LIMIT" : "SELL LIMIT"}
                     </span>
-                    <span className="font-bold text-sm text-amber-300">
-                      {evaluation.plannedOrder.type === "BUY_LIMIT" ? "🎯 PLANNED BUY LIMIT" : "🎯 PLANNED SELL LIMIT"}
-                    </span>
-                    <span className="rounded bg-black/60 px-2 py-0.5 text-xs text-zinc-400 border border-zinc-800">
-                      {evaluation.signal === "WAIT" ? "Pending Pullback Retest Trigger" : "Armed for Execution"}
+                    <span className="rounded bg-black px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
+                      {evaluation.signal === "WAIT" ? "Pending Pullback" : "Armed"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-zinc-400">Target RR:</span>
-                    <span className="font-bold text-emerald-400">{evaluation.plannedOrder.rr}</span>
+                    <span className="text-zinc-500">RR:</span>
+                    <span className="font-semibold text-zinc-200">{evaluation.plannedOrder.rr}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
-                    <span className="text-[10px] text-zinc-500 block">Pending Limit Price</span>
-                    <span className="font-bold text-zinc-100">${evaluation.plannedOrder.price}</span>
+                  <div className="rounded bg-black p-2 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 block">Entry</span>
+                    <span className="font-semibold text-zinc-100">${evaluation.plannedOrder.price}</span>
                   </div>
-                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                  <div className="rounded bg-black p-2 border border-zinc-800">
                     <span className="text-[10px] text-red-400 block">Stop Loss</span>
-                    <span className="font-bold text-red-300">${evaluation.plannedOrder.sl} ({evaluation.plannedOrder.slPips}p)</span>
+                    <span className="font-semibold text-red-400">${evaluation.plannedOrder.sl} (-{evaluation.plannedOrder.slPips}p)</span>
                   </div>
-                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
+                  <div className="rounded bg-black p-2 border border-zinc-800">
                     <span className="text-[10px] text-emerald-400 block">Take Profit</span>
-                    <span className="font-bold text-emerald-300">${evaluation.plannedOrder.tp} ({evaluation.plannedOrder.tpPips}p)</span>
+                    <span className="font-semibold text-emerald-400">${evaluation.plannedOrder.tp} (+{evaluation.plannedOrder.tpPips}p)</span>
                   </div>
-                  <div className="rounded bg-black/60 p-2 border border-zinc-800/80">
-                    <span className="text-[10px] text-zinc-400 block">Status / Trigger</span>
-                    <span className="font-semibold text-amber-300 truncate block">{evaluation.plannedOrder.status || evaluation.entryTrigger || "ARMED"}</span>
+                  <div className="rounded bg-black p-2 border border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 block">Trigger</span>
+                    <span className="font-semibold text-zinc-300 truncate block">{evaluation.plannedOrder.status || evaluation.entryTrigger || "PENDING"}</span>
                   </div>
                 </div>
                 {evaluation.plannedOrder.rationale && (
-                  <p className="mt-2 text-xs text-zinc-400 font-sans italic">
-                    💡 Rationale Dewan: {evaluation.plannedOrder.rationale}
+                  <p className="mt-2 text-xs text-zinc-400 font-sans">
+                    {evaluation.plannedOrder.rationale}
                   </p>
                 )}
               </div>
@@ -1146,7 +1137,7 @@ export default function DashboardPage() {
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none">
               <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between border-b border-zinc-800">
                 <CardTitle className="text-xs font-semibold text-zinc-200">
-                  Scalping Execution Plan (Synthesized by Council)
+                  Execution Plan
                 </CardTitle>
                 {evaluation?.signal && (
                   <Badge
@@ -1220,20 +1211,20 @@ export default function DashboardPage() {
                     {evaluation.entryPrice && evaluation.signal !== "WAIT" && (
                       <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-black border border-zinc-800 font-mono">
                         <div className="text-center border-r border-zinc-800 pr-2">
-                          <span className="text-[10px] text-zinc-500 uppercase flex items-center justify-center gap-1">
-                            {evaluation.orderType === "LIMIT" ? "⏳ Limit / Retest Entry" : "⚡ Suggested Entry"}
+                          <span className="text-[10px] text-zinc-500 uppercase block">
+                            {evaluation.orderType === "LIMIT" ? "Limit Entry" : "Entry"}
                           </span>
                           <div className="text-sm font-semibold text-zinc-100 mt-0.5">
                             ${evaluation.entryPrice.toFixed(2)}
                           </div>
                           {evaluation.entryTrigger && (
-                            <span className="text-[9px] block text-cyan-400/90 font-normal truncate mt-0.5" title={evaluation.entryTrigger}>
-                              {evaluation.orderType === "LIMIT" ? "Pending Pullback" : "Market Execution"}
+                            <span className="text-[9px] block text-zinc-400 font-normal truncate mt-0.5" title={evaluation.entryTrigger}>
+                              {evaluation.orderType === "LIMIT" ? "Pullback" : "Market"}
                             </span>
                           )}
                         </div>
                         <div className="text-center border-r border-zinc-800 pr-2">
-                          <span className="text-[10px] text-red-400 uppercase">Stop Loss (SL)</span>
+                          <span className="text-[10px] text-red-400 uppercase block">Stop Loss (SL)</span>
                           <div className="text-sm font-semibold text-red-400 mt-0.5">
                             ${evaluation.stopLoss?.toFixed(2)}
                             {evaluation.slPips && (
@@ -1244,7 +1235,7 @@ export default function DashboardPage() {
                           </div>
                         </div>
                         <div className="text-center">
-                          <span className="text-[10px] text-emerald-400 uppercase">Take Profit (TP)</span>
+                          <span className="text-[10px] text-emerald-400 uppercase block">Take Profit (TP)</span>
                           <div className="text-sm font-semibold text-emerald-400 mt-0.5">
                             ${evaluation.takeProfit?.toFixed(2)}
                             {evaluation.tpPips && (
@@ -1259,25 +1250,19 @@ export default function DashboardPage() {
 
                     {/* No-Trade Reasons when WAIT */}
                     {evaluation.signal === "WAIT" && (
-                      <div className="rounded-lg border border-amber-800/80 bg-amber-950/20 p-3.5 space-y-2">
-                        <div className="flex items-center gap-2 text-amber-400 font-mono text-xs font-semibold pb-1.5 border-b border-amber-900/40">
-                          <AlertCircle className="h-4 w-4" />
-                          <span>Status: MENAHAN DIRI (WAIT) — Edge Belum Terpenuhi</span>
+                      <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-400 font-mono text-xs font-semibold pb-1 border-b border-amber-900/40">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          <span>Status: WAIT — Edge Belum Terpenuhi</span>
                         </div>
-                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
-                          AI dewan memilih <strong className="text-amber-300">TIDAK MEMAKSAKAN ENTRY</strong> karena kondisi saat ini belum memiliki probabilitas edge yang memadai.
-                        </p>
                         {evaluation.noTradeReasons && evaluation.noTradeReasons.length > 0 && (
-                          <div className="mt-2 space-y-1.5 pt-1">
-                            <div className="text-[11px] font-mono text-zinc-400">Penyebab Belum Ada Setup:</div>
-                            <div className="grid grid-cols-1 gap-1.5">
-                              {evaluation.noTradeReasons.map((reason, idx) => (
-                                <div key={idx} className="flex items-start gap-2 text-[11px] font-mono text-amber-200/90 bg-black/50 border border-amber-900/30 rounded p-2">
-                                  <span className="text-amber-400 font-bold">•</span>
-                                  <span>{reason}</span>
-                                </div>
-                              ))}
-                            </div>
+                          <div className="space-y-1">
+                            {evaluation.noTradeReasons.map((reason, idx) => (
+                              <div key={idx} className="flex items-start gap-2 text-[11px] font-mono text-zinc-300">
+                                <span className="text-amber-400">•</span>
+                                <span>{reason}</span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1295,11 +1280,11 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Kesimpulan Akhir */}
+                    {/* Detailed Verdict */}
                     {evaluation.detailedVerdict && (
-                      <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/10 p-3.5">
-                        <div className="font-semibold text-emerald-400 font-mono text-[11px] pb-1 border-b border-emerald-900/40">
-                          Kesimpulan Akhir &amp; Putusan AI Penyimpul
+                      <div className="rounded border border-zinc-800 bg-black p-3">
+                        <div className="font-semibold text-zinc-400 font-mono text-[11px] pb-1 border-b border-zinc-850">
+                          Verdict
                         </div>
                         <p className="mt-2 text-zinc-200 text-xs leading-relaxed font-sans">
                           {evaluation.detailedVerdict}
@@ -1307,21 +1292,23 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Tesis Konsensus */}
-                    <div className="rounded border border-zinc-800 bg-black p-3">
-                      <div className="font-semibold text-zinc-400 font-mono text-[11px]">
-                        Tesis Konsensus Dewan AI ({activeSymbol} &bull; {timeframe.toUpperCase()})
+                    {/* Thesis */}
+                    {evaluation.thesis && (
+                      <div className="rounded border border-zinc-800 bg-black p-3">
+                        <div className="font-semibold text-zinc-400 font-mono text-[11px]">
+                          Thesis ({activeSymbol} • {timeframe.toUpperCase()})
+                        </div>
+                        <p className="mt-1 text-zinc-200 text-xs leading-relaxed">{evaluation.thesis}</p>
                       </div>
-                      <p className="mt-1 text-zinc-200 leading-relaxed">{evaluation.thesis}</p>
-                    </div>
+                    )}
 
-                    {/* SL & TP Detailed Justification Reasons */}
+                    {/* SL & TP Rationale */}
                     {(evaluation.slReason || evaluation.tpReason) && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {evaluation.slReason && (
                           <div className="rounded border border-zinc-800 bg-black p-3">
                             <div className="font-semibold text-red-400 font-mono text-[11px]">
-                              Alasan Penempatan Stop Loss
+                              Stop Loss Basis
                             </div>
                             <p className="mt-1 text-zinc-300 text-[11px] leading-relaxed">
                               {evaluation.slReason}
@@ -1331,7 +1318,7 @@ export default function DashboardPage() {
                         {evaluation.tpReason && (
                           <div className="rounded border border-zinc-800 bg-black p-3">
                             <div className="font-semibold text-emerald-400 font-mono text-[11px]">
-                              Alasan Penempatan Take Profit
+                              Take Profit Target
                             </div>
                             <p className="mt-1 text-zinc-300 text-[11px] leading-relaxed">
                               {evaluation.tpReason}
@@ -1341,11 +1328,11 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Invalidation & Recommendation */}
+                    {/* Invalidation & Instructions */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[11px]">
-                          Level Pembatalan Skenario (Invalidation)
+                          Invalidation Level
                         </div>
                         <p className="mt-1 font-mono text-zinc-300 text-[11px]">
                           {evaluation.riskInvalidation}
@@ -1353,7 +1340,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="rounded border border-zinc-800 bg-black p-3">
                         <div className="font-semibold text-zinc-400 font-mono text-[11px]">
-                          Instruksi Eksekusi Scalping
+                          Execution Notes
                         </div>
                         <p className="mt-1 text-zinc-200 text-[11px]">
                           {evaluation.recommendation}
@@ -1377,13 +1364,13 @@ export default function DashboardPage() {
             <Card className="border-zinc-800 bg-zinc-950 p-4 shadow-none space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
                 <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-purple-400" />
-                  <span className="font-mono font-bold text-sm tracking-wide text-white">
-                    20-AGENT SPECIALIST CONSENSUS BREAKDOWN &amp; DISCIPLINE
+                  <Users className="h-4 w-4 text-zinc-400" />
+                  <span className="font-mono font-semibold text-xs tracking-wider text-zinc-200 uppercase">
+                    Council Breakdown
                   </span>
                 </div>
                 <Badge variant="outline" className="text-xs font-mono border-zinc-800 text-zinc-400">
-                  {evaluation?.activeAgentCount ?? (evaluation?.agentOpinions?.length || 20)} CONTRIBUTORS
+                  {evaluation?.activeAgentCount ?? (evaluation?.agentOpinions?.length || 20)} Contributors
                 </Badge>
               </div>
 
