@@ -15,6 +15,7 @@ import { resolveTradeOutcome } from "@/lib/trade/outcome";
 import { SkillChecklistModal, TradingSkill } from "@/components/skills/SkillChecklistModal";
 import { CouncilWarRoomChat } from "@/components/council/CouncilWarRoomChat";
 import { PossibilityMonteCarloChart } from "@/components/chart/PossibilityMonteCarloChart";
+import { MarketNewsTerminal } from "@/components/news/MarketNewsTerminal";
 import { PossibilityScenario } from "@/lib/ai/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ import {
   AlertCircle,
   Zap,
   Layers,
+  Newspaper,
 } from "lucide-react";
 import type {
   AgentOpinion,
@@ -200,7 +202,7 @@ export default function DashboardPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  type WorkspaceView = "chart" | "forecast" | "warroom" | "agents" | "journal";
+  type WorkspaceView = "chart" | "forecast" | "warroom" | "agents" | "journal" | "news";
 
   // Active Workspace View (Single source of truth)
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("chart");
@@ -247,7 +249,7 @@ export default function DashboardPage() {
       // Check URL query param for initial view
       const params = new URLSearchParams(window.location.search);
       const viewParam = params.get("view");
-      if (viewParam === "forecast" || viewParam === "warroom" || viewParam === "agents" || viewParam === "chart" || viewParam === "journal") {
+      if (viewParam === "forecast" || viewParam === "warroom" || viewParam === "agents" || viewParam === "chart" || viewParam === "journal" || viewParam === "news") {
         setWorkspaceView(viewParam as WorkspaceView);
       }
 
@@ -806,6 +808,19 @@ export default function DashboardPage() {
             >
               <FileText className="h-3.5 w-3.5 text-amber-400" />
               <span>JOURNAL ({evalLogs.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchWorkspaceView("news")}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all shrink-0 ${
+                workspaceView === "news"
+                  ? "bg-zinc-800 text-zinc-100 font-semibold shadow-sm border border-zinc-700"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+              }`}
+            >
+              <Newspaper className="h-3.5 w-3.5 text-cyan-400" />
+              <span>NEWS &amp; CALENDAR</span>
             </button>
           </div>
 
@@ -1700,6 +1715,11 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* 6. NEWS & ECONOMIC CALENDAR VIEW */}
+        {workspaceView === "news" && (
+          <MarketNewsTerminal activeSymbol={activeSymbol} />
         )}
       </div>
 
