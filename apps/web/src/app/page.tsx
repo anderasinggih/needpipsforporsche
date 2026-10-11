@@ -10,6 +10,10 @@ import {
 } from "@/components/chart/TradingViewChart";
 import { LiveOrderbookTape } from "@/components/chart/LiveOrderbookTape";
 import { TradeTape } from "@/components/ui/trade-tape";
+import { OrderBook } from "@/components/ui/order-book";
+import { DepthChart } from "@/components/ui/depth-chart";
+import { OrderTicket, type Order as SsychOrder } from "@/components/ui/order-ticket";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { LiquidityHeatmapRadar } from "@/components/chart/LiquidityHeatmapRadar";
 import { useMarketStream } from "@/hooks/useMarketStream";
 import { resolveTradeOutcome } from "@/lib/trade/outcome";
@@ -197,7 +201,8 @@ export default function DashboardPage() {
     useMarketStream(activeSymbol, timeframe);
 
   const [showSidePanel, setShowSidePanel] = useState<boolean>(true);
-  const [sidePanelTab, setSidePanelTab] = useState<"tape" | "heatmap">("heatmap");
+  const [sidePanelTab, setSidePanelTab] = useState<"tape" | "book" | "depth" | "ticket" | "heatmap">("tape");
+  const [orderSubmitting, setOrderSubmitting] = useState<boolean>(false);
 
   const [selectedSkill, setSelectedSkill] = useState<TradingSkill | null>(null);
   const [checkedRules, setCheckedRules] = useState<Record<string, boolean>>({});
@@ -658,24 +663,8 @@ export default function DashboardPage() {
 
           {/* Right Controls: Side Panel Toggle & Live Status (Strict 1-Row) */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Side Panel Toggle (Heatmap / Tape / Close) */}
-            <div className="flex items-center bg-black border border-zinc-800 rounded p-0.5 text-[11px] font-mono shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSidePanel(true);
-                  setSidePanelTab("heatmap");
-                }}
-                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
-                  showSidePanel && sidePanelTab === "heatmap"
-                    ? "bg-zinc-800 text-cyan-400 font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="L2 Liquidity Heatmap Radar"
-              >
-                <Layers className="h-3 w-3 text-cyan-400" />
-                <span className="hidden sm:inline">HEATMAP</span>
-              </button>
+            {/* Side Panel Toggle (Tape / Book / Depth / Ticket / Heatmap) */}
+            <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 text-[11px] font-mono shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -687,16 +676,80 @@ export default function DashboardPage() {
                     ? "bg-zinc-800 text-emerald-400 font-semibold"
                     : "text-zinc-400 hover:text-zinc-200"
                 }`}
-                title="Live Running Trades Orderbook Tape"
+                title="Live Running Trades Order Tape"
               >
                 <Activity className="h-3 w-3 text-emerald-400" />
                 <span className="hidden sm:inline">TAPE</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("book");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "book"
+                    ? "bg-zinc-800 text-amber-400 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="L2 Order Book Ladder"
+              >
+                <Scale className="h-3 w-3 text-amber-400" />
+                <span className="hidden sm:inline">BOOK</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("depth");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "depth"
+                    ? "bg-zinc-800 text-cyan-400 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Market Depth Curve"
+              >
+                <TrendingUp className="h-3 w-3 text-cyan-400" />
+                <span className="hidden sm:inline">DEPTH</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("ticket");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "ticket"
+                    ? "bg-zinc-800 text-purple-400 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Smart Order Execution Ticket"
+              >
+                <Zap className="h-3 w-3 text-purple-400" />
+                <span className="hidden sm:inline">TICKET</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSidePanel(true);
+                  setSidePanelTab("heatmap");
+                }}
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  showSidePanel && sidePanelTab === "heatmap"
+                    ? "bg-zinc-800 text-blue-400 font-semibold"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="L2 Liquidity Heatmap Radar"
+              >
+                <Layers className="h-3 w-3 text-blue-400" />
+                <span className="hidden sm:inline">HEATMAP</span>
               </button>
               {showSidePanel && (
                 <button
                   type="button"
                   onClick={() => setShowSidePanel(false)}
-                  className="px-1.5 py-0.5 text-zinc-500 hover:text-red-400"
+                  className="px-1.5 py-0.5 text-zinc-500 hover:text-red-400 transition-colors"
                   title="Close Side Panel for Fullscreen Chart"
                 >
                   ✕
@@ -958,35 +1011,53 @@ export default function DashboardPage() {
                 </Card>
               </div>
 
-              {/* Integrated Side Panel (Tape or Heatmap) */}
+              {/* Integrated ssych Pure Suite Side Panel (Tape | Book | Depth | Ticket | Heatmap) */}
               {showSidePanel && (
                 <div className="lg:col-span-1 h-[700px] flex flex-col gap-2">
                   <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                    <div className="flex items-center gap-2 text-xs font-mono font-medium text-zinc-300">
-                      {sidePanelTab === "tape" ? (
+                    <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-zinc-300">
+                      {sidePanelTab === "tape" && (
                         <>
                           <Activity className="h-3.5 w-3.5 text-emerald-400" />
-                          <span>LIVE L2 ORDERFLOW TAPE</span>
+                          <span>LIVE TAPE</span>
                         </>
-                      ) : (
+                      )}
+                      {sidePanelTab === "book" && (
                         <>
-                          <Layers className="h-3.5 w-3.5 text-cyan-400" />
-                          <span>LIQUIDITY HEATMAP RADAR</span>
+                          <Scale className="h-3.5 w-3.5 text-amber-400" />
+                          <span>ORDER BOOK</span>
+                        </>
+                      )}
+                      {sidePanelTab === "depth" && (
+                        <>
+                          <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+                          <span>MARKET DEPTH</span>
+                        </>
+                      )}
+                      {sidePanelTab === "ticket" && (
+                        <>
+                          <Zap className="h-3.5 w-3.5 text-purple-400" />
+                          <span>ORDER TICKET</span>
+                        </>
+                      )}
+                      {sidePanelTab === "heatmap" && (
+                        <>
+                          <Layers className="h-3.5 w-3.5 text-blue-400" />
+                          <span>HEATMAP RADAR</span>
                         </>
                       )}
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setSidePanelTab(sidePanelTab === "tape" ? "heatmap" : "tape")}
-                        className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white"
-                      >
-                        {sidePanelTab === "tape" ? "Show Heatmap" : "Show Tape"}
-                      </button>
+                      <SegmentedControl
+                        value={sidePanelTab.toUpperCase()}
+                        onChange={(val) => setSidePanelTab(val.toLowerCase() as typeof sidePanelTab)}
+                        options={["TAPE", "BOOK", "DEPTH", "TICKET", "HEATMAP"]}
+                      />
                       <button
                         type="button"
                         onClick={() => setShowSidePanel(false)}
-                        className="p-1 text-zinc-500 hover:text-zinc-300 text-xs"
+                        className="p-1 text-zinc-500 hover:text-zinc-300 text-xs transition-colors ml-1"
+                        title="Close Side Panel"
                       >
                         ✕
                       </button>
@@ -994,7 +1065,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-zinc-850 bg-black p-2 flex flex-col justify-start">
-                    {sidePanelTab === "tape" ? (
+                    {sidePanelTab === "tape" && (
                       <TradeTape
                         symbol={activeSymbol}
                         base={currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650)}
@@ -1015,7 +1086,107 @@ export default function DashboardPage() {
                             : undefined
                         }
                       />
-                    ) : (
+                    )}
+
+                    {sidePanelTab === "book" && (
+                      <OrderBook
+                        symbol={activeSymbol}
+                        unit={activeSymbol === "BTCUSD" ? "BTC" : "OZ"}
+                        priceDp={activeSymbol === "BTCUSD" ? 1 : 2}
+                        sizeDp={activeSymbol === "BTCUSD" ? 3 : 1}
+                        tick={activeSymbol === "BTCUSD" ? 0.5 : 0.05}
+                        rows={8}
+                        feed={false}
+                        bids={
+                          marketDepth.bids.length > 0
+                            ? marketDepth.bids.slice(0, 16).map((b) => ({
+                                price: b.price,
+                                size: b.qty,
+                              }))
+                            : undefined
+                        }
+                        asks={
+                          marketDepth.asks.length > 0
+                            ? marketDepth.asks.slice(0, 16).map((a) => ({
+                                price: a.price,
+                                size: a.qty,
+                              }))
+                            : undefined
+                        }
+                      />
+                    )}
+
+                    {sidePanelTab === "depth" && (
+                      <div className="w-full flex justify-center py-2">
+                        <DepthChart
+                          symbol={activeSymbol}
+                          unit={activeSymbol === "BTCUSD" ? "BTC" : "OZ"}
+                          priceDp={activeSymbol === "BTCUSD" ? 1 : 2}
+                          sizeDp={activeSymbol === "BTCUSD" ? 3 : 1}
+                          tick={activeSymbol === "BTCUSD" ? 0.5 : 0.05}
+                          bids={
+                            marketDepth.bids.length > 0
+                              ? marketDepth.bids.slice(0, 30).map((b) => ({
+                                  price: b.price,
+                                  size: b.qty,
+                                }))
+                              : undefined
+                          }
+                          asks={
+                            marketDepth.asks.length > 0
+                              ? marketDepth.asks.slice(0, 30).map((a) => ({
+                                  price: a.price,
+                                  size: a.qty,
+                                }))
+                              : undefined
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {sidePanelTab === "ticket" && (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-2 overflow-y-auto">
+                        <OrderTicket
+                          symbol={activeSymbol}
+                          base={activeSymbol === "BTCUSD" ? "BTC" : "XAU"}
+                          quote="USD"
+                          bid={marketDepth.bids[0]?.price ?? (currentCandle?.close ? currentCandle.close - 0.25 : 2650)}
+                          ask={marketDepth.asks[0]?.price ?? (currentCandle?.close ? currentCandle.close + 0.25 : 2650.5)}
+                          quoteBalance={50000}
+                          baseBalance={activeSymbol === "BTCUSD" ? 1.25 : 15.0}
+                          priceDp={activeSymbol === "BTCUSD" ? 1 : 2}
+                          sizeDp={activeSymbol === "BTCUSD" ? 3 : 2}
+                          onSubmit={async (order: SsychOrder) => {
+                            try {
+                              setOrderSubmitting(true);
+                              const res = await fetch("/api/trade/execute", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  symbol: activeSymbol,
+                                  side: order.side.toUpperCase(),
+                                  type: order.type.toUpperCase(),
+                                  volume: order.amount,
+                                  price: order.price,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setToast(`Order ${order.side.toUpperCase()} ${order.amount} ${activeSymbol} placed successfully!`);
+                              } else {
+                                setToast(`Order notice: ${data.error || "Simulation recorded"}`);
+                              }
+                            } catch (err: any) {
+                              setToast(`Order simulation: ${order.side.toUpperCase()} ${order.amount} @ ${order.price}`);
+                            } finally {
+                              setOrderSubmitting(false);
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {sidePanelTab === "heatmap" && (
                       <LiquidityHeatmapRadar
                         depth={marketDepth}
                         currentPrice={currentCandle?.close || (activeSymbol === "BTCUSD" ? 64000 : 2650)}
